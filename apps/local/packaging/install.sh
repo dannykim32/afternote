@@ -41,6 +41,13 @@ fi
 
 broker_validate_lifecycle
 
+install_root_created=0
+bin_root_created=0
+launch_agent_root_created=0
+if [ ! -e "$install_root" ]; then install_root_created=1; fi
+if [ ! -e "$bin_root" ]; then bin_root_created=1; fi
+if [ ! -e "$launch_agent_root" ]; then launch_agent_root_created=1; fi
+
 case "$application_path" in
   /*) ;;
   *)
@@ -128,6 +135,20 @@ cleanup_stage() {
   fi
   if [ "$published_version" -eq 1 ] && [ "$installation_complete" -eq 0 ]; then
     rm -rf -- "$version_root"
+  fi
+  if [ "$installation_complete" -eq 0 ] && [ "$install_root_created" -eq 1 ]; then
+    if [ -f "$marker" ] && [ ! -L "$marker" ] &&
+      [ "$(sed -n '1p' "$marker")" = "dev.afternote.local" ]; then
+      rm "$marker"
+    fi
+    rmdir "$versions_root" 2>/dev/null || true
+    rmdir "$install_root" 2>/dev/null || true
+  fi
+  if [ "$installation_complete" -eq 0 ] && [ "$bin_root_created" -eq 1 ]; then
+    rmdir "$bin_root" 2>/dev/null || true
+  fi
+  if [ "$installation_complete" -eq 0 ] && [ "$launch_agent_root_created" -eq 1 ]; then
+    rmdir "$launch_agent_root" 2>/dev/null || true
   fi
   afternote_release_lifecycle_lock
 }

@@ -179,6 +179,33 @@ describeMac("macOS package lifecycle", () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain("Refusing unsafe Afternote install root");
   });
+
+  it("removes every owned runtime path after a failed fresh install", () => {
+    const home = join(directory, "failed-fresh-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const failingHealthcheck = join(directory, "failing-healthcheck");
+    mkdirSync(home, { recursive: true });
+    writeExecutable(failingHealthcheck, "#!/bin/sh\nexit 1\n");
+    const result = Bun.spawnSync([join(alphaZero.portableDirectory, "install.sh")], {
+      env: {
+        ...baseEnvironment(),
+        HOME: home,
+        AFTERNOTE_INSTALL_ROOT: installRoot,
+        AFTERNOTE_BIN_ROOT: binRoot,
+        AFTERNOTE_LAUNCHCTL: launchctl,
+        AFTERNOTE_BROKER_HEALTHCHECK: failingHealthcheck,
+        AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(existsSync(installRoot)).toBe(false);
+    expect(existsSync(join(binRoot, "afternote"))).toBe(false);
+    expect(existsSync(join(home, "Library/LaunchAgents/dev.afternote.vault-broker.plist")))
+      .toBe(false);
+  });
 });
 
 function baseEnvironment(): Record<string, string> {
