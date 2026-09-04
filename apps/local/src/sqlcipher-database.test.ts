@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   atomicExchangeFiles,
+  cosineSimilaritiesNative,
   createDataProtectionKeychainVaultKey,
   deleteKeychainVaultKeyForTest,
   deleteDevelopmentClientKeyForTest,
@@ -27,6 +28,28 @@ afterEach(() => {
 });
 
 describe("SqlcipherDatabase", () => {
+  it("scores packed embedding vectors without crossing the plaintext boundary", () => {
+    const packed = Float32Array.from([1, 0, 0, 2, -1, 0]);
+    const magnitudes = Float32Array.from([1, 2, 1]);
+    expect(cosineSimilaritiesNative(
+      Float32Array.from([1, 0]),
+      packed,
+      magnitudes,
+    )).toEqual(Float64Array.from([1, 0, -1]));
+    expect(
+      [...cosineSimilaritiesNative(
+        Float32Array.from([0, 0]),
+        packed,
+        magnitudes,
+      )!].every(Number.isNaN),
+    ).toBe(true);
+    expect(() => cosineSimilaritiesNative(
+      Float32Array.from([1, 0]),
+      Float32Array.from([1, 0, 1]),
+      magnitudes,
+    )).toThrow("dimensions are invalid");
+  });
+
   it("supports the synchronous query and transaction contract over encrypted FTS5 storage", () => {
     const directory = temporaryDirectory();
     const path = join(directory, "vault.db");

@@ -118,6 +118,26 @@ bool ByteView(napi_env environment, napi_value value, const void **data, size_t 
   return true;
 }
 
+bool Float32View(napi_env environment, napi_value value, const float **data,
+                 size_t *length) {
+  bool is_typed_array = false;
+  napi_is_typedarray(environment, value, &is_typed_array);
+  if (!is_typed_array) return false;
+  napi_typedarray_type type;
+  size_t elements = 0;
+  void *bytes = nullptr;
+  napi_value array_buffer;
+  size_t byte_offset = 0;
+  if (napi_get_typedarray_info(environment, value, &type, &elements, &bytes,
+                               &array_buffer, &byte_offset) != napi_ok ||
+      type != napi_float32_array) {
+    return false;
+  }
+  *data = static_cast<const float *>(bytes);
+  *length = elements;
+  return true;
+}
+
 bool BindValue(napi_env environment, sqlite3_stmt *statement, int index,
                napi_value value) {
   napi_valuetype type;
@@ -329,6 +349,79 @@ napi_value Close(napi_env environment, napi_callback_info information) {
     handle->database = nullptr;
   }
   return Undefined(environment);
+}
+
+napi_value CosineSimilarities(napi_env environment,
+                              napi_callback_info information) {
+  size_t count = 3;
+  napi_value arguments[3];
+  napi_get_cb_info(environment, information, &count, arguments, nullptr,
+                   nullptr);
+  if (count != 3) {
+    return Throw(environment,
+                 "cosineSimilarities requires a query, packed vectors, and magnitudes");
+  }
+
+  const float *query = nullptr;
+  const float *vectors = nullptr;
+  const float *magnitudes = nullptr;
+  size_t dimensions = 0;
+  size_t vector_elements = 0;
+  size_t magnitude_count = 0;
+  if (!Float32View(environment, arguments[0], &query, &dimensions) ||
+      dimensions == 0 ||
+      !Float32View(environment, arguments[1], &vectors, &vector_elements) ||
+      vector_elements % dimensions != 0 ||
+      !Float32View(environment, arguments[2], &magnitudes,
+                   &magnitude_count) ||
+      magnitude_count != vector_elements / dimensions) {
+    return Throw(environment, "Cosine similarity vector dimensions are invalid");
+  }
+
+  double query_squared = 0;
+  for (size_t index = 0; index < dimensions; index += 1) {
+    query_squared += static_cast<double>(query[index]) * query[index];
+  }
+  const double query_magnitude = std::sqrt(query_squared);
+  if (magnitude_count >
+      std::numeric_limits<size_t>::max() / sizeof(double)) {
+    return Throw(environment, "Cosine similarity result is too large");
+  }
+
+  napi_value array_buffer;
+  void *output_bytes = nullptr;
+  if (napi_create_arraybuffer(environment, magnitude_count * sizeof(double),
+                              &output_bytes, &array_buffer) != napi_ok) {
+    return Throw(environment, "Could not allocate cosine similarity results");
+  }
+  auto *output = static_cast<double *>(output_bytes);
+  if (!std::isfinite(query_magnitude) || query_magnitude <= 0) {
+    for (size_t candidate = 0; candidate < magnitude_count; candidate += 1) {
+      output[candidate] = std::numeric_limits<double>::quiet_NaN();
+    }
+  } else {
+    for (size_t candidate = 0; candidate < magnitude_count; candidate += 1) {
+      const double magnitude = magnitudes[candidate];
+      if (!std::isfinite(magnitude) || magnitude <= 0) {
+        output[candidate] = std::numeric_limits<double>::quiet_NaN();
+        continue;
+      }
+      double dot = 0;
+      const size_t offset = candidate * dimensions;
+      for (size_t dimension = 0; dimension < dimensions; dimension += 1) {
+        dot += static_cast<double>(query[dimension]) *
+               vectors[offset + dimension];
+      }
+      output[candidate] = dot / (query_magnitude * magnitude);
+    }
+  }
+
+  napi_value result;
+  if (napi_create_typedarray(environment, napi_float64_array, magnitude_count,
+                             array_buffer, 0, &result) != napi_ok) {
+    return Throw(environment, "Could not create cosine similarity results");
+  }
+  return result;
 }
 
 napi_value Exec(napi_env environment, napi_callback_info information) {
@@ -1784,6 +1877,7 @@ napi_value Init(napi_env environment, napi_value exports) {
     {"exchangeFiles", nullptr, ExchangeFiles, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"acquireFileLock", nullptr, AcquireFileLock, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"releaseFileLock", nullptr, ReleaseFileLock, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"cosineSimilarities", nullptr, CosineSimilarities, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"get", nullptr, Get, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"all", nullptr, All, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"run", nullptr, Run, nullptr, nullptr, nullptr, napi_default, nullptr},

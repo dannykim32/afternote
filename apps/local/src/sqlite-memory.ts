@@ -46,7 +46,10 @@ import {
   type VaultContext,
 } from "@afternote/memory";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { SqlcipherDatabase } from "./sqlcipher-database";
+import {
+  cosineSimilaritiesNative,
+  SqlcipherDatabase,
+} from "./sqlcipher-database";
 import {
   MAX_INTERCHANGE_NOTES,
   MAX_INTERCHANGE_REVISIONS,
@@ -207,7 +210,11 @@ type VectorWithMagnitude = {
 type SemanticIndexCache = {
   modelKey: string;
   vectors: SemanticVector[];
-  centroid: VectorWithMagnitude | null;
+  packedVectors: Float32Array;
+  magnitudes: Float32Array;
+  corpusSimilarities: Float64Array;
+  noteOrdinals: Uint32Array;
+  noteCount: number;
 };
 
 type RevisionRow = {
@@ -1530,31 +1537,46 @@ export class SqliteMemory implements Memory {
         searchMode: "degraded",
       };
     }
-    const bestByNote = new Map<string, SemanticCandidate>();
     const similarityThreshold = minimumSimilarity ?? model.minimumSimilarity;
-    for (const candidate of semanticIndex.vectors) {
-      const querySimilarity = cosineSimilarityWithMagnitudes(
-        queryVector,
-        queryMagnitude,
-        candidate.vector,
-        candidate.magnitude,
-      );
+    const nativeSimilarities = cosineSimilaritiesNative(
+      queryVector,
+      semanticIndex.packedVectors,
+      semanticIndex.magnitudes,
+    );
+    const bestScores = new Float64Array(semanticIndex.noteCount);
+    bestScores.fill(Number.NEGATIVE_INFINITY);
+    const bestVectorIndexes = new Int32Array(semanticIndex.noteCount);
+    bestVectorIndexes.fill(-1);
+    for (let index = 0; index < semanticIndex.vectors.length; index += 1) {
+      const candidate = semanticIndex.vectors[index]!;
+      const querySimilarity = nativeSimilarities?.[index] ??
+        cosineSimilarityWithMagnitudes(
+          queryVector,
+          queryMagnitude,
+          candidate.vector,
+          candidate.magnitude,
+        );
       if (!Number.isFinite(querySimilarity) || querySimilarity < similarityThreshold) {
         continue;
       }
-      const similarity = hubnessCorrectedSimilarity(
-        querySimilarity,
-        candidate.vector,
-        candidate.magnitude,
-        semanticIndex.centroid,
-      );
-      const current = bestByNote.get(candidate.row.id);
-      if (!current || similarity > current.similarity) {
-        bestByNote.set(candidate.row.id, { ...candidate, similarity });
+      const similarity = querySimilarity -
+        SEMANTIC_HUBNESS_PENALTY * semanticIndex.corpusSimilarities[index]!;
+      const noteOrdinal = semanticIndex.noteOrdinals[index]!;
+      if (similarity > bestScores[noteOrdinal]!) {
+        bestScores[noteOrdinal] = similarity;
+        bestVectorIndexes[noteOrdinal] = index;
       }
     }
-    let semanticCandidates = [...bestByNote.values()]
-      .sort((left, right) => right.similarity - left.similarity);
+    let semanticCandidates: SemanticCandidate[] = [];
+    for (let ordinal = 0; ordinal < bestVectorIndexes.length; ordinal += 1) {
+      const vectorIndex = bestVectorIndexes[ordinal]!;
+      if (vectorIndex < 0) continue;
+      semanticCandidates.push({
+        ...semanticIndex.vectors[vectorIndex]!,
+        similarity: bestScores[ordinal]!,
+      });
+    }
+    semanticCandidates.sort((left, right) => right.similarity - left.similarity);
 
     if (lexical.length === 0 && temporal.length === 0) {
       semanticCandidates = this.#withoutSupersededRevisionMatches(query, semanticCandidates);
@@ -1674,13 +1696,43 @@ export class SqliteMemory implements Memory {
       if (!Number.isFinite(magnitude) || magnitude <= 0) return [];
       return [{ row, vector, magnitude }];
     });
+    const centroid = embeddingCentroid(
+      vectors.map((candidate) => candidate.vector),
+      descriptor.dimensions,
+    );
+    const packedVectors = new Float32Array(
+      vectors.length * descriptor.dimensions,
+    );
+    const magnitudes = new Float32Array(vectors.length);
+    const corpusSimilarities = new Float64Array(vectors.length);
+    const noteOrdinals = new Uint32Array(vectors.length);
+    const noteOrdinalById = new Map<string, number>();
+    vectors.forEach((candidate, index) => {
+      packedVectors.set(candidate.vector, index * descriptor.dimensions);
+      magnitudes[index] = candidate.magnitude;
+      let noteOrdinal = noteOrdinalById.get(candidate.row.id);
+      if (noteOrdinal === undefined) {
+        noteOrdinal = noteOrdinalById.size;
+        noteOrdinalById.set(candidate.row.id, noteOrdinal);
+      }
+      noteOrdinals[index] = noteOrdinal;
+      corpusSimilarities[index] = centroid
+        ? cosineSimilarityWithMagnitudes(
+            centroid.vector,
+            centroid.magnitude,
+            candidate.vector,
+            candidate.magnitude,
+          )
+        : 0;
+    });
     const cache = {
       modelKey,
       vectors,
-      centroid: embeddingCentroid(
-        vectors.map((candidate) => candidate.vector),
-        descriptor.dimensions,
-      ),
+      packedVectors,
+      magnitudes,
+      corpusSimilarities,
+      noteOrdinals,
+      noteCount: noteOrdinalById.size,
     } satisfies SemanticIndexCache;
     this.#semanticIndexCache = cache;
     return cache;
@@ -2810,24 +2862,6 @@ function embeddingCentroid(
   return Number.isFinite(magnitude) && magnitude > 0
     ? { vector: centroid, magnitude }
     : null;
-}
-
-function hubnessCorrectedSimilarity(
-  querySimilarity: number,
-  vector: Float32Array,
-  magnitude: number,
-  centroid: VectorWithMagnitude | null,
-): number {
-  if (!centroid) return querySimilarity;
-  const corpusSimilarity = cosineSimilarityWithMagnitudes(
-    centroid.vector,
-    centroid.magnitude,
-    vector,
-    magnitude,
-  );
-  return Number.isFinite(corpusSimilarity)
-    ? querySimilarity - SEMANTIC_HUBNESS_PENALTY * corpusSimilarity
-    : querySimilarity;
 }
 
 function vectorMagnitude(vector: Float32Array): number {

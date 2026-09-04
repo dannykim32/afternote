@@ -30,6 +30,11 @@ type NativeAddon = {
   exchangeFiles(firstPath: string, secondPath: string): void;
   acquireFileLock(path: string): object;
   releaseFileLock(lock: object): void;
+  cosineSimilarities(
+    query: Float32Array,
+    packedVectors: Float32Array,
+    magnitudes: Float32Array,
+  ): Float64Array;
   getOrCreateVaultKey(service: string): Uint8Array;
   deleteVaultKey(service: string): void;
   getOrCreateDataProtectionVaultKey(service: string, accessGroup: string): Uint8Array;
@@ -191,6 +196,26 @@ export function requestVaultBrokerXpc(
     throw new Error("Broker request timeout is invalid");
   }
   return loadAddon().xpcBrokerRequest(service, codeRequirement, request, timeoutMs);
+}
+
+export function cosineSimilaritiesNative(
+  query: Float32Array,
+  packedVectors: Float32Array,
+  magnitudes: Float32Array,
+): Float64Array | null {
+  if (process.platform !== "darwin" || process.arch !== "arm64") return null;
+  const result = loadAddon().cosineSimilarities(
+    query,
+    packedVectors,
+    magnitudes,
+  );
+  if (
+    !(result instanceof Float64Array) ||
+    result.length !== magnitudes.length
+  ) {
+    throw new Error("Native cosine similarity returned an invalid result");
+  }
+  return result;
 }
 
 export function requireParentCodeSigningRequirement(codeRequirement: string): void {
