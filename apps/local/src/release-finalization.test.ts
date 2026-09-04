@@ -23,6 +23,7 @@ const publicReport = {
   sqlcipherAddonPath: `${paths.portableDirectory}/afternote_sqlcipher.node`,
   sqlcipherLibraryPath: `${paths.portableDirectory}/libsqlcipher.3.dylib`,
   cryptoLibraryPath: `${paths.portableDirectory}/libcrypto.4.dylib`,
+  onnxRuntimeBindingPath: `${paths.portableDirectory}/onnxruntime_binding.node`,
   onnxRuntimePath: `${paths.portableDirectory}/libonnxruntime.1.21.0.dylib`,
   ownerControlAppPath: `${paths.portableDirectory}/Afternote.app`,
   embeddedRuntimePath: `${paths.portableDirectory}/Afternote.app/Contents/Resources/AfternoteRuntime`,

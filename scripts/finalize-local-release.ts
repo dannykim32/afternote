@@ -40,6 +40,7 @@ type ArtifactReport = {
   sqlcipherAddonPath: string;
   sqlcipherLibraryPath: string;
   cryptoLibraryPath: string;
+  onnxRuntimeBindingPath: string;
   onnxRuntimePath: string;
   ownerControlAppPath: string;
   embeddedRuntimePath: string;
@@ -171,6 +172,7 @@ function finalizeLocalRelease(): void {
     artifact.sqlcipherAddonPath,
     artifact.sqlcipherLibraryPath,
     artifact.cryptoLibraryPath,
+    artifact.onnxRuntimeBindingPath,
     artifact.onnxRuntimePath,
     artifact.ownerControlAppPath,
     artifact.brokerWorkerAppPath,
@@ -403,6 +405,7 @@ function verifyExtractedArchive(
       artifact.sqlcipherAddonPath,
       artifact.sqlcipherLibraryPath,
       artifact.cryptoLibraryPath,
+      artifact.onnxRuntimeBindingPath,
       artifact.onnxRuntimePath,
       artifact.ownerControlAppPath,
       artifact.brokerWorkerAppPath,

@@ -186,6 +186,12 @@ if [ -e "$script_dir/libonnxruntime.1.21.0.dylib" ]; then
     exit 1
   fi
   install -m 755 "$script_dir/libonnxruntime.1.21.0.dylib" "$version_stage/libonnxruntime.1.21.0.dylib"
+  if [ -L "$script_dir/onnxruntime_binding.node" ] ||
+    [ ! -f "$script_dir/onnxruntime_binding.node" ]; then
+    printf 'Refusing a missing, invalid, or symlinked semantic native binding.\n' >&2
+    exit 1
+  fi
+  install -m 755 "$script_dir/onnxruntime_binding.node" "$version_stage/onnxruntime_binding.node"
 fi
 verify_release_version "$version_stage" "$installed_application_path"
 

@@ -249,6 +249,13 @@ function assertPinnedNativeReleaseInputs(): void {
       ),
       requiredDigest(manifest.onnxRuntimeLibrarySha256, "ONNX Runtime library"),
     ],
+    [
+      join(
+        repositoryRoot,
+        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64/onnxruntime_binding.node",
+      ),
+      requiredDigest(manifest.onnxRuntimeBindingSha256, "ONNX Runtime binding"),
+    ],
   ];
   for (const [path, expected] of expectations) {
     if (sha256File(path) !== expected) {

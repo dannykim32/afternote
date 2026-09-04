@@ -103,6 +103,7 @@ export function discoverLocalEmbeddingModel(
     model: status.state === "ready"
       ? new TransformersTextEmbeddingModel({
           cacheDirectory: modelCacheDirectory(vaultPath),
+          localModelPath: modelSnapshotPath(vaultPath),
           allowRemoteModels: false,
         })
       : null,
@@ -130,8 +131,7 @@ export async function acquireLocalEmbeddingModel(
       );
     }
     if (existsSync(snapshot)) {
-      const quarantine = `${snapshot}.invalid-${Date.now()}`;
-      renameSync(snapshot, quarantine);
+      rmSync(snapshot, { recursive: true, force: true });
     }
     renameSync(staging, snapshot);
   } catch (error) {
@@ -141,12 +141,13 @@ export async function acquireLocalEmbeddingModel(
 
   const model = new TransformersTextEmbeddingModel({
     cacheDirectory,
+    localModelPath: snapshot,
     allowRemoteModels: false,
   });
   try {
     await model.embed(["Afternote local semantic search installation check."]);
   } catch (error) {
-    renameSync(snapshot, `${snapshot}.failed-${Date.now()}`);
+    rmSync(snapshot, { recursive: true, force: true });
     throw new Error("Local embedding model failed its runtime check", {
       cause: error,
     });

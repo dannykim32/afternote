@@ -167,6 +167,7 @@ verify_release_version() {
   verify_release_code "$release_root/libcrypto.4.dylib" "dev.afternote.sqlcipher.crypto" || return 1
   if [ -e "$release_root/libonnxruntime.1.21.0.dylib" ]; then
     verify_release_code "$release_root/libonnxruntime.1.21.0.dylib" "dev.afternote.local.onnxruntime" || return 1
+    verify_release_code "$release_root/onnxruntime_binding.node" "dev.afternote.local.onnxruntime-binding" || return 1
   fi
   verify_release_app "$application_path" "dev.afternote.owner-control" || return 1
 }

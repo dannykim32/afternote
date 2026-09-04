@@ -39,6 +39,7 @@ describe("package policy", () => {
     expect(entries).toContain("SBOM.spdx.json");
     expect(entries).toContain("THIRD_PARTY_NOTICES.md");
     expect(entries.join("\n")).not.toMatch(/browser|slack/i);
+    expect(desktopRuntimeEntries(true)).toContain("onnxruntime_binding.node");
   });
 
   it("strips development-only claims from public release documentation", () => {

@@ -16,6 +16,7 @@ describe("native release input policy", () => {
     for (const key of [
       "bunExecutableSha256",
       "nodeHeadersSha256",
+      "onnxRuntimeBindingSha256",
       "onnxRuntimeLibrarySha256",
       "opensslLibrarySha256",
       "sqlcipherLibrarySha256",

@@ -89,7 +89,7 @@ export class TransformersTextEmbeddingModel implements TextEmbeddingModel {
         }
         const extractor = await transformers.pipeline(
           "feature-extraction",
-          LOCAL_EMBEDDING_MODEL.id,
+          this.#localModelPath ?? LOCAL_EMBEDDING_MODEL.id,
           {
             revision: LOCAL_EMBEDDING_MODEL.revision,
             dtype: LOCAL_EMBEDDING_MODEL.dtype,

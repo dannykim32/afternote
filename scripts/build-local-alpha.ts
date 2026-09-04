@@ -40,6 +40,7 @@ export type LocalAlphaArtifacts = {
   sqlcipherAddonPath: string;
   sqlcipherLibraryPath: string;
   cryptoLibraryPath: string;
+  onnxRuntimeBindingPath: string;
   onnxRuntimePath: string;
   ownerControlAppPath: string;
   embeddedRuntimePath: string;
@@ -155,6 +156,8 @@ export async function buildLocalAlpha(options?: {
   );
   const onnxRuntimeLibraryName = "libonnxruntime.1.21.0.dylib";
   const onnxRuntimeLibraryPath = join(portableDirectory, onnxRuntimeLibraryName);
+  const onnxRuntimeBindingName = "onnxruntime_binding.node";
+  const onnxRuntimeBindingPath = join(portableDirectory, onnxRuntimeBindingName);
   const sqlcipherAddonName = "afternote_sqlcipher.node";
   const sqlcipherLibraryName = "libsqlcipher.3.dylib";
   const cryptoLibraryName = "libcrypto.4.dylib";
@@ -482,15 +485,20 @@ export async function buildLocalAlpha(options?: {
     clientSignerAppPath,
   ]);
   if (includeSemanticRuntime) {
-    copyFileSync(
-      join(
-        repositoryRoot,
-        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64",
-        onnxRuntimeLibraryName,
-      ),
-      onnxRuntimeLibraryPath,
-    );
-    chmodSync(onnxRuntimeLibraryPath, 0o755);
+    for (const [name, destination] of [
+      [onnxRuntimeLibraryName, onnxRuntimeLibraryPath],
+      [onnxRuntimeBindingName, onnxRuntimeBindingPath],
+    ] as const) {
+      copyFileSync(
+        join(
+          repositoryRoot,
+          "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64",
+          name,
+        ),
+        destination,
+      );
+      chmodSync(destination, 0o755);
+    }
   }
   for (const filename of [
     sqlcipherAddonName,
@@ -503,22 +511,27 @@ export async function buildLocalAlpha(options?: {
     runPackagingCommand(["codesign", "--verify", "--strict", "--verbose=4", destination]);
   }
   if (includeSemanticRuntime) {
-    runPackagingCommand([
-      "codesign",
-      "--force",
-      "--sign",
-      signing.identity,
-      ...(signing.release ? ["--options", "runtime", "--timestamp"] : []),
-      "--identifier",
-      "dev.afternote.local.onnxruntime",
-      onnxRuntimeLibraryPath,
-    ]);
+    for (const [identifier, path] of [
+      ["dev.afternote.local.onnxruntime", onnxRuntimeLibraryPath],
+      ["dev.afternote.local.onnxruntime-binding", onnxRuntimeBindingPath],
+    ] as const) {
+      runPackagingCommand([
+        "codesign",
+        "--force",
+        "--sign",
+        signing.identity,
+        ...(signing.release ? ["--options", "runtime", "--timestamp"] : []),
+        "--identifier", identifier,
+        path,
+      ]);
+    }
   }
   for (const filename of [
     sqlcipherAddonName,
     sqlcipherLibraryName,
     cryptoLibraryName,
     ...(includeSemanticRuntime ? [onnxRuntimeLibraryName] : []),
+    ...(includeSemanticRuntime ? [onnxRuntimeBindingName] : []),
   ]) {
     copyFileSync(
       join(portableDirectory, filename),
@@ -553,6 +566,9 @@ export async function buildLocalAlpha(options?: {
         join(portableDirectory, sqlcipherAddonName),
         join(portableDirectory, sqlcipherLibraryName),
         join(portableDirectory, cryptoLibraryName),
+        ...(includeSemanticRuntime
+          ? [onnxRuntimeLibraryPath, onnxRuntimeBindingPath]
+          : []),
       ],
       clientPath: binaryPath,
       workerPath: brokerWorkerPath,
@@ -720,6 +736,7 @@ export async function buildLocalAlpha(options?: {
     sqlcipherAddonPath,
     sqlcipherLibraryPath,
     cryptoLibraryPath,
+    onnxRuntimeBindingPath,
     onnxRuntimePath: onnxRuntimeLibraryPath,
     ownerControlAppPath,
     embeddedRuntimePath,
@@ -750,6 +767,7 @@ export function desktopRuntimeEntries(includeSemanticRuntime: boolean): string[]
     "libsqlcipher.3.dylib",
     "libcrypto.4.dylib",
     ...(includeSemanticRuntime ? ["libonnxruntime.1.21.0.dylib"] : []),
+    ...(includeSemanticRuntime ? ["onnxruntime_binding.node"] : []),
     "install.sh",
     "rollback.sh",
     "uninstall.sh",
@@ -1028,11 +1046,16 @@ function resolveHostTool(command: string[]): string[] {
 }
 
 export function runTextOnlyTransformersCompile(command: string[]): void {
-  const transformersPath = join(
-    repositoryRoot,
-    "apps/local/node_modules/@huggingface/transformers/dist/transformers.node.mjs",
+  const transformersPath = Bun.resolveSync(
+    "@huggingface/transformers",
+    join(repositoryRoot, "apps/local"),
+  );
+  const onnxBindingModulePath = join(
+    dirname(Bun.resolveSync("onnxruntime-node", dirname(transformersPath))),
+    "binding.js",
   );
   const original = readFileSync(transformersPath, "utf8");
+  const originalOnnxBindingModule = readFileSync(onnxBindingModulePath, "utf8");
   const sharpImport = 'import * as __WEBPACK_EXTERNAL_MODULE_sharp__ from "sharp";';
   if (!original.includes(sharpImport)) {
     throw new Error("Pinned Transformers.js Sharp import changed; review the text-only build shim");
@@ -1051,10 +1074,23 @@ export function runTextOnlyTransformersCompile(command: string[]): void {
     absoluteModuleDirectory,
     'let dirname__ = ".";\n\n// Only used for environments with access to file system',
   );
+  const bundledNativeBinding =
+    'require(`../bin/napi-v3/${process.platform}/${process.arch}/onnxruntime_binding.node`);';
+  if (!originalOnnxBindingModule.includes(bundledNativeBinding)) {
+    throw new Error(
+      "Pinned ONNX Runtime binding loader changed; review the external native binding shim",
+    );
+  }
+  const externalOnnxBindingModule = originalOnnxBindingModule.replace(
+    bundledNativeBinding,
+    'require(require("node:path").join(require("node:path").dirname(process.execPath), "onnxruntime_binding.node"));',
+  );
   writeFileSync(transformersPath, textOnly);
+  writeFileSync(onnxBindingModulePath, externalOnnxBindingModule);
   try {
     runPackagingCommand(command);
   } finally {
+    writeFileSync(onnxBindingModulePath, originalOnnxBindingModule);
     writeFileSync(transformersPath, original);
   }
 }

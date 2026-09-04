@@ -9,6 +9,7 @@
   "sqliteVersion": "3.53.4",
   "opensslVersion": "4.0.2",
   "onnxRuntimeVersion": "1.21.0",
+  "onnxRuntimeBindingSha256": "8ad39fe71b4e4683ae5ae7b5edb8f4d2fb47f58dc139c68a2a14d3977281b9a5",
   "onnxRuntimeLibrarySha256": "1bce2d05d778282c912e7fab6d5dfc5fa851f5797e8d0914a62d4adeb1d4d82b",
   "opensslLibrarySha256": "897d0e466b2127e29bc28669a0b4049dc1f5de9aec97aca17666044a12a724b0",
   "sqlcipherLibrarySha256": "7ac5de94fee95f3b5c4a8eb45accc32bcff84bdb1a3132c41df830492bb8e21d",
