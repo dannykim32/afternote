@@ -1,0 +1,50 @@
+name: Bug report
+description: Tell us what failed and how to reproduce it.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Do not include note text, recall queries, private URLs, access tokens, API keys, or other secrets.
+  - type: input
+    id: version
+    attributes:
+      label: Afternote version
+      description: Run `afternote version` if the app will not open.
+      placeholder: 2.0.0-alpha.5
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      options:
+        - Local app
+        - Codex connector
+        - Claude Code connector
+        - Installer, upgrade, or uninstall
+        - Recall evaluation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened?
+      description: List the smallest set of steps that reproduces the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Share-safe diagnostics
+      description: Optional. Save diagnostics from Settings, inspect the file, then attach it here. Never attach your vault or a note export.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I checked this report and its attachments for note text, queries, private URLs, credentials, and other secrets.
+          required: true

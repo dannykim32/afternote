@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://afternote.app/schemas/afternote-vault-v1.schema.json",
+  "title": "Afternote Vault Interchange v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schemaVersion", "applicationVersion", "notes", "manifest"],
+  "properties": {
+    "format": { "const": "afternote-vault" },
+    "schemaVersion": { "const": 1 },
+    "applicationVersion": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+    },
+    "notes": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/note" }
+    },
+    "manifest": { "$ref": "#/$defs/manifest" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[1-5][a-fA-F0-9]{3}-[89aAbB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "application": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" },
+        "url": { "type": "string", "minLength": 1, "maxLength": 2048, "pattern": "\\S" },
+        "author": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+        "timestamp": { "type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["noteId", "revision", "content", "source", "createdAt"],
+      "properties": {
+        "noteId": { "$ref": "#/$defs/uuid" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 100000, "pattern": "\\S" },
+        "source": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/source" }
+          ]
+        },
+        "createdAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "currentRevision", "createdAt", "updatedAt", "revisions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "currentRevision": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" },
+        "revisions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500000,
+          "items": { "$ref": "#/$defs/revision" }
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "noteCount", "revisionCount", "payloadSha256"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "noteCount": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "revisionCount": { "type": "integer", "minimum": 0, "maximum": 500000 },
+        "payloadSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

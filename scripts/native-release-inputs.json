@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "platform": "darwin-arm64",
+  "minimumMacosVersion": "13.3",
+  "bunExecutableSha256": "e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233",
+  "nodeVersion": "v25.9.0",
+  "nodeHeadersSha256": "de480ac8a830dbb86942be7d259ada88784da856e40d94e81c842388b18496bb",
+  "sqlcipherVersion": "4.18.0",
+  "sqliteVersion": "3.53.4",
+  "opensslVersion": "4.0.2",
+  "onnxRuntimeVersion": "1.21.0",
+  "onnxRuntimeLibrarySha256": "1bce2d05d778282c912e7fab6d5dfc5fa851f5797e8d0914a62d4adeb1d4d82b",
+  "opensslLibrarySha256": "897d0e466b2127e29bc28669a0b4049dc1f5de9aec97aca17666044a12a724b0",
+  "sqlcipherLibrarySha256": "58566cc482986aab8f394919786992fbb9ac2572f1d406f2c27c168b60792d0f",
+  "sqlcipherHeaderSha256": "8a9d1bff44d75174ca6dea3ea9bac50a6104d86facb566647b8bb839375b7b3a",
+  "opensslSource": {
+    "version": "4.0.2",
+    "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.2/openssl-4.0.2.tar.gz",
+    "sha256": "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8",
+    "maximumBytes": 60000000
+  },
+  "sqlcipherSource": {
+    "version": "4.18.0",
+    "url": "https://github.com/sqlcipher/sqlcipher/archive/refs/tags/v4.18.0.tar.gz",
+    "sha256": "1df02d1b346fa27feaf2da2cb2c0d8209e788248e461ec288718aa5d3e9643e5",
+    "maximumBytes": 25000000
+  }
+}

@@ -1,0 +1,36 @@
+name: Product feedback
+description: Share a rough edge, missing workflow, or suggestion.
+title: "[Feedback]: "
+labels:
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Specific examples help. Please describe the workflow without pasting private note content, recall queries, URLs, or credentials.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which part of Afternote is this about?
+      options:
+        - Saving a note
+        - Finding or recalling a note
+        - Local app
+        - Codex connector
+        - Claude Code connector
+        - Installation or updates
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What would you change?
+      description: What were you trying to do, where did it become difficult, and what would have felt better?
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: Contact (optional)
+      description: Add an email or handle only if you are comfortable with a public issue containing it.

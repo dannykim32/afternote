@@ -1,0 +1,15 @@
+{
+  "name": "@afternote/mcp",
+  "version": "2.0.0-alpha.5",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "dependencies": {
+    "@afternote/memory": "workspace:*",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.4.3"
+  }
+}

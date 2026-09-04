@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__AFTERNOTE_BROKER_IDENTIFIER__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__AFTERNOTE_BROKER_PATH__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>__AFTERNOTE_HOME__</string>
+    <key>AFTERNOTE_BROKER_MACH_SERVICE</key>
+    <string>__AFTERNOTE_BROKER_IDENTIFIER__</string>
+    <key>AFTERNOTE_OWNER_CONTROL_MACH_SERVICE</key>
+    <string>__AFTERNOTE_OWNER_CONTROL_SERVICE__</string>
+    <key>AFTERNOTE_BROKER_WORKER_PATH</key>
+    <string>__AFTERNOTE_BROKER_WORKER_PATH__</string>
+  </dict>
+  <key>MachServices</key>
+  <dict>
+    <key>__AFTERNOTE_BROKER_IDENTIFIER__</key>
+    <true/>
+    <key>__AFTERNOTE_OWNER_CONTROL_SERVICE__</key>
+    <true/>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>StandardOutPath</key>
+  <string>/dev/null</string>
+  <key>StandardErrorPath</key>
+  <string>/dev/null</string>
+</dict>
+</plist>
