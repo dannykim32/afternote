@@ -1530,37 +1530,29 @@ export class SqliteMemory implements Memory {
         searchMode: "degraded",
       };
     }
-    const vectorCandidates = semanticIndex.vectors
-      .map((candidate) => ({
-        ...candidate,
-        similarity: cosineSimilarityWithMagnitudes(
-          queryVector,
-          queryMagnitude,
-          candidate.vector,
-          candidate.magnitude,
-        ),
-      }))
-      .filter((candidate) => Number.isFinite(candidate.similarity));
     const bestByNote = new Map<string, SemanticCandidate>();
-    vectorCandidates
-      .filter((candidate) =>
-        candidate.similarity >= (minimumSimilarity ?? model.minimumSimilarity)
-      )
-      .map((candidate) => ({
-        ...candidate,
-        similarity: hubnessCorrectedSimilarity(
-          candidate.similarity,
-          candidate.vector,
-          candidate.magnitude,
-          semanticIndex.centroid,
-        ),
-      }))
-      .forEach((candidate) => {
-        const current = bestByNote.get(candidate.row.id);
-        if (!current || candidate.similarity > current.similarity) {
-          bestByNote.set(candidate.row.id, candidate);
-        }
-      });
+    const similarityThreshold = minimumSimilarity ?? model.minimumSimilarity;
+    for (const candidate of semanticIndex.vectors) {
+      const querySimilarity = cosineSimilarityWithMagnitudes(
+        queryVector,
+        queryMagnitude,
+        candidate.vector,
+        candidate.magnitude,
+      );
+      if (!Number.isFinite(querySimilarity) || querySimilarity < similarityThreshold) {
+        continue;
+      }
+      const similarity = hubnessCorrectedSimilarity(
+        querySimilarity,
+        candidate.vector,
+        candidate.magnitude,
+        semanticIndex.centroid,
+      );
+      const current = bestByNote.get(candidate.row.id);
+      if (!current || similarity > current.similarity) {
+        bestByNote.set(candidate.row.id, { ...candidate, similarity });
+      }
+    }
     let semanticCandidates = [...bestByNote.values()]
       .sort((left, right) => right.similarity - left.similarity);
 
@@ -2811,8 +2803,7 @@ function embeddingCentroid(
   const centroid = new Float32Array(dimensions);
   for (const vector of vectors) {
     for (let index = 0; index < dimensions; index += 1) {
-      centroid[index] =
-        (centroid[index] ?? 0) + (vector[index] ?? 0) / vectors.length;
+      centroid[index] += vector[index]! / vectors.length;
     }
   }
   const magnitude = vectorMagnitude(centroid);
@@ -2861,7 +2852,7 @@ function cosineSimilarityWithMagnitudes(
   }
   let dot = 0;
   for (let index = 0; index < left.length; index += 1) {
-    dot += (left[index] ?? 0) * (right[index] ?? 0);
+    dot += left[index]! * right[index]!;
   }
   return dot / (leftMagnitude * rightMagnitude);
 }
