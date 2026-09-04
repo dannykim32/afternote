@@ -167,7 +167,7 @@ describe("Recall evaluation revision and document-shape holdout", () => {
     ]));
 
     expect(report.corpus).toMatchObject({
-      version: 7,
+      version: 8,
       baseNoteCount: 31,
       unsupportedCaseCount: 4,
     });
@@ -223,7 +223,7 @@ describe("Recall evaluation semantic holdout", () => {
     ]));
 
     expect(report.corpus).toMatchObject({
-      version: 7,
+      version: 8,
       semanticNoteCount: 4,
       caseCount: 41,
     });

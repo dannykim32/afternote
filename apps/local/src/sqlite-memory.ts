@@ -143,6 +143,7 @@ const CONNECTOR_RECALL_DEADLINE_MS = 2_000;
 const MAX_RECALL_CANDIDATES = 10_000;
 const MAX_TEMPORAL_ANNOTATIONS_PER_TEXT = 32;
 const MAX_EMBEDDING_CHUNK_CANDIDATES = 100_000;
+const SEMANTIC_HUBNESS_PENALTY = 0.55;
 const TEMPORAL_TEXT_MATCH_BOOST = 10;
 
 export type EffectiveSearchMode = "exact" | "indexing" | "hybrid" | "degraded";
@@ -178,6 +179,35 @@ type EmbeddingRow = NoteRow & {
   content_start: number;
   content_end: number;
   vector: Uint8Array;
+};
+
+type EmbeddingCandidateRow = Omit<EmbeddingRow, keyof NoteRow | "vector"> & {
+  id: string;
+  current_revision: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type EmbeddingVectorRow = EmbeddingCandidateRow & { vector: Uint8Array };
+type HydratedEmbeddingRow = Omit<EmbeddingRow, "vector">;
+
+type SemanticVector = {
+  row: EmbeddingCandidateRow;
+  vector: Float32Array;
+  magnitude: number;
+};
+
+type SemanticCandidate = SemanticVector & { similarity: number };
+
+type VectorWithMagnitude = {
+  vector: Float32Array;
+  magnitude: number;
+};
+
+type SemanticIndexCache = {
+  modelKey: string;
+  vectors: SemanticVector[];
+  centroid: VectorWithMagnitude | null;
 };
 
 type RevisionRow = {
@@ -493,6 +523,7 @@ export class SqliteMemory implements Memory {
   #indexQueue: Promise<void> = Promise.resolve();
   #indexing = 0;
   #lastIndexError: string | null = null;
+  #semanticIndexCache: SemanticIndexCache | null = null;
   #closed = false;
 
   constructor(
@@ -1359,6 +1390,7 @@ export class SqliteMemory implements Memory {
       : this.#database
           .query("delete from notes where id = ? and current_revision = ?")
           .run(id, expectedRevision);
+    if (result.changes > 0) this.#semanticIndexCache = null;
     return result.changes > 0;
   }
 
@@ -1427,6 +1459,7 @@ export class SqliteMemory implements Memory {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.#semanticIndexCache = null;
     try {
       if (this.#ownsDatabase) this.#database.close();
     } finally {
@@ -1450,7 +1483,11 @@ export class SqliteMemory implements Memory {
       query,
       rawLexical,
     );
-    if (lexical.length === 0 && temporal.length === 0 && isUnderspecifiedDeicticQuery(query)) {
+    if (
+      lexical.length === 0 &&
+      temporal.length === 0 &&
+      (isUnderspecifiedDeicticQuery(query) || requestsUnsavedLiveState(query))
+    ) {
       return { results: [], searchMode: "hybrid" };
     }
     const indexState = this.derivedIndexStatus(vault).state;
@@ -1482,30 +1519,10 @@ export class SqliteMemory implements Memory {
     }
 
     const descriptor = model.descriptor;
-    let rows: EmbeddingRow[];
+    const queryMagnitude = vectorMagnitude(queryVector);
+    let semanticIndex: SemanticIndexCache;
     try {
-      rows = this.#database.query<EmbeddingRow, [string, string, number]>(
-        `select
-           notes.id,
-           notes.content,
-           notes.current_revision,
-           notes.source_json,
-           notes.created_at,
-           notes.updated_at,
-           embeddings.note_revision as embedding_revision,
-           chunks.chunk_index,
-           chunks.content_start,
-           chunks.content_end,
-           chunks.vector
-         from note_embeddings embeddings
-         join notes on notes.id = embeddings.note_id
-         join note_embedding_chunks chunks on chunks.note_id = embeddings.note_id
-         where embeddings.note_revision = notes.current_revision
-           and embeddings.model_id = ?
-           and embeddings.model_revision = ?
-           and embeddings.dimensions = ?
-         limit ${MAX_EMBEDDING_CHUNK_CANDIDATES}`,
-      ).all(descriptor.id, descriptor.revision, descriptor.dimensions);
+      semanticIndex = this.#semanticIndex(descriptor);
     } catch (error) {
       if (!isInterrupted(error)) throw error;
       return {
@@ -1513,29 +1530,48 @@ export class SqliteMemory implements Memory {
         searchMode: "degraded",
       };
     }
-    const bestByNote = new Map<string, { row: EmbeddingRow; similarity: number }>();
-    rows
-      .map((row) => {
-        const vector = embeddingFromBytes(row.vector, descriptor.dimensions);
-        return { row, similarity: vector ? cosineSimilarity(queryVector, vector) : Number.NaN };
-      })
-      .filter(
-        (candidate) =>
-          Number.isFinite(candidate.similarity) &&
-          candidate.similarity >= (minimumSimilarity ?? model.minimumSimilarity),
+    const vectorCandidates = semanticIndex.vectors
+      .map((candidate) => ({
+        ...candidate,
+        similarity: cosineSimilarityWithMagnitudes(
+          queryVector,
+          queryMagnitude,
+          candidate.vector,
+          candidate.magnitude,
+        ),
+      }))
+      .filter((candidate) => Number.isFinite(candidate.similarity));
+    const bestByNote = new Map<string, SemanticCandidate>();
+    vectorCandidates
+      .filter((candidate) =>
+        candidate.similarity >= (minimumSimilarity ?? model.minimumSimilarity)
       )
+      .map((candidate) => ({
+        ...candidate,
+        similarity: hubnessCorrectedSimilarity(
+          candidate.similarity,
+          candidate.vector,
+          candidate.magnitude,
+          semanticIndex.centroid,
+        ),
+      }))
       .forEach((candidate) => {
         const current = bestByNote.get(candidate.row.id);
         if (!current || candidate.similarity > current.similarity) {
           bestByNote.set(candidate.row.id, candidate);
         }
       });
-    let semantic = [...bestByNote.values()]
+    let semanticCandidates = [...bestByNote.values()]
       .sort((left, right) => right.similarity - left.similarity);
 
     if (lexical.length === 0 && temporal.length === 0) {
-      semantic = this.#withoutSupersededRevisionMatches(query, semantic);
+      semanticCandidates = this.#withoutSupersededRevisionMatches(query, semanticCandidates);
     }
+    const semantic = this.#hydrateSemanticCandidates(
+      limit === null
+        ? semanticCandidates
+        : semanticCandidates.slice(0, MAX_RECALL_RESULTS),
+    );
 
     const fused = new Map<string, { result: RecallResult; score: number }>();
     lexical.forEach((result, index) => {
@@ -1574,6 +1610,88 @@ export class SqliteMemory implements Memory {
         : temporallyRanked.slice(0, boundedLimit(limit, DEFAULT_RECALL_RESULTS, MAX_RECALL_RESULTS)),
       searchMode: "hybrid",
     };
+  }
+
+  #hydrateSemanticCandidates(
+    candidates: readonly SemanticCandidate[],
+  ): Array<{ row: HydratedEmbeddingRow; similarity: number }> {
+    const statement = this.#database.query<NoteRow, [string]>(
+      `select id, content, current_revision, source_json, created_at, updated_at
+       from notes
+       where id = ?`,
+    );
+    try {
+      return candidates.flatMap((candidate) => {
+        const note = statement.get(candidate.row.id);
+        if (!note || note.current_revision !== candidate.row.current_revision) return [];
+        return [{
+          row: { ...note, ...candidate.row },
+          similarity: candidate.similarity,
+        }];
+      });
+    } finally {
+      closePreparedStatement(statement);
+    }
+  }
+
+  #semanticIndex(
+    descriptor: TextEmbeddingModel["descriptor"],
+  ): SemanticIndexCache {
+    const modelKey = `${descriptor.id}\u0000${descriptor.revision}\u0000${descriptor.dimensions}`;
+    if (this.#semanticIndexCache?.modelKey === modelKey) {
+      return this.#semanticIndexCache;
+    }
+
+    const statement = this.#database.query<
+      EmbeddingVectorRow,
+      [string, string, number]
+    >(
+      `select
+         notes.id,
+         notes.current_revision,
+         notes.created_at,
+         notes.updated_at,
+         embeddings.note_revision as embedding_revision,
+         chunks.chunk_index,
+         chunks.content_start,
+         chunks.content_end,
+         chunks.vector
+       from note_embeddings embeddings
+       join notes on notes.id = embeddings.note_id
+       join note_embedding_chunks chunks on chunks.note_id = embeddings.note_id
+       where embeddings.note_revision = notes.current_revision
+         and embeddings.model_id = ?
+         and embeddings.model_revision = ?
+         and embeddings.dimensions = ?
+       limit ${MAX_EMBEDDING_CHUNK_CANDIDATES}`,
+    );
+    let rows: EmbeddingVectorRow[];
+    try {
+      rows = statement.all(
+        descriptor.id,
+        descriptor.revision,
+        descriptor.dimensions,
+      );
+    } finally {
+      closePreparedStatement(statement);
+    }
+    const vectors = rows.flatMap(({ vector: bytes, ...row }) => {
+      const vector = embeddingFromBytes(bytes, descriptor.dimensions);
+      if (!vector) return [];
+      const magnitude = vectorMagnitude(vector);
+      if (!Number.isFinite(magnitude) || magnitude <= 0) return [];
+      return [{ row, vector, magnitude }];
+    });
+    const cache = {
+      modelKey,
+      vectors,
+      centroid: embeddingCentroid(
+        vectors.map((candidate) => candidate.vector),
+        descriptor.dimensions,
+      ),
+    } satisfies SemanticIndexCache;
+    this.#semanticIndexCache = cache;
+    return cache;
   }
 
   #allLexicalResults(vault: VaultContext, query: string): RecallResult[] {
@@ -1801,6 +1919,7 @@ export class SqliteMemory implements Memory {
     const run = (sql: string, parameters: readonly SQLQueryBindings[]): void =>
       runDatabaseStatement(this.#database, sql, parameters);
     if (invalidateEmbedding) {
+      this.#semanticIndexCache = null;
       run("delete from note_embedding_chunks where note_id = ?", [note.id]);
       run("delete from note_embeddings where note_id = ?", [note.id]);
     }
@@ -2072,6 +2191,7 @@ export class SqliteMemory implements Memory {
   #scheduleEmbeddingBatch(notes: readonly Note[]): void {
     const model = this.#embeddingModel;
     if (!model || this.#closed || notes.length === 0) return;
+    this.#semanticIndexCache = null;
     this.#indexing += notes.length;
     this.#indexQueue = this.#indexQueue
       .then(async () => {
@@ -2664,7 +2784,10 @@ function searchRowToResult(row: SearchRow): RecallResult {
   };
 }
 
-function semanticRowToResult(row: EmbeddingRow, score: number): RecallResult {
+function semanticRowToResult(
+  row: HydratedEmbeddingRow,
+  score: number,
+): RecallResult {
   const note = rowToNote(row);
   const excerpt = note.content.slice(row.content_start, row.content_end);
   return {
@@ -2678,6 +2801,69 @@ function semanticRowToResult(row: EmbeddingRow, score: number): RecallResult {
     },
     score,
   };
+}
+
+function embeddingCentroid(
+  vectors: readonly Float32Array[],
+  dimensions: number,
+): VectorWithMagnitude | null {
+  if (vectors.length === 0) return null;
+  const centroid = new Float32Array(dimensions);
+  for (const vector of vectors) {
+    for (let index = 0; index < dimensions; index += 1) {
+      centroid[index] =
+        (centroid[index] ?? 0) + (vector[index] ?? 0) / vectors.length;
+    }
+  }
+  const magnitude = vectorMagnitude(centroid);
+  return Number.isFinite(magnitude) && magnitude > 0
+    ? { vector: centroid, magnitude }
+    : null;
+}
+
+function hubnessCorrectedSimilarity(
+  querySimilarity: number,
+  vector: Float32Array,
+  magnitude: number,
+  centroid: VectorWithMagnitude | null,
+): number {
+  if (!centroid) return querySimilarity;
+  const corpusSimilarity = cosineSimilarityWithMagnitudes(
+    centroid.vector,
+    centroid.magnitude,
+    vector,
+    magnitude,
+  );
+  return Number.isFinite(corpusSimilarity)
+    ? querySimilarity - SEMANTIC_HUBNESS_PENALTY * corpusSimilarity
+    : querySimilarity;
+}
+
+function vectorMagnitude(vector: Float32Array): number {
+  let squared = 0;
+  for (const value of vector) squared += value * value;
+  return Math.sqrt(squared);
+}
+
+function cosineSimilarityWithMagnitudes(
+  left: Float32Array,
+  leftMagnitude: number,
+  right: Float32Array,
+  rightMagnitude: number,
+): number {
+  if (
+    left.length === 0 ||
+    left.length !== right.length ||
+    leftMagnitude === 0 ||
+    rightMagnitude === 0
+  ) {
+    return Number.NaN;
+  }
+  let dot = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += (left[index] ?? 0) * (right[index] ?? 0);
+  }
+  return dot / (leftMagnitude * rightMagnitude);
 }
 
 function hybridResultAfterCursor(
@@ -3000,4 +3186,12 @@ function isUnderspecifiedDeicticQuery(query: string): boolean {
     "which",
   ]);
   return words.length > 0 && words.every((word) => generic.has(word));
+}
+
+function requestsUnsavedLiveState(query: string): boolean {
+  const words = new Set(normalizedTextTokens(query));
+  const requestsInboxState =
+    ["email", "inbox", "mail"].some((word) => words.has(word)) &&
+    ["new", "unread", "waiting"].some((word) => words.has(word));
+  return requestsInboxState;
 }

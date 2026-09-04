@@ -63,9 +63,9 @@ const SEMANTIC_SCENARIO_DEFINITIONS = [
     noteKey: "semantic-access-paraphrase",
     content: "The spare studio key is taped beneath the lavender toolbox lid.",
     source: { application: "Claude", label: "Access detail" },
-    query: "Where is my backup way into the workspace?",
+    query: "Where is the backup entrance pass for the art room?",
     documentPhrase: "lavender toolbox",
-    queryPhrase: "backup way into the workspace",
+    queryPhrase: "backup entrance pass for the art room",
   },
 ] as const;
 
@@ -160,7 +160,7 @@ export const LOCAL_RECALL_SEMANTIC_SCENARIOS =
 
 export const LOCAL_RECALL_EVALUATION_CORPUS = {
   id: "local-delayed-recall",
-  version: 7,
+  version: 8,
   notes: [
     note(1, "commitment-proposal", "Send John the revised proposal Friday afternoon.", {
       application: "Claude",

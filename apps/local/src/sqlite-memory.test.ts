@@ -1444,6 +1444,134 @@ describe("SqliteMemory temporal recall", () => {
 });
 
 describe("SqliteMemory hybrid retrieval", () => {
+  it("invalidates the cached semantic index after saves, edits, and deletes", async () => {
+    const first = "The brass token opens the archive room.";
+    const second = "The indigo folder contains the vendor renewal.";
+    const updated = "The archive token was replaced by a digital badge.";
+    const firstQuery = "How do I enter the records storage area?";
+    const secondQuery = "Where is the supplier extension paperwork?";
+    const updatedQuery = "What replaced the physical archive credential?";
+    const model = new FixtureEmbeddingModel(new Map([
+      [first, [1, 0]],
+      [second, [0, 1]],
+      [updated, [-1, 0]],
+      [firstQuery, [1, 0]],
+      [secondQuery, [0, 1]],
+      [updatedQuery, [-1, 0]],
+    ]));
+    const memory = new SqliteMemory(":memory:", localVault, {
+      embeddingModel: model,
+      retrievalMode: "hybrid",
+    });
+    try {
+      const original = await memory.remember(localVault, { content: first });
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, firstQuery, 5)).toMatchObject([
+        { note: { id: original.id } },
+      ]);
+
+      const added = await memory.remember(localVault, { content: second });
+      await memory.waitForDerivedIndex();
+      expect(
+        (await memory.recall(localVault, secondQuery, 5))
+          .map((result) => result.note.id),
+      ).toContain(added.id);
+
+      await memory.updateNote(localVault, original.id, {
+        content: updated,
+        expectedRevision: 1,
+      });
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, updatedQuery, 5)).toMatchObject([
+        { note: { id: original.id, revision: 2 } },
+      ]);
+
+      await memory.forget(localVault, added.id);
+      expect(
+        (await memory.recall(localVault, secondQuery, 5))
+          .map((result) => result.note.id),
+      ).not.toContain(added.id);
+    } finally {
+      memory.close();
+    }
+  });
+
+  it("corrects corpus hubness so near-duplicate distractors cannot crowd out evidence", async () => {
+    const query = "What is blocking the release?";
+    const relevant = "Security approval is required before shipping.";
+    const distractors = Array.from(
+      { length: 5 },
+      (_, index) => `Routine planning placeholder ${index + 1}.`,
+    );
+    const model = new FixtureEmbeddingModel(new Map([
+      [query, [1, 0]],
+      [relevant, [0.78, -0.625]],
+      ...distractors.map((content, index) => [
+        content,
+        [0.8, 0.6 + index * 0.002],
+      ] as [string, number[]]),
+    ]));
+    const memory = new SqliteMemory(":memory:", localVault, {
+      embeddingModel: model,
+      retrievalMode: "hybrid",
+    });
+    try {
+      const expected = await memory.remember(localVault, { content: relevant });
+      for (const content of distractors) {
+        await memory.remember(localVault, { content });
+      }
+      await memory.waitForDerivedIndex();
+
+      expect(
+        (await memory.recall(localVault, query, 5)).map((result) => result.note.id),
+      ).toContain(expected.id);
+    } finally {
+      memory.close();
+    }
+  });
+
+  it("does not invent live inbox access from an unrelated semantic neighbor", async () => {
+    const query = "Summarize my unread email inbox";
+    const unrelated = "Routine message status placeholder.";
+    const model = new FixtureEmbeddingModel(new Map([
+      [query, [1, 0]],
+      [unrelated, [1, 0]],
+    ]));
+    const memory = new SqliteMemory(":memory:", localVault, {
+      embeddingModel: model,
+      retrievalMode: "hybrid",
+    });
+    try {
+      await memory.remember(localVault, { content: unrelated });
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, query, 5)).toEqual([]);
+    } finally {
+      memory.close();
+    }
+  });
+
+  it("still returns saved evidence about an inbox when the note actually says so", async () => {
+    const query = "What did I save about my unread email inbox?";
+    const content = "My unread email inbox was empty before the flight.";
+    const model = new FixtureEmbeddingModel(new Map([
+      [query, [1, 0]],
+      [content, [1, 0]],
+    ]));
+    const memory = new SqliteMemory(":memory:", localVault, {
+      embeddingModel: model,
+      retrievalMode: "hybrid",
+    });
+    try {
+      const expected = await memory.remember(localVault, { content });
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, query, 5)).toMatchObject([
+        { note: { id: expected.id } },
+      ]);
+    } finally {
+      memory.close();
+    }
+  });
+
   it("does not reinterpret an exact phrase found only in a superseded revision", async () => {
     const query = "crimson accordion";
     const current = "The emergency keycard moved to the green fireproof box upstairs.";
