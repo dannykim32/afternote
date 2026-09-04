@@ -66,6 +66,7 @@ try {
   const sqlcipherCflags = [
     "-DSQLITE_HAS_CODEC",
     "-DSQLCIPHER_CRYPTO_OPENSSL",
+    "-DSQLITE_ENABLE_FTS5",
     "-DSQLITE_EXTRA_INIT=sqlcipher_extra_init",
     "-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown",
     `-mmacosx-version-min=${minimumMacosVersion}`,

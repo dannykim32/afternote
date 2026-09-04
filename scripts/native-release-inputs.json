@@ -11,7 +11,7 @@
   "onnxRuntimeVersion": "1.21.0",
   "onnxRuntimeLibrarySha256": "1bce2d05d778282c912e7fab6d5dfc5fa851f5797e8d0914a62d4adeb1d4d82b",
   "opensslLibrarySha256": "897d0e466b2127e29bc28669a0b4049dc1f5de9aec97aca17666044a12a724b0",
-  "sqlcipherLibrarySha256": "58566cc482986aab8f394919786992fbb9ac2572f1d406f2c27c168b60792d0f",
+  "sqlcipherLibrarySha256": "7ac5de94fee95f3b5c4a8eb45accc32bcff84bdb1a3132c41df830492bb8e21d",
   "sqlcipherHeaderSha256": "8a9d1bff44d75174ca6dea3ea9bac50a6104d86facb566647b8bb839375b7b3a",
   "opensslSource": {
     "version": "4.0.2",

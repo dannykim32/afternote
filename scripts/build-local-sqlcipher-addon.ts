@@ -4,10 +4,13 @@ import {
   copyFileSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import {
   resolvedPeerRequirement,
@@ -204,6 +207,7 @@ for (const [identifier, path] of [
   ]);
   run(["codesign", "--verify", "--strict", "--verbose=4", path]);
 }
+assertSqlcipherRuntimeCapabilities();
 
 function cStringMacro(name: string, value: string): string {
   return `-D${name}=${JSON.stringify(value)}`;
@@ -310,6 +314,34 @@ function sha256Directory(path: string): string {
     (file) => `${sha256File(file)}  ${file}\n`,
   ).join("");
   return createHash("sha256").update(inventory).digest("hex");
+}
+
+function assertSqlcipherRuntimeCapabilities(): void {
+  const addon = createRequire(import.meta.url)(addonPath) as {
+    open(path: string, key: Uint8Array, readonly: boolean): object;
+    exec(database: object, sql: string): void;
+    close(database: object): void;
+  };
+  const directory = mkdtempSync(join(tmpdir(), "afternote-native-smoke-"));
+  const databasePath = join(directory, "encrypted.db");
+  let database: object | undefined;
+  try {
+    database = addon.open(databasePath, new Uint8Array(32).fill(0x5a), false);
+    addon.exec(database, "CREATE VIRTUAL TABLE release_fts USING fts5(content)");
+    addon.exec(database, "INSERT INTO release_fts(content) VALUES ('afternote-native-canary')");
+    addon.close(database);
+    database = undefined;
+    const bytes = readFileSync(databasePath);
+    if (
+      bytes.includes(Buffer.from("SQLite format 3")) ||
+      bytes.includes(Buffer.from("afternote-native-canary"))
+    ) {
+      throw new Error("Native SQLCipher smoke database contains plaintext");
+    }
+  } finally {
+    if (database) addon.close(database);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 console.log(
