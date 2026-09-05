@@ -21,7 +21,8 @@ gate below, finalizes the DMG, and copies only the DMG, checksum, and final repo
 7. Sign with the existing Developer ID identity and the separate worker and client-signer
    provisioning profiles. Credentials remain outside the checkout.
 8. Verify every nested signature and the signed payload manifest. The manifest covers the
-   top-level portable payload and the copy embedded in `Afternote.app`.
+   top-level portable payload plus the app resources and embedded runtime. The outer app's main
+   Mach-O is covered by its Developer ID signature because signing changes its signature region.
 9. Notarize, staple, verify Gatekeeper assessment, and re-verify a private extracted
    archive. Publish only the final DMG, never the portable build directory or archives.
 10. Test fresh install, upgrade, rollback, uninstall, and reinstall on a clean macOS user.

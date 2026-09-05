@@ -31,7 +31,7 @@ export function collectPayloadEntries(portableRoot: string): PayloadManifestEntr
       const relativePath = relative(portableRoot, path);
       if (!includeApplication &&
         (relativePath === "Afternote.app" || relativePath.startsWith("Afternote.app/"))) continue;
-      if (includeApplication && isExcludedApplicationMetadata(relativePath)) continue;
+      if (includeApplication && isExcludedApplicationEntry(relativePath)) continue;
       const info = lstatSync(path);
       if (info.isSymbolicLink()) throw new Error(`Release payload contains a symlink: ${relativePath}`);
       if (info.isDirectory()) visit(path, includeApplication);
@@ -178,9 +178,10 @@ function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function isExcludedApplicationMetadata(relativePath: string): boolean {
+function isExcludedApplicationEntry(relativePath: string): boolean {
   return relativePath ===
       "Afternote.app/Contents/Resources/AFTERNOTE_PAYLOAD_MANIFEST.json" ||
+    relativePath === "Afternote.app/Contents/MacOS/Afternote" ||
     relativePath === "Afternote.app/Contents/CodeResources" ||
     relativePath === "Afternote.app/Contents/_CodeSignature" ||
     relativePath.startsWith("Afternote.app/Contents/_CodeSignature/");

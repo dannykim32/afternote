@@ -39,7 +39,9 @@ connector-key access group. The CLI does not receive either private-key group.
 IT can verify the DMG, Developer ID signature, identifier, Team ID, Gatekeeper decision, and
 stapled notarization ticket with the commands in [VERIFY_RELEASE.md](VERIFY_RELEASE.md). The signed
 app also contains the SPDX SBOM, notices, licenses, build provenance, and a payload manifest over
-the app executable, resources, and embedded runtime.
+its resources and embedded runtime. The outer app executable is covered by its Developer ID
+signature; hashing it into the pre-sign manifest would include the signature region that signing
+itself changes.
 
 ## Data and retention
 

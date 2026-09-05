@@ -78,7 +78,7 @@ describe("signed release payload manifest", () => {
     expect(() => assertEmbeddedRuntimeMatchesPortable(root)).toThrow("differs");
   });
 
-  it("allows only declared finalizer mutations", () => {
+  it("allows only declared finalizer mutations outside Apple's outer-app signature", () => {
     const root = temporaryDirectory();
     mkdirSync(join(root, "AfternoteVaultWorker.app"), { recursive: true });
     mkdirSync(join(root, "Afternote.app/Contents/Resources/AfternoteRuntime"), { recursive: true });
@@ -86,7 +86,11 @@ describe("signed release payload manifest", () => {
     writeFileSync(join(root, "install.sh"), "echo reviewed\n");
     writeFileSync(join(root, "AfternoteVaultWorker.app/ticket"), "before\n");
     writeFileSync(join(root, "Afternote.app/Contents/MacOS/Afternote"), "reviewed\n");
+    writeFileSync(join(root, "Afternote.app/Contents/Resources/reviewed.dat"), "reviewed\n");
     const before = collectPayloadEntries(root);
+    expect(before.some((entry) =>
+      entry.path === "Afternote.app/Contents/MacOS/Afternote"
+    )).toBe(false);
 
     writeFileSync(join(root, "AfternoteVaultWorker.app/ticket"), "after\n");
     expect(() => assertOnlyAllowedPayloadChanges(
@@ -103,7 +107,7 @@ describe("signed release payload manifest", () => {
     )).toThrow("allowed mutation set");
 
     writeFileSync(join(root, "install.sh"), "echo reviewed\n");
-    writeFileSync(join(root, "Afternote.app/Contents/MacOS/Afternote"), "injected\n");
+    writeFileSync(join(root, "Afternote.app/Contents/Resources/reviewed.dat"), "injected\n");
     expect(() => assertOnlyAllowedPayloadChanges(
       before,
       collectPayloadEntries(root),
