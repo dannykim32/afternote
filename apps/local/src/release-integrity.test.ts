@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -70,6 +70,11 @@ describe("signed release payload manifest", () => {
     verifyPayloadManifest(root);
     verifyEmbeddedRuntimeManifest(application);
     verifyApplicationPayloadManifest(application);
+
+    symlinkSync("/Applications", join(root, "Applications"));
+    verifyEmbeddedRuntimeManifest(application);
+    verifyApplicationPayloadManifest(application);
+    rmSync(join(root, "Applications"));
 
     writeFileSync(join(embedded, "install.sh"), "echo changed\n", { mode: 0o755 });
     expect(() => verifyPayloadManifest(root)).toThrow("does not match");

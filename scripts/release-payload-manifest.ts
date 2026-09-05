@@ -24,6 +24,13 @@ export function payloadManifestPath(portableRoot: string): string {
 }
 
 export function collectPayloadEntries(portableRoot: string): PayloadManifestEntry[] {
+  return collectEntries(portableRoot, true);
+}
+
+function collectEntries(
+  portableRoot: string,
+  includePortablePayload: boolean,
+): PayloadManifestEntry[] {
   const entries: PayloadManifestEntry[] = [];
   const visit = (directory: string, includeApplication = false) => {
     for (const name of readdirSync(directory).sort()) {
@@ -44,21 +51,20 @@ export function collectPayloadEntries(portableRoot: string): PayloadManifestEntr
       else throw new Error(`Release payload contains a non-regular path: ${relativePath}`);
     }
   };
-  visit(portableRoot);
+  if (includePortablePayload) visit(portableRoot);
   visit(join(portableRoot, "Afternote.app"), true);
   return entries;
 }
 
 export function collectEmbeddedRuntimeEntries(ownerApplicationPath: string): PayloadManifestEntry[] {
-  const portableRoot = join(ownerApplicationPath, "..");
-  return collectPayloadEntries(portableRoot).filter((entry) =>
+  return collectApplicationEntries(ownerApplicationPath).filter((entry) =>
     entry.path.startsWith("Afternote.app/Contents/Resources/AfternoteRuntime/"),
   );
 }
 
 export function collectApplicationEntries(ownerApplicationPath: string): PayloadManifestEntry[] {
   const portableRoot = join(ownerApplicationPath, "..");
-  return collectPayloadEntries(portableRoot).filter((entry) =>
+  return collectEntries(portableRoot, false).filter((entry) =>
     entry.path.startsWith("Afternote.app/"),
   );
 }
