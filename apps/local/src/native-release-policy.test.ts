@@ -40,7 +40,9 @@ describe("native release input policy", () => {
     expect(preparation).toContain('const sourceDateEpoch = "0"');
     expect(preparation).toContain('"/usr/bin/curl"');
     expect(preparation).toContain('"--proto-redir", "=https"');
-    expect(preparation).toContain('"--retry", "2"');
+    expect(preparation).toContain('"--http1.1"');
+    expect(preparation).toContain('"--continue-at", "-"');
+    expect(preparation).toContain('"--retry", "8"');
     expect(preparation).toContain('"--max-filesize", String(input.maximumBytes)');
     expect(preparation).toContain("SOURCE_DATE_EPOCH: sourceDateEpoch");
     expect(preparation).toContain('"-DSQLITE_ENABLE_FTS5"');
