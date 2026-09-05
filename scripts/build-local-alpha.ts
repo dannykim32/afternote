@@ -919,26 +919,41 @@ function assertReleaseInputsUnchanged(expected: {
 }
 
 export function releaseToolchainIdentity(): Record<string, string> {
-  const capture = (command: string[]) => {
+  const tryCapture = (command: string[]): string | null => {
     const result = Bun.spawnSync(command, {
       cwd: repositoryRoot,
       env: releaseCommandEnvironment(process.env),
       stdout: "pipe",
       stderr: "pipe",
     });
-    if (result.exitCode !== 0) {
+    if (result.exitCode !== 0) return null;
+    return `${result.stdout.toString()}${result.stderr.toString()}`.trim() || null;
+  };
+  const capture = (command: string[]): string => {
+    const value = tryCapture(command);
+    if (value === null) {
       throw new Error(`Could not identify release toolchain: ${command[0]}`);
     }
-    return `${result.stdout.toString()}${result.stderr.toString()}`.trim();
+    return value;
   };
   const sdkPath = capture(["/usr/bin/xcrun", "--show-sdk-path"]);
+  const developerDirectory = capture(["/usr/bin/xcode-select", "-p"]);
+  const developerTools = tryCapture(["/usr/bin/xcodebuild", "-version"]) ??
+    tryCapture([
+      "/usr/sbin/pkgutil",
+      "--pkg-info=com.apple.pkg.CLTools_Executables",
+    ]);
+  if (developerTools === null) {
+    throw new Error("Could not identify Xcode or Command Line Tools");
+  }
   return {
     bunExecutableSha256: sha256(process.execPath),
     bunVersion: process.versions.bun ?? "unknown",
     clang: capture(["/usr/bin/clang++", "--version"]),
+    developerDirectory,
+    developerTools,
     sdkPath,
     sdkSettingsSha256: sha256(join(sdkPath, "SDKSettings.json")),
-    xcode: capture(["/usr/bin/xcodebuild", "-version"]),
   };
 }
 

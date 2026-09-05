@@ -57,5 +57,7 @@ describe("native release input policy", () => {
     expect(nativeBuild).toContain('requiredDigest(manifest.onnxRuntimeLibrarySha256');
     expect(packageBuild).toContain('signing.release ? "13.3" : "26.0"');
     expect(packageBuild).toContain('["-mmacosx-version-min=13.3"]');
+    expect(packageBuild).toContain('["/usr/bin/xcode-select", "-p"]');
+    expect(packageBuild).toContain("com.apple.pkg.CLTools_Executables");
   });
 });
