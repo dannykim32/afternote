@@ -16,6 +16,7 @@ import {
   resolvedPeerRequirement,
   signedRequirement,
 } from "./build-local-alpha";
+import { releaseCommandEnvironment } from "./release-environment";
 
 const repositoryRoot = resolve(process.cwd());
 if (process.versions.bun !== "1.3.14") {
@@ -378,6 +379,9 @@ function run(command: string[]): void {
   const resolvedCommand = [resolvedTool, ...args];
   const result = Bun.spawnSync(resolvedCommand, {
     cwd: repositoryRoot,
+    env: releaseBuild
+      ? releaseCommandEnvironment(process.env)
+      : process.env as Record<string, string>,
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -22,9 +22,10 @@ xcrun stapler validate /Volumes/Afternote/Afternote.app
 The signature details must show Team Identifier `486B2A8N8A` and identifier
 `dev.afternote.owner-control`. Gatekeeper and stapler validation must succeed. The signed app
 contains the runtime, SPDX SBOM, third-party notices, license texts, and a manifest binding
-every non-app runtime file copied during installation.
+both the reviewed portable payload and the runtime embedded in the application.
 
 These checks authenticate the maintainer and Apple's notarization decision. They do not by
 themselves prove that a binary was built from a particular source commit. The embedded
-release record states the maintainer build commit and input digests; a third-party build
-attestation is not claimed for this alpha.
+release record states the maintainer build commit, Git tree, dependency tree, restricted build
+environment, toolchain, and native input digests. This is maintainer-signed provenance, not a
+third-party reproducible-build attestation.

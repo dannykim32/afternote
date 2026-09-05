@@ -62,6 +62,16 @@ describe("native owner administration production boundary", () => {
     );
   });
 
+  it("uses a PID-bound, mutually signed XPC channel for the private worker", () => {
+    expect(gatewaySource).toContain("CreateWorkerListener");
+    expect(gatewaySource).toContain(
+      "xpc_connection_set_peer_code_signing_requirement(listener, requirement)",
+    );
+    expect(gatewaySource).toContain("peer_pid != worker->pid");
+    expect(gatewaySource).not.toContain("fdopen(request_pipe[1]");
+    expect(gatewaySource).not.toContain("fprintf(worker->input");
+  });
+
   it("validates broker responses in the native helper and never accepts note plaintext", () => {
     expect(nativeAppSource).toContain("IsAdminResult");
     expect(nativeAppSource).toContain("RunAdminCommand");

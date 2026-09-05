@@ -65,6 +65,7 @@ import {
 import {
   getOrCreateKeychainVaultKey,
   packagedVaultKeychainOptions,
+  pollVaultBrokerGatewayXpc,
   ExclusiveFileLock,
   SqlcipherDatabase,
 } from "./sqlcipher-database";
@@ -3372,6 +3373,60 @@ export async function runVaultBrokerWorker(
   } finally {
     worker.close();
   }
+}
+
+export async function runVaultBrokerWorkerXpc(
+  options: string | VaultBrokerWorkerOptions,
+  transport: { service: string; gatewayCodeRequirement: string },
+): Promise<void> {
+  const worker = new VaultBrokerWorker(options);
+  let responseTo = 0;
+  let response: string | null = null;
+  let terminate = false;
+  let terminateAfterDelivery = false;
+  try {
+    while (true) {
+      const delivery = pollVaultBrokerGatewayXpc(
+        transport.service,
+        transport.gatewayCodeRequirement,
+        JSON.stringify({
+          protocolVersion: 1,
+          responseTo,
+          response,
+          terminate,
+        }),
+      );
+      if (terminate) {
+        const acknowledgement = JSON.parse(delivery) as unknown;
+        assertExactObject(acknowledgement, ["protocolVersion", "shutdown"]);
+        const value = acknowledgement as Record<string, unknown>;
+        if (value.protocolVersion !== 1 || value.shutdown !== true) {
+          throw new Error("Private gateway shutdown acknowledgement is invalid");
+        }
+        terminateAfterDelivery = true;
+        break;
+      }
+      const parsed = JSON.parse(delivery) as unknown;
+      assertExactObject(parsed, ["protocolVersion", "request", "requestId"]);
+      const value = parsed as Record<string, unknown>;
+      if (
+        value.protocolVersion !== 1 ||
+        !Number.isSafeInteger(value.requestId) ||
+        (value.requestId as number) <= 0 ||
+        typeof value.request !== "string" ||
+        !value.request ||
+        Buffer.byteLength(value.request) > MAXIMUM_MESSAGE_BYTES
+      ) {
+        throw new Error("Private gateway delivery is invalid");
+      }
+      responseTo = value.requestId as number;
+      response = await worker.handleSerialized(value.request);
+      terminate = worker.shouldTerminateAfterResponse();
+    }
+  } finally {
+    worker.close();
+  }
+  if (terminateAfterDelivery) process.exit(70);
 }
 
 class BrokerProtocolError extends Error {

@@ -15,10 +15,25 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import {
+  assertEmbeddedRuntimeMatchesPortable,
+  assertOnlyAllowedPayloadChanges,
+  collectPayloadEntries,
   payloadManifestPath,
+  readPayloadManifestEntries,
+  verifyApplicationPayloadManifest,
+  verifyEmbeddedRuntimeManifest,
   verifyPayloadManifest,
   writePayloadManifest,
 } from "./release-payload-manifest";
+import {
+  releaseCommandEnvironment,
+  releaseEnvironmentSha256,
+} from "./release-environment";
+import { sha256DirectoryTree } from "./release-inputs";
+import {
+  releaseProvisioningProfileIdentity,
+  releaseToolchainIdentity,
+} from "./build-local-alpha";
 
 if (process.versions.bun !== "1.3.14") {
   throw new Error(`Afternote release finalization requires Bun 1.3.14; found ${process.versions.bun ?? "unknown"}`);
@@ -45,8 +60,13 @@ type ArtifactReport = {
   ownerControlAppPath: string;
   embeddedRuntimePath: string;
   sourceCommit: string;
+  sourceTree: string;
   sourceTreeClean: boolean;
   dependencyLockSha256: string;
+  dependencyTreeSha256: string | null;
+  buildEnvironmentSha256: string | null;
+  toolchainSha256: string | null;
+  provisioningProfilesSha256: string | null;
   payloadManifestSha256: string | null;
   buildProvenanceSha256: string | null;
 };
@@ -95,10 +115,19 @@ export function assertPublicArtifactReport(
   if (!report.signing.startsWith("Developer ID hardened-runtime signature")) {
     throw new Error("Release finalization requires a Developer ID build");
   }
-  if (!report.sourceTreeClean || !/^[0-9a-f]{40}$/.test(report.sourceCommit)) {
+  if (!report.sourceTreeClean || !/^[0-9a-f]{40}$/.test(report.sourceCommit) ||
+    !/^[0-9a-f]{40}$/.test(report.sourceTree)) {
     throw new Error("Release finalization requires clean build-time source provenance");
   }
   if (!/^[a-f0-9]{64}$/.test(report.dependencyLockSha256) ||
+    typeof report.dependencyTreeSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(report.dependencyTreeSha256) ||
+    typeof report.buildEnvironmentSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(report.buildEnvironmentSha256) ||
+    typeof report.toolchainSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(report.toolchainSha256) ||
+    typeof report.provisioningProfilesSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(report.provisioningProfilesSha256) ||
     typeof report.payloadManifestSha256 !== "string" ||
     !/^[a-f0-9]{64}$/.test(report.payloadManifestSha256) ||
     typeof report.buildProvenanceSha256 !== "string" ||
@@ -130,6 +159,7 @@ function finalizeLocalRelease(): void {
     throw new Error("Release finalization requires macOS arm64");
   }
   const repositoryRoot = resolve(process.cwd());
+  releaseCommandEnvironment(process.env);
   const outputDirectory = join(repositoryRoot, "build/local-alpha");
   const artifactReportPath = join(outputDirectory, "artifact-report.json");
   const artifact = JSON.parse(readFileSync(artifactReportPath, "utf8")) as ArtifactReport;
@@ -140,9 +170,34 @@ function finalizeLocalRelease(): void {
   if (artifact.sourceCommit !== sourceCommit) {
     throw new Error("Release artifact was not built from the current source commit");
   }
+  const sourceTree = run(["git", "rev-parse", "HEAD^{tree}"], repositoryRoot).stdout.trim();
+  if (artifact.sourceTree !== sourceTree) {
+    throw new Error("Release artifact was not built from the current source tree");
+  }
   if (!/^[a-f0-9]{64}$/.test(artifact.dependencyLockSha256) ||
     sha256(join(repositoryRoot, "bun.lock")) !== artifact.dependencyLockSha256) {
     throw new Error("Release dependency lock changed after packaging");
+  }
+  if (sha256DirectoryTree(join(repositoryRoot, "node_modules")) !==
+    artifact.dependencyTreeSha256 ||
+    process.env.AFTERNOTE_RELEASE_DEPENDENCY_TREE_SHA256 !== artifact.dependencyTreeSha256) {
+    throw new Error("Release dependency tree changed after packaging");
+  }
+  if (releaseEnvironmentSha256(releaseCommandEnvironment(process.env)) !==
+    artifact.buildEnvironmentSha256) {
+    throw new Error("Release build environment changed after packaging");
+  }
+  const toolchainSha256 = createHash("sha256")
+    .update(JSON.stringify(releaseToolchainIdentity()))
+    .digest("hex");
+  if (toolchainSha256 !== artifact.toolchainSha256) {
+    throw new Error("Release toolchain changed after packaging");
+  }
+  const provisioningProfilesSha256 = createHash("sha256")
+    .update(JSON.stringify(releaseProvisioningProfileIdentity()))
+    .digest("hex");
+  if (provisioningProfilesSha256 !== artifact.provisioningProfilesSha256) {
+    throw new Error("Release provisioning profiles changed after packaging");
   }
 
   const teamId = requiredEnvironment("AFTERNOTE_TEAM_ID");
@@ -159,6 +214,7 @@ function finalizeLocalRelease(): void {
     throw new Error("Signed payload manifest does not match the build report");
   }
   verifyPayloadManifest(portableRoot);
+  const approvedPayloadEntries = readPayloadManifestEntries(portableRoot);
   verifyBuildProvenance(portableRoot, artifact, repositoryRoot);
   const embeddedRuntimePath = requireContainedPath(
     portableRoot,
@@ -217,15 +273,19 @@ function finalizeLocalRelease(): void {
     run(["xcrun", "stapler", "staple", appPath]);
     run(["xcrun", "stapler", "validate", appPath]);
   }
-  resealDesktopApplication({
+  artifact.payloadManifestSha256 = resealDesktopApplication({
     portableRoot,
     ownerControlAppPath: artifact.ownerControlAppPath,
     embeddedRuntimePath,
     brokerWorkerAppPath: artifact.brokerWorkerAppPath,
     clientSignerAppPath: artifact.clientSignerAppPath,
     signingIdentity,
+    approvedPayloadEntries,
   });
   verifyPayloadManifest(portableRoot);
+  if (sha256(payloadManifestPath(portableRoot)) !== artifact.payloadManifestSha256) {
+    throw new Error("Final payload manifest does not match the resealed application");
+  }
   verifyBuildProvenance(portableRoot, artifact, repositoryRoot);
   run([
     "ditto", "-c", "-k", "--keepParent",
@@ -271,11 +331,19 @@ function finalizeLocalRelease(): void {
   run(["hdiutil", "verify", paths.submissionDmg]);
   copyFileSync(paths.submissionDmg, paths.finalDmg);
   rmSync(paths.submissionDmg, { force: true });
-  verifyDesktopDmg(paths.finalDmg, teamId);
+  verifyDesktopDmg(paths.finalDmg, teamId, artifact.payloadManifestSha256);
 
   run(["ditto", "-c", "-k", "--keepParent", portableRoot, paths.verificationArchive]);
   verifyExtractedArchive(paths.verificationArchive, portableRoot, artifact, teamId);
   rmSync(paths.verificationArchive, { force: true });
+
+  requireCleanSource(repositoryRoot);
+  if (run(["git", "rev-parse", "HEAD"], repositoryRoot).stdout.trim() !== sourceCommit ||
+    run(["git", "rev-parse", "HEAD^{tree}"], repositoryRoot).stdout.trim() !== sourceTree ||
+    sha256(join(repositoryRoot, "bun.lock")) !== artifact.dependencyLockSha256 ||
+    sha256DirectoryTree(join(repositoryRoot, "node_modules")) !== artifact.dependencyTreeSha256) {
+    throw new Error("Release source inputs changed during finalization");
+  }
 
   const checksums = [`${sha256(paths.finalDmg)}  ${basename(paths.finalDmg)}`];
   writeFileSync(paths.checksums, `${checksums.join("\n")}\n`, { mode: 0o644 });
@@ -293,6 +361,7 @@ function finalizeLocalRelease(): void {
     finalDmgSha256: sha256(paths.finalDmg),
     checksums: paths.checksums,
     embeddedBuildProvenanceSha256: artifact.buildProvenanceSha256,
+    finalPayloadManifestSha256: artifact.payloadManifestSha256,
   }, null, 2)}\n`, { mode: 0o644 });
   console.log(readFileSync(paths.report, "utf8"));
 }
@@ -304,7 +373,8 @@ function resealDesktopApplication(options: {
   brokerWorkerAppPath: string;
   clientSignerAppPath: string;
   signingIdentity: string;
-}): void {
+  approvedPayloadEntries: ReturnType<typeof collectPayloadEntries>;
+}): string {
   for (const [source, name] of [
     [options.brokerWorkerAppPath, "AfternoteVaultWorker.app"],
     [options.clientSignerAppPath, "AfternoteClientSigner.app"],
@@ -314,7 +384,19 @@ function resealDesktopApplication(options: {
     run(["ditto", source, destination]);
     run(["xcrun", "stapler", "validate", destination]);
   }
-  writePayloadManifest(options.portableRoot);
+  assertOnlyAllowedPayloadChanges(
+    options.approvedPayloadEntries,
+    collectPayloadEntries(options.portableRoot),
+    [
+      "AfternoteVaultWorker.app",
+      "AfternoteClientSigner.app",
+      "Afternote.app/Contents/Resources/AfternoteRuntime/AfternoteVaultWorker.app",
+      "Afternote.app/Contents/Resources/AfternoteRuntime/AfternoteClientSigner.app",
+    ],
+  );
+  assertEmbeddedRuntimeMatchesPortable(options.portableRoot);
+  const manifestPath = writePayloadManifest(options.portableRoot);
+  verifyPayloadManifest(options.portableRoot);
   run([
     "codesign",
     "--force",
@@ -331,6 +413,7 @@ function resealDesktopApplication(options: {
     "codesign", "--verify", "--deep", "--strict", "--verbose=4",
     options.ownerControlAppPath,
   ]);
+  return sha256(manifestPath);
 }
 
 function createDesktopDmg(destination: string, applicationPath: string): void {
@@ -356,7 +439,11 @@ function createDesktopDmg(destination: string, applicationPath: string): void {
   }
 }
 
-function verifyDesktopDmg(dmgPath: string, teamId: string): void {
+function verifyDesktopDmg(
+  dmgPath: string,
+  teamId: string,
+  payloadManifestSha256: string,
+): void {
   const mountRoot = mkdtempSync(join(tmpdir(), "afternote-dmg-verify-"));
   const mountPoint = join(mountRoot, "Afternote");
   mkdirSync(mountPoint, { mode: 0o700 });
@@ -377,6 +464,14 @@ function verifyDesktopDmg(dmgPath: string, teamId: string): void {
     }
     run(["xcrun", "stapler", "validate", appPath]);
     run(["spctl", "--assess", "--type", "execute", "--verbose=4", appPath]);
+    verifyEmbeddedRuntimeManifest(appPath);
+    verifyApplicationPayloadManifest(appPath);
+    if (sha256(join(
+      appPath,
+      "Contents/Resources/AFTERNOTE_PAYLOAD_MANIFEST.json",
+    )) !== payloadManifestSha256) {
+      throw new Error("DMG payload manifest differs from the finalized release manifest");
+    }
   } finally {
     if (mounted) run(["hdiutil", "detach", mountPoint]);
     rmSync(mountRoot, { recursive: true, force: true });
@@ -394,6 +489,9 @@ function verifyExtractedArchive(
     run(["ditto", "-x", "-k", archive, directory]);
     const extractedRoot = requireRegularDirectory(join(directory, basename(originalPortableRoot)));
     verifyPayloadManifest(extractedRoot);
+    if (sha256(payloadManifestPath(extractedRoot)) !== artifact.payloadManifestSha256) {
+      throw new Error("Extracted release payload manifest differs from finalization");
+    }
     verifyBuildProvenance(extractedRoot, artifact);
     const translate = (path: string) =>
       requireContainedPath(extractedRoot, join(extractedRoot, relative(originalPortableRoot, path)));
@@ -438,7 +536,12 @@ function verifyBuildProvenance(
   const parsed = JSON.parse(readFileSync(provenancePath, "utf8")) as Record<string, unknown>;
   if (parsed.format !== "afternote-signed-build-provenance" || parsed.version !== 1 ||
     parsed.sourceCommit !== artifact.sourceCommit ||
-    parsed.dependencyLockSha256 !== artifact.dependencyLockSha256) {
+    parsed.sourceTree !== artifact.sourceTree ||
+    parsed.dependencyLockSha256 !== artifact.dependencyLockSha256 ||
+    parsed.dependencyTreeSha256 !== artifact.dependencyTreeSha256 ||
+    parsed.buildEnvironmentSha256 !== artifact.buildEnvironmentSha256 ||
+    parsed.toolchainSha256 !== artifact.toolchainSha256 ||
+    parsed.provisioningProfilesSha256 !== artifact.provisioningProfilesSha256) {
     throw new Error("Signed build provenance contents are invalid");
   }
   if (repositoryRoot) {
@@ -519,7 +622,12 @@ function run(command: string[], cwd = process.cwd()): { stdout: string; stderr: 
   const resolvedTool = tool.startsWith("/") ? tool : tools[tool];
   if (!resolvedTool) throw new Error(`Release finalization tool is not pinned: ${tool}`);
   const resolvedCommand = [resolvedTool, ...args];
-  const result = Bun.spawnSync(resolvedCommand, { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(resolvedCommand, {
+    cwd,
+    env: releaseCommandEnvironment(process.env),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const stdout = result.stdout.toString();
   const stderr = result.stderr.toString();
   if (result.exitCode !== 0) {

@@ -64,6 +64,32 @@ exit 0
   });
 });
 
+describe("package broker retirement", () => {
+  it("fails closed when launchd still reports the broker", () => {
+    const fixture = lifecycleFixture("broker-live");
+    const launchctl = join(fixture.directory, "launchctl");
+    writeExecutable(launchctl, `#!/bin/sh
+case "\${1:-}" in
+  bootout) exit 1 ;;
+  print) exit 0 ;;
+esac
+exit 1
+`);
+    const result = runBrokerBootout(fixture, launchctl);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("still running after launchd bootout");
+  });
+
+  it("accepts an already absent broker", () => {
+    const fixture = lifecycleFixture("broker-absent");
+    const launchctl = join(fixture.directory, "launchctl");
+    writeExecutable(launchctl, "#!/bin/sh\nexit 1\n");
+    const result = runBrokerBootout(fixture, launchctl);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe("");
+  });
+});
+
 function lifecycleFixture(name: string) {
   const directory = mkdtempSync(join(tmpdir(), `afternote-legacy-${name}-`));
   temporaryDirectories.push(directory);
@@ -100,6 +126,29 @@ function runLegacyCleanup(fixture: ReturnType<typeof lifecycleFixture>) {
       AFTERNOTE_INSTALL_ROOT: fixture.installRoot,
       AFTERNOTE_RUNTIME_PATH: fixture.runtimePath,
       AFTERNOTE_TEST_LEGACY_STOP_LOG: fixture.log,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+}
+
+function runBrokerBootout(
+  fixture: ReturnType<typeof lifecycleFixture>,
+  launchctl: string,
+) {
+  return Bun.spawnSync([
+    "/bin/sh",
+    "-c",
+    'install_root="$AFTERNOTE_INSTALL_ROOT"; . "$1"; broker_bootout',
+    "afternote-broker-bootout",
+    lifecycleScript,
+  ], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      AFTERNOTE_INSTALL_ROOT: fixture.installRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
     },
     stdout: "pipe",
     stderr: "pipe",

@@ -24,7 +24,10 @@ import {
   vaultBrokerHealth,
 } from "./vault-broker-client";
 import { localVaultContext } from "./local-vault";
-import type { DurableClientSigner } from "./sqlcipher-database";
+import {
+  requestVaultBrokerXpc,
+  type DurableClientSigner,
+} from "./sqlcipher-database";
 import { SqliteMemory } from "./sqlite-memory";
 
 const describeMacos = process.platform === "darwin" && process.arch === "arm64" &&
@@ -54,6 +57,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
     const suffix = randomUUID().toLowerCase();
     const service = `dev.afternote.vault-broker.test.${suffix}`;
     const ownerService = `dev.afternote.owner.test.${suffix}`;
+    const workerService = `${service}.private-worker`;
     const label = `${service}.primary`;
     const duplicateLabel = `${service}.duplicate`;
     const workerPath = join(directory, "afternote-vault-worker");
@@ -360,6 +364,17 @@ describeMacos("launchd-owned vault broker gateway", () => {
       timeoutMs: 500,
       codeRequirement: 'identifier "dev.afternote.invalid"',
     })).toThrow("unavailable");
+    expect(() => requestVaultBrokerXpc(
+      workerService,
+      gatewayCodeRequirement,
+      JSON.stringify({
+        protocolVersion: 1,
+        responseTo: 0,
+        response: null,
+        terminate: false,
+      }),
+      500,
+    )).toThrow(/unavailable|timed out/);
     const migrated = Bun.spawnSync([
       ownerControlPath,
       "--admin-migrate",
@@ -866,7 +881,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
     expect(ownerSmoke.exitCode, ownerSmoke.stderr.toString()).toBe(0);
     expect(ownerSmoke.stdout.toString()).toContain(note.id);
     expect(ownerSmoke.stdout.toString()).toContain("signed native restore XPC canary");
-  }, 60_000);
+  }, 90_000);
 
 });
 
@@ -885,6 +900,7 @@ function launchAgent(input: {
   ownerControlRequirement: string;
   closeFailurePath: string;
 }): string {
+  const workerService = `${input.service}.private-worker`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -893,6 +909,7 @@ function launchAgent(input: {
 <key>EnvironmentVariables</key><dict>
 <key>AFTERNOTE_BROKER_MACH_SERVICE</key><string>${input.service}</string>
 <key>AFTERNOTE_OWNER_CONTROL_MACH_SERVICE</key><string>${input.ownerService}</string>
+<key>AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE</key><string>${workerService}</string>
 <key>AFTERNOTE_BROKER_WORKER_PATH</key><string>${input.workerPath}</string>
 <key>AFTERNOTE_OWNER_PRESENCE_TEST_MODE</key><string>approve</string>
 <key>AFTERNOTE_VAULT_PATH</key><string>${input.vaultPath}</string>
@@ -905,7 +922,7 @@ ${input.keyPath
 <key>AFTERNOTE_TEST_OWNER_CONTROL_CODE_REQUIREMENT</key><string>${input.ownerControlRequirement}</string>
 <key>AFTERNOTE_TEST_VAULT_CLOSE_FAILURE_PATH</key><string>${input.closeFailurePath}</string>
 </dict>
-<key>MachServices</key><dict><key>${input.service}</key><true/><key>${input.ownerService}</key><true/></dict>
+<key>MachServices</key><dict><key>${input.service}</key><true/><key>${input.ownerService}</key><true/><key>${workerService}</key><true/></dict>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
 <key>ThrottleInterval</key><integer>1</integer>

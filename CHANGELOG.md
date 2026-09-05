@@ -15,6 +15,12 @@ binary releases. Until the first public tag, changes remain under Unreleased.
 
 ### Security
 
+- Worker requests now use a mutually signed, PID-bound post-exec XPC channel instead of
+  inherited standard streams.
+- Public releases build from a fresh detached checkout, reject ambient compiler inputs,
+  record the installed dependency tree and toolchain, and bind the embedded app runtime to
+  payload manifest v2.
+- Uninstall fails closed when launchd still reports the broker active.
 - The SQLCipher key is stored in the data-protection Keychain and is available only while
   the device is unlocked to the signed worker access group.
 - Connector sessions end on screen lock, sleep, logout, manual lock, and broker restart.

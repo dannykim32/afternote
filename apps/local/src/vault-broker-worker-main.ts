@@ -1,4 +1,4 @@
-import { runVaultBrokerWorker } from "./vault-broker-worker";
+import { runVaultBrokerWorkerXpc } from "./vault-broker-worker";
 import {
   existsSync,
   readFileSync,
@@ -17,6 +17,7 @@ declare const AFTERNOTE_BROKER_TESTING: boolean | undefined;
 declare const AFTERNOTE_GATEWAY_CODE_REQUIREMENT: string | undefined;
 declare const AFTERNOTE_RELEASE_BUILD: boolean | undefined;
 declare const AFTERNOTE_STANDALONE: boolean | undefined;
+declare const AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE: string | undefined;
 declare const AFTERNOTE_OWNER_PRESENCE_MODE:
   | "required"
   | "development-bypass"
@@ -37,6 +38,15 @@ if (!gatewayCodeRequirement) {
   throw new Error("Authorized vault broker gateway requirement is unavailable");
 }
 requireParentCodeSigningRequirement(gatewayCodeRequirement);
+const workerGatewayService =
+  typeof AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE === "string"
+    ? AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE
+    : typeof AFTERNOTE_BROKER_TESTING === "boolean" && AFTERNOTE_BROKER_TESTING
+      ? process.env.AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE
+      : undefined;
+if (!workerGatewayService) {
+  throw new Error("Private worker gateway service is unavailable");
+}
 
 const testKeyPath =
   typeof AFTERNOTE_BROKER_TESTING === "boolean" &&
@@ -65,7 +75,7 @@ const developmentKeyPath = ownerPresenceMode === "development-bypass"
   ? developmentVaultKeyPath(homedir())
   : undefined;
 
-await runVaultBrokerWorker(testKeyPath
+await runVaultBrokerWorkerXpc(testKeyPath
   ? {
       applicationVersion,
       standalone: typeof AFTERNOTE_STANDALONE === "boolean" && AFTERNOTE_STANDALONE,
@@ -98,4 +108,7 @@ await runVaultBrokerWorker(testKeyPath
       trustPath: typeof AFTERNOTE_RELEASE_BUILD === "boolean" && AFTERNOTE_RELEASE_BUILD
         ? "production-signed"
         : "development-only",
-    });
+    }, {
+  service: workerGatewayService,
+  gatewayCodeRequirement,
+});

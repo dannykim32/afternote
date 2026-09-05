@@ -3,7 +3,7 @@ import {
   readDataProtectionKeychainVaultKey,
   requireParentCodeSigningRequirement,
 } from "./sqlcipher-database";
-import { runVaultBrokerWorker } from "./vault-broker-worker";
+import { runVaultBrokerWorkerXpc } from "./vault-broker-worker";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { discoverLocalEmbeddingModel } from "./local-embedding";
@@ -14,6 +14,7 @@ declare const AFTERNOTE_KEYCHAIN_ACCESS_GROUP: string | undefined;
 declare const AFTERNOTE_OWNER_PRESENCE_MODE: "required" | undefined;
 declare const AFTERNOTE_RELEASE_BUILD: boolean | undefined;
 declare const AFTERNOTE_STANDALONE: boolean | undefined;
+declare const AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE: string | undefined;
 
 if (typeof AFTERNOTE_RELEASE_BUILD !== "boolean" || !AFTERNOTE_RELEASE_BUILD) {
   throw new Error("The public vault worker requires a release build");
@@ -27,17 +28,22 @@ if (
 ) {
   throw new Error("Authorized vault broker gateway requirement is unavailable");
 }
+requireParentCodeSigningRequirement(AFTERNOTE_GATEWAY_CODE_REQUIREMENT);
 if (
   typeof AFTERNOTE_KEYCHAIN_ACCESS_GROUP !== "string" ||
   !AFTERNOTE_KEYCHAIN_ACCESS_GROUP
 ) {
   throw new Error("The public vault worker requires its private Keychain group");
 }
-
-requireParentCodeSigningRequirement(AFTERNOTE_GATEWAY_CODE_REQUIREMENT);
+if (
+  typeof AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE !== "string" ||
+  !AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE
+) {
+  throw new Error("The public vault worker requires its private gateway service");
+}
 
 const accessGroup = AFTERNOTE_KEYCHAIN_ACCESS_GROUP;
-await runVaultBrokerWorker({
+await runVaultBrokerWorkerXpc({
   applicationVersion: typeof AFTERNOTE_BUILD_VERSION === "string"
     ? AFTERNOTE_BUILD_VERSION
     : "2.0.0-release",
@@ -56,4 +62,7 @@ await runVaultBrokerWorker({
       invalid: discovery.status.state === "invalid",
     };
   },
+}, {
+  service: AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE,
+  gatewayCodeRequirement: AFTERNOTE_GATEWAY_CODE_REQUIREMENT,
 });

@@ -18,12 +18,16 @@
     <string>__AFTERNOTE_OWNER_CONTROL_SERVICE__</string>
     <key>AFTERNOTE_BROKER_WORKER_PATH</key>
     <string>__AFTERNOTE_BROKER_WORKER_PATH__</string>
+    <key>AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE</key>
+    <string>__AFTERNOTE_WORKER_GATEWAY_SERVICE__</string>
   </dict>
   <key>MachServices</key>
   <dict>
     <key>__AFTERNOTE_BROKER_IDENTIFIER__</key>
     <true/>
     <key>__AFTERNOTE_OWNER_CONTROL_SERVICE__</key>
+    <true/>
+    <key>__AFTERNOTE_WORKER_GATEWAY_SERVICE__</key>
     <true/>
   </dict>
   <key>ProcessType</key>

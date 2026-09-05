@@ -94,7 +94,10 @@ describeMac("macOS package lifecycle", () => {
   let alphaOne: LocalAlphaArtifacts;
 
   beforeAll(async () => {
-    writeExecutable(launchctl, "#!/bin/sh\nexit 0\n");
+    writeExecutable(launchctl, `#!/bin/sh
+if [ "\${1:-}" = print ]; then exit 1; fi
+exit 0
+`);
     writeExecutable(healthcheck, "#!/bin/sh\nexit 0\n");
     alphaZero = await buildLocalAlpha({
       outputDirectory: join(directory, "alpha-zero"),
@@ -104,7 +107,7 @@ describeMac("macOS package lifecycle", () => {
       outputDirectory: join(directory, "alpha-one"),
       version: "2.0.0-alpha.1",
     });
-  }, 90_000);
+  }, 180_000);
 
   afterAll(() => rmSync(directory, { recursive: true, force: true }));
 

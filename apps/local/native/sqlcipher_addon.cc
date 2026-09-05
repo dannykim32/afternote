@@ -802,7 +802,7 @@ napi_value XpcBrokerRequest(napi_env environment,
       code_requirement.find('\0') != std::string::npos ||
       code_requirement.find('\n') != std::string::npos ||
       code_requirement.find('\r') != std::string::npos || request.empty() ||
-      request.size() > 1024 * 1024 || timeout_ms < 1 || timeout_ms > 130000) {
+      request.size() > 1024 * 1024 || timeout_ms < 1 || timeout_ms > 86400000) {
     return Throw(environment, "XPC broker request is invalid");
   }
 

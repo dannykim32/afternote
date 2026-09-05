@@ -30,6 +30,12 @@ Secure Enclave-backed connector signing keys use tags beginning
 content and remain across an ordinary uninstall so reinstall can recover the same local
 identity. Deleting `~/.afternote` alone does not delete Keychain items.
 
+Copies made by Time Machine or other filesystem backup tools are whole-vault snapshots, not
+an append-only history. Replacing `vault.db` with an older valid encrypted copy can rewind
+notes and vault-resident security state. Afternote does not detect that rollback when the
+logged-in account performing it is already compromised; see the security model for the
+remaining session and signing requirements.
+
 The Uninstall action is therefore a runtime removal, not an identity or data wipe. It
 removes the Codex and Claude Code configuration entries so those tools cannot invoke
 Afternote, but preserves encrypted broker grants and their matching device-bound signing

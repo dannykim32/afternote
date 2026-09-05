@@ -4,12 +4,12 @@ The portable development bundle contains the CLI, native gateway, private worker
 client signer app, owner-control app, native libraries, lifecycle scripts, licenses, SPDX
 SBOM, and third-party notices. It contains no signing credentials or provisioning profiles.
 
-`install.sh` publishes an immutable version directory under the user's Application Support
-directory, switches the `current` link, installs a user LaunchAgent, and verifies broker
-health. A failed switch restores the prior links and LaunchAgent. `rollback.sh` selects an
-already installed version. `uninstall.sh` removes Afternote-owned runtime files after
-stopping the broker; user vaults and explicit exports are handled separately and are never
-silently deleted.
+`install.sh` publishes a versioned directory under the user's Application Support directory
+and refuses to overwrite an existing version. It switches the `current` link, installs a
+user LaunchAgent, and verifies broker health. A failed switch restores the prior links and
+LaunchAgent. `rollback.sh` selects an already installed version. `uninstall.sh` removes
+Afternote-owned runtime files after stopping the broker; user vaults and explicit exports are
+handled separately and are never silently deleted.
 
 All lifecycle scripts use a per-user lock outside the install tree. They reject unsafe,
 symlinked, or unowned paths. A stale lock is reclaimed only when its recorded process no
@@ -31,12 +31,14 @@ the additional disk and runtime requirements.
 
 ## Public release
 
-The release build additionally requires the exact pinned native inputs, standalone Git
-provenance, Developer ID signing, the worker and client-signer provisioning profiles, and a
-named `notarytool` Keychain profile. The finalizer verifies the signed payload manifest,
-submits artifacts to Apple, staples tickets, re-verifies a private extracted archive, and
-writes a checksum for the only distributable binary artifact: the notarized DMG. Portable
-archives are development and verification inputs, not public release artifacts.
+Run `bun run release:public` from a clean reviewed commit on the dedicated release account or
+host. The release command builds in a detached temporary worktree, performs a fresh frozen
+dependency install, rejects ambient compiler configuration, and rechecks source and dependency
+digests. The finalizer verifies the signed payload manifest against both the portable files and
+the runtime embedded in the app, submits artifacts to Apple, staples tickets, re-verifies a
+private extracted archive, and writes a checksum for the only distributable binary artifact:
+the notarized DMG. Portable archives are development and verification inputs, not public release
+artifacts.
 
 Credential files must remain outside the repository. Never place their contents, signing
 identities, secrets, or notarization credentials in documentation, logs, fixtures, or

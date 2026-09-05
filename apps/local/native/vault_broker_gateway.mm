@@ -6,6 +6,7 @@
 #include <xpc/xpc.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <mach-o/dyld.h>
 #include <spawn.h>
@@ -18,6 +19,8 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -60,13 +63,23 @@ constexpr int64_t kOwnerAuthenticationTimeoutSeconds = 120;
 
 struct Worker {
   pid_t pid = -1;
-  FILE *input = nullptr;
-  FILE *output = nullptr;
-  std::mutex mutex;
+  std::mutex exchange_mutex;
+  std::mutex channel_mutex;
+  std::condition_variable channel_changed;
+  xpc_object_t waiting_poll = nullptr;
+  pid_t channel_pid = -1;
+  uint64_t next_request_id = 1;
+  uint64_t awaiting_response_id = 0;
+  std::string response;
+  bool response_ready = false;
+  bool unavailable = false;
 };
+
+std::string SerializeObject(NSDictionary *value);
 
 xpc_connection_t g_memory_listener = nullptr;
 xpc_connection_t g_owner_listener = nullptr;
+xpc_connection_t g_worker_listener = nullptr;
 std::mutex g_owner_context_mutex;
 NSMutableDictionary<NSString *, id<AfternoteOwnerAuthenticationContext>> *g_owner_contexts;
 NSMutableSet<NSString *> *g_closed_owner_peers;
@@ -205,6 +218,14 @@ std::string ExecutableDirectory() {
   return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
+const char *WorkerCodeRequirement() {
+#if defined(AFTERNOTE_GATEWAY_TESTING)
+  return getenv("AFTERNOTE_TEST_WORKER_CODE_REQUIREMENT");
+#else
+  return AFTERNOTE_WORKER_CODE_REQUIREMENT;
+#endif
+}
+
 bool SpawnWorker(Worker *worker, std::string *error) {
 #if defined(AFTERNOTE_GATEWAY_TESTING)
   const char *configured = getenv("AFTERNOTE_BROKER_WORKER_PATH");
@@ -224,12 +245,7 @@ bool SpawnWorker(Worker *worker, std::string *error) {
     return false;
   }
 
-#if defined(AFTERNOTE_GATEWAY_TESTING)
-  const char *worker_requirement =
-      getenv("AFTERNOTE_TEST_WORKER_CODE_REQUIREMENT");
-#else
-  const char *worker_requirement = AFTERNOTE_WORKER_CODE_REQUIREMENT;
-#endif
+  const char *worker_requirement = WorkerCodeRequirement();
   if (worker_requirement != nullptr && worker_requirement[0] != '\0') {
     NSString *path = [NSString stringWithUTF8String:worker_path.c_str()];
     NSURL *url = path == nil ? nil : [NSURL fileURLWithPath:path];
@@ -259,25 +275,22 @@ bool SpawnWorker(Worker *worker, std::string *error) {
     }
   }
 
-  int request_pipe[2] = {-1, -1};
-  int response_pipe[2] = {-1, -1};
-  if (pipe(request_pipe) != 0) {
-    *error = "Could not create private broker pipes";
+  posix_spawn_file_actions_t actions = nullptr;
+  int actions_status = posix_spawn_file_actions_init(&actions);
+  if (actions_status == 0) {
+    actions_status = posix_spawn_file_actions_addopen(
+        &actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+  }
+  if (actions_status == 0) {
+    actions_status = posix_spawn_file_actions_addopen(
+        &actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+  }
+  if (actions_status != 0) {
+    if (actions != nullptr) posix_spawn_file_actions_destroy(&actions);
+    *error = "Could not isolate the private broker worker standard streams (" +
+             std::to_string(actions_status) + ")";
     return false;
   }
-  if (pipe(response_pipe) != 0) {
-    close(request_pipe[0]);
-    close(request_pipe[1]);
-    *error = "Could not create private broker pipes";
-    return false;
-  }
-
-  posix_spawn_file_actions_t actions;
-  posix_spawn_file_actions_init(&actions);
-  posix_spawn_file_actions_adddup2(&actions, request_pipe[0], STDIN_FILENO);
-  posix_spawn_file_actions_adddup2(&actions, response_pipe[1], STDOUT_FILENO);
-  posix_spawn_file_actions_addclose(&actions, request_pipe[1]);
-  posix_spawn_file_actions_addclose(&actions, response_pipe[0]);
 
   char *arguments[] = {const_cast<char *>(worker_path.c_str()), nullptr};
   std::vector<std::string> environment_values;
@@ -300,35 +313,31 @@ bool SpawnWorker(Worker *worker, std::string *error) {
   child_environment.reserve(environment_values.size() + 1);
   for (std::string &value : environment_values) child_environment.push_back(value.data());
   child_environment.push_back(nullptr);
-  const int status = posix_spawn(&worker->pid, worker_path.c_str(), &actions,
+  pid_t spawned_pid = -1;
+  const int status = posix_spawn(&spawned_pid, worker_path.c_str(), &actions,
                                  nullptr, arguments, child_environment.data());
   posix_spawn_file_actions_destroy(&actions);
-  close(request_pipe[0]);
-  close(response_pipe[1]);
   if (status != 0) {
-    close(request_pipe[1]);
-    close(response_pipe[0]);
     *error = "Could not launch the private broker worker (" +
              std::to_string(status) + ")";
     return false;
   }
+  {
+    std::lock_guard<std::mutex> lock(worker->channel_mutex);
+    worker->pid = spawned_pid;
+    worker->channel_changed.notify_all();
+  }
   if (worker_requirement == nullptr || worker_requirement[0] == '\0' ||
-      !ProcessSatisfiesRequirement(worker->pid, worker_requirement)) {
-    kill(worker->pid, SIGKILL);
-    while (waitpid(worker->pid, nullptr, 0) < 0 && errno == EINTR) {}
-    close(request_pipe[1]);
-    close(response_pipe[0]);
+      !ProcessSatisfiesRequirement(spawned_pid, worker_requirement)) {
+    kill(spawned_pid, SIGKILL);
+    while (waitpid(spawned_pid, nullptr, 0) < 0 && errno == EINTR) {}
+    std::lock_guard<std::mutex> lock(worker->channel_mutex);
     worker->pid = -1;
+    worker->unavailable = true;
+    worker->channel_changed.notify_all();
     *error = "Launched broker worker does not satisfy its code-signing requirement";
     return false;
   }
-  worker->input = fdopen(request_pipe[1], "w");
-  worker->output = fdopen(response_pipe[0], "r");
-  if (worker->input == nullptr || worker->output == nullptr) {
-    *error = "Could not open the private broker pipes";
-    return false;
-  }
-  setvbuf(worker->input, nullptr, _IOLBF, 0);
   return true;
 }
 
@@ -339,23 +348,59 @@ bool Exchange(Worker *worker, const std::string &request, std::string *response,
     *error = "Broker request is malformed or oversized";
     return false;
   }
-  std::lock_guard<std::mutex> lock(worker->mutex);
-  if (fprintf(worker->input, "%s\n", request.c_str()) < 0 ||
-      fflush(worker->input) != 0) {
-    *error = "Broker worker request failed";
+  std::lock_guard<std::mutex> exchange_lock(worker->exchange_mutex);
+  std::unique_lock<std::mutex> channel_lock(worker->channel_mutex);
+  if (!worker->channel_changed.wait_for(
+          channel_lock, std::chrono::seconds(5),
+          [worker] { return worker->waiting_poll != nullptr || worker->unavailable; })) {
+    *error = "Authenticated broker worker channel is unavailable";
     return false;
   }
-  char *line = nullptr;
-  size_t capacity = 0;
-  const ssize_t length = getline(&line, &capacity, worker->output);
-  if (length <= 0 || static_cast<size_t>(length) > kMaximumMessageBytes + 1) {
-    free(line);
-    *error = "Broker worker response failed";
+  if (worker->unavailable || worker->waiting_poll == nullptr) {
+    *error = "Authenticated broker worker channel is unavailable";
     return false;
   }
-  response->assign(line, static_cast<size_t>(length));
-  free(line);
-  if (!response->empty() && response->back() == '\n') response->pop_back();
+
+  const uint64_t request_id = worker->next_request_id++;
+  worker->awaiting_response_id = request_id;
+  worker->response.clear();
+  worker->response_ready = false;
+  xpc_object_t poll = worker->waiting_poll;
+  worker->waiting_poll = nullptr;
+  NSDictionary *delivery = @{
+    @"protocolVersion" : @1,
+    @"requestId" : @(request_id),
+    @"request" : [NSString stringWithUTF8String:request.c_str()],
+  };
+  const std::string serialized_delivery = SerializeObject(delivery);
+  xpc_object_t reply = xpc_dictionary_create_reply(poll);
+  xpc_connection_t peer = xpc_dictionary_get_remote_connection(poll);
+  if (reply == nullptr || peer == nullptr || serialized_delivery.empty()) {
+    worker->unavailable = true;
+    worker->awaiting_response_id = 0;
+    *error = "Authenticated broker worker request could not be delivered";
+    return false;
+  }
+  xpc_dictionary_set_string(reply, "response", serialized_delivery.c_str());
+  xpc_connection_send_message(peer, reply);
+
+  if (!worker->channel_changed.wait_for(
+          channel_lock, std::chrono::seconds(kOwnerAuthenticationTimeoutSeconds + 10),
+          [worker] { return worker->response_ready || worker->unavailable; })) {
+    worker->unavailable = true;
+    worker->awaiting_response_id = 0;
+    *error = "Authenticated broker worker response timed out";
+    return false;
+  }
+  if (!worker->response_ready) {
+    worker->awaiting_response_id = 0;
+    *error = "Authenticated broker worker channel closed";
+    return false;
+  }
+  *response = worker->response;
+  worker->response.clear();
+  worker->response_ready = false;
+  worker->awaiting_response_id = 0;
   return true;
 }
 
@@ -488,6 +533,158 @@ std::string SerializeObject(NSDictionary *value) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
   if (data == nil) return {};
   return std::string(static_cast<const char *>(data.bytes), data.length);
+}
+
+bool HasExactKeys(NSDictionary *value, NSArray<NSString *> *keys) {
+  return value != nil && [[NSSet setWithArray:value.allKeys]
+      isEqualToSet:[NSSet setWithArray:keys]];
+}
+
+void RejectWorkerPoll(xpc_connection_t peer, xpc_object_t event,
+                      const char *message) {
+  xpc_object_t reply = xpc_dictionary_create_reply(event);
+  if (reply != nullptr) {
+    xpc_dictionary_set_string(reply, "error", message);
+    xpc_connection_send_message(peer, reply);
+  }
+  xpc_connection_cancel(peer);
+}
+
+void CloseWorkerChannel(Worker *worker, pid_t peer_pid) {
+  std::lock_guard<std::mutex> lock(worker->channel_mutex);
+  if (worker->channel_pid != peer_pid) return;
+  if (worker->waiting_poll != nullptr) {
+    worker->waiting_poll = nullptr;
+  }
+  worker->channel_pid = -1;
+  worker->unavailable = true;
+  worker->channel_changed.notify_all();
+}
+
+void HandleWorkerPoll(Worker *worker, xpc_connection_t peer, pid_t peer_pid,
+                      xpc_object_t event) {
+  if (xpc_get_type(event) != XPC_TYPE_DICTIONARY) {
+    if (xpc_get_type(event) == XPC_TYPE_ERROR) CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  const char *serialized = xpc_dictionary_get_string(event, "request");
+  if (serialized == nullptr || serialized[0] == '\0' ||
+      strlen(serialized) > kMaximumMessageBytes) {
+    RejectWorkerPoll(peer, event, "Private worker message is invalid");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  NSDictionary *message = ParseObject(serialized);
+  if (!HasExactKeys(message, @[@"protocolVersion", @"responseTo", @"response", @"terminate"]) ||
+      ![message[@"protocolVersion"] isEqual:@1] ||
+      ![message[@"responseTo"] isKindOfClass:[NSNumber class]] ||
+      ![message[@"terminate"] isKindOfClass:[NSNumber class]] ||
+      (![message[@"response"] isKindOfClass:[NSString class]] &&
+       message[@"response"] != NSNull.null)) {
+    RejectWorkerPoll(peer, event, "Private worker protocol is invalid");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  NSNumber *response_number = message[@"responseTo"];
+  const int64_t signed_response_to = response_number.longLongValue;
+  if (signed_response_to < 0 ||
+      response_number.doubleValue != static_cast<double>(signed_response_to)) {
+    RejectWorkerPoll(peer, event, "Private worker response ID is invalid");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  const uint64_t response_to = static_cast<uint64_t>(signed_response_to);
+  NSString *worker_response = [message[@"response"] isKindOfClass:[NSString class]]
+      ? message[@"response"] : nil;
+  const bool terminate = [message[@"terminate"] isEqual:@YES];
+  if (![message[@"terminate"] isEqual:@YES] &&
+      ![message[@"terminate"] isEqual:@NO]) {
+    RejectWorkerPoll(peer, event, "Private worker termination state is invalid");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  if (worker_response != nil &&
+      [worker_response lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > kMaximumMessageBytes) {
+    RejectWorkerPoll(peer, event, "Private worker response is oversized");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+
+  std::unique_lock<std::mutex> lock(worker->channel_mutex);
+  if (worker->channel_pid != peer_pid || worker->unavailable ||
+      worker->waiting_poll != nullptr ||
+      response_to != worker->awaiting_response_id ||
+      (response_to == 0 && worker_response != nil) ||
+      (response_to != 0 && worker_response == nil)) {
+    lock.unlock();
+    RejectWorkerPoll(peer, event, "Private worker response is out of sequence");
+    CloseWorkerChannel(worker, peer_pid);
+    return;
+  }
+  if (response_to != 0) {
+    worker->response.assign(worker_response.UTF8String);
+    worker->response_ready = true;
+  }
+  if (terminate) {
+    NSDictionary *acknowledgement = @{
+      @"protocolVersion" : @1,
+      @"shutdown" : @YES,
+    };
+    const std::string serialized_acknowledgement = SerializeObject(acknowledgement);
+    xpc_object_t reply = xpc_dictionary_create_reply(event);
+    if (reply != nullptr && !serialized_acknowledgement.empty()) {
+      xpc_dictionary_set_string(reply, "response", serialized_acknowledgement.c_str());
+      xpc_connection_send_message(peer, reply);
+    }
+    worker->channel_pid = -1;
+    worker->unavailable = true;
+  } else {
+    worker->waiting_poll = event;
+  }
+  worker->channel_changed.notify_all();
+}
+
+xpc_connection_t CreateWorkerListener(Worker *worker, const char *service,
+                                      const char *requirement) {
+  if (service == nullptr || service[0] == '\0' || strlen(service) > 255 ||
+      requirement == nullptr || requirement[0] == '\0') {
+    fprintf(stderr, "Private worker Mach service configuration is invalid\n");
+    return nullptr;
+  }
+  xpc_connection_t listener = xpc_connection_create_mach_service(
+      service, dispatch_get_main_queue(), XPC_CONNECTION_MACH_SERVICE_LISTENER);
+  if (listener == nullptr) {
+    fprintf(stderr, "Could not claim the private worker Mach service\n");
+    return nullptr;
+  }
+  if (xpc_connection_set_peer_code_signing_requirement(listener, requirement) != 0) {
+    fprintf(stderr, "Private worker code-signing requirement is invalid\n");
+    return nullptr;
+  }
+  xpc_connection_set_event_handler(listener, ^(xpc_object_t event) {
+    if (xpc_get_type(event) != XPC_TYPE_CONNECTION) return;
+    xpc_connection_t peer = static_cast<xpc_connection_t>(event);
+    const pid_t peer_pid = xpc_connection_get_pid(peer);
+    {
+      std::unique_lock<std::mutex> lock(worker->channel_mutex);
+      worker->channel_changed.wait_for(lock, std::chrono::seconds(5),
+                                       [worker] { return worker->pid > 1; });
+      if (peer_pid != worker->pid || worker->channel_pid != -1 || worker->unavailable) {
+        lock.unlock();
+        xpc_connection_cancel(peer);
+        return;
+      }
+      worker->channel_pid = peer_pid;
+    }
+    xpc_connection_set_target_queue(
+        peer, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+    xpc_connection_set_event_handler(peer, ^(xpc_object_t message) {
+      HandleWorkerPoll(worker, peer, peer_pid, message);
+    });
+    xpc_connection_resume(peer);
+  });
+  xpc_connection_resume(listener);
+  return listener;
 }
 
 std::string GatewayEnvelope(NSString *kind, NSString *peer_role,
@@ -744,6 +941,10 @@ int main(int argc, const char *argv[]) {
 #endif
     Worker worker;
     std::string error;
+    const char *worker_service = getenv("AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE");
+    g_worker_listener = CreateWorkerListener(
+        &worker, worker_service, WorkerCodeRequirement());
+    if (g_worker_listener == nullptr) return 1;
     if (!SpawnWorker(&worker, &error)) {
       fprintf(stderr, "%s\n", error.c_str());
       return 1;
@@ -752,9 +953,11 @@ int main(int argc, const char *argv[]) {
     RegisterSessionRevocationObservers(worker.pid);
     const char *service = getenv("AFTERNOTE_BROKER_MACH_SERVICE");
     const char *owner_service = getenv("AFTERNOTE_OWNER_CONTROL_MACH_SERVICE");
-    if (service != nullptr && owner_service != nullptr &&
-        strcmp(service, owner_service) == 0) {
-      fprintf(stderr, "Owner-control and Memory Mach services must be distinct\n");
+    if (service == nullptr || owner_service == nullptr || worker_service == nullptr ||
+        strcmp(service, owner_service) == 0 ||
+        strcmp(service, worker_service) == 0 ||
+        strcmp(owner_service, worker_service) == 0) {
+      fprintf(stderr, "Broker Mach services must be distinct\n");
       return 1;
     }
 #if defined(AFTERNOTE_GATEWAY_TESTING)

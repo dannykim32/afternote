@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { releaseCommandEnvironment } from "./release-environment";
 
 const repositoryRoot = resolve(process.cwd());
 const configurationPath = join(repositoryRoot, "scripts/native-release-inputs.json");
@@ -206,7 +207,7 @@ function run(
   if (!executable) throw new Error(`Native source build tool is not pinned: ${tool ?? "missing"}`);
   const result = Bun.spawnSync([executable, ...args], {
     cwd,
-    env: { ...process.env, ...environment },
+    env: releaseCommandEnvironment(process.env, environment),
     stdout: tool === "make" ? "ignore" : "pipe",
     stderr: "pipe",
   });

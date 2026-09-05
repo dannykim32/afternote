@@ -28,8 +28,13 @@ const publicReport = {
   ownerControlAppPath: `${paths.portableDirectory}/Afternote.app`,
   embeddedRuntimePath: `${paths.portableDirectory}/Afternote.app/Contents/Resources/AfternoteRuntime`,
   sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+  sourceTree: "89abcdef0123456789abcdef0123456789abcdef",
   sourceTreeClean: true,
   dependencyLockSha256: "a".repeat(64),
+  dependencyTreeSha256: "d".repeat(64),
+  buildEnvironmentSha256: "e".repeat(64),
+  toolchainSha256: "f".repeat(64),
+  provisioningProfilesSha256: "1".repeat(64),
   payloadManifestSha256: "b".repeat(64),
   buildProvenanceSha256: "c".repeat(64),
 };

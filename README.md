@@ -36,12 +36,18 @@ work, not promises made by this release.
 
 These controls reduce risk; they do not make arbitrary content trustworthy. Recalled note
 text and source metadata are untrusted data to an AI client. Exports contain plaintext.
+SQLCipher detects invalid ciphertext, but Afternote does not promise rollback detection when
+malware already controlling the logged-in account replaces the vault with an older valid
+encrypted snapshot.
 An approved connector is trusted to call Remember only after an explicit user request;
 Afternote cannot independently prove what natural-language instruction caused a host tool
 call.
 Read [the security model](docs/SECURITY_MODEL.md) for assumptions and limits.
 The [data and network inventory](docs/DATA_AND_NETWORK.md) lists every local path,
 retained uninstall item, and outbound destination.
+Security and IT reviewers can start with the
+[enterprise security review](docs/ENTERPRISE_SECURITY.md), which includes the current deployment
+and secure-erasure limits.
 
 ## Retrieval
 

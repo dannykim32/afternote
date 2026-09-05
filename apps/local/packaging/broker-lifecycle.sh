@@ -175,7 +175,21 @@ verify_release_version() {
 broker_bootout() {
   if [ -f "$launch_agent" ]; then
     "$launchctl_bin" bootout "$launch_domain" "$launch_agent" >/dev/null 2>&1 || true
+  else
+    "$launchctl_bin" bootout "$launch_domain/$broker_label" >/dev/null 2>&1 || true
   fi
+  broker_stop_attempt=1
+  while [ "$broker_stop_attempt" -le "$broker_health_attempts" ]; do
+    if ! "$launchctl_bin" print "$launch_domain/$broker_label" >/dev/null 2>&1; then
+      return 0
+    fi
+    broker_stop_attempt=$((broker_stop_attempt + 1))
+    if [ "$broker_stop_attempt" -le "$broker_health_attempts" ]; then
+      sleep 0.1
+    fi
+  done
+  printf 'Afternote broker is still running after launchd bootout.\n' >&2
+  return 1
 }
 
 broker_start() {

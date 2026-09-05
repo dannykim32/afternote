@@ -198,6 +198,21 @@ export function requestVaultBrokerXpc(
   return loadAddon().xpcBrokerRequest(service, codeRequirement, request, timeoutMs);
 }
 
+export function pollVaultBrokerGatewayXpc(
+  service: string,
+  codeRequirement: string,
+  request: string,
+): string {
+  if (!/^[A-Za-z0-9.-]{1,255}$/.test(service)) {
+    throw new Error("Private worker Mach service name is invalid");
+  }
+  if (!request || Buffer.byteLength(request) > 1_048_576) {
+    throw new Error("Private worker message is malformed or oversized");
+  }
+  assertCodeSigningRequirement(codeRequirement, "Gateway");
+  return loadAddon().xpcBrokerRequest(service, codeRequirement, request, 86_400_000);
+}
+
 export function cosineSimilaritiesNative(
   query: Float32Array,
   packedVectors: Float32Array,

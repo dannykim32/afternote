@@ -35,7 +35,7 @@ declare const AFTERNOTE_RELEASE_BUILD: boolean | undefined;
 export const LOCAL_VERSION =
   typeof AFTERNOTE_BUILD_VERSION === "string"
     ? AFTERNOTE_BUILD_VERSION
-    : "2.0.0-alpha.5-dev";
+    : "2.0.0-alpha.6-dev";
 
 const isStandaloneArtifact =
   typeof AFTERNOTE_STANDALONE === "boolean" ? AFTERNOTE_STANDALONE : false;

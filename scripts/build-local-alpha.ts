@@ -22,7 +22,15 @@ import {
   clientSignerAccessGroup,
 } from "../apps/local/src/vault-broker-metadata";
 import { writeReleaseSupplyChainArtifacts } from "./release-supply-chain";
-import { writePayloadManifest } from "./release-payload-manifest";
+import {
+  assertEmbeddedRuntimeMatchesPortable,
+  writePayloadManifest,
+} from "./release-payload-manifest";
+import {
+  releaseCommandEnvironment,
+  releaseEnvironmentSha256,
+} from "./release-environment";
+import { sha256DirectoryTree } from "./release-inputs";
 
 const repositoryRoot = resolve(process.cwd());
 const packagingRoot = join(repositoryRoot, "apps/local/packaging");
@@ -54,8 +62,13 @@ export type LocalAlphaArtifacts = {
   releaseFlavor: "development" | "public";
   semanticRuntimeIncluded: boolean;
   sourceCommit: string;
+  sourceTree: string;
   sourceTreeClean: boolean;
   dependencyLockSha256: string;
+  dependencyTreeSha256: string | null;
+  buildEnvironmentSha256: string | null;
+  toolchainSha256: string | null;
+  provisioningProfilesSha256: string | null;
   payloadManifestSha256: string | null;
   buildProvenanceSha256: string | null;
 };
@@ -84,10 +97,32 @@ export async function buildLocalAlpha(options?: {
   const dependencyLockSha256 = sha256(dependencyLockPath);
   const source = sourceRevision();
   const sourceCommit = source.commit;
+  const sourceTree = source.tree;
   const sourceTreeClean = source.clean;
   if (signing.release && !sourceTreeClean) {
     throw new Error("Release packaging requires a clean source tree");
   }
+  const dependencyTreeSha256 = signing.release
+    ? requiredReleaseDigest("AFTERNOTE_RELEASE_DEPENDENCY_TREE_SHA256")
+    : null;
+  if (signing.release &&
+    sha256DirectoryTree(join(repositoryRoot, "node_modules")) !== dependencyTreeSha256) {
+    throw new Error("Installed release dependency tree does not match the fresh-install snapshot");
+  }
+  const releaseEnvironment = signing.release
+    ? releaseCommandEnvironment(process.env)
+    : null;
+  const buildEnvironmentSha256 = releaseEnvironment
+    ? releaseEnvironmentSha256(releaseEnvironment)
+    : null;
+  const toolchain = signing.release ? releaseToolchainIdentity() : null;
+  const toolchainSha256 = toolchain
+    ? createHash("sha256").update(JSON.stringify(toolchain)).digest("hex")
+    : null;
+  const provisioningProfiles = signing.release ? releaseProvisioningProfileIdentity() : null;
+  const provisioningProfilesSha256 = provisioningProfiles
+    ? createHash("sha256").update(JSON.stringify(provisioningProfiles)).digest("hex")
+    : null;
   const workerEntrypoint = releaseWorkerEntrypoint({
     releaseBuild: process.env.AFTERNOTE_RELEASE_BUILD,
   });
@@ -106,8 +141,9 @@ export async function buildLocalAlpha(options?: {
   const ownerControlMachService = brokerMachService === VAULT_BROKER_IDENTIFIER
     ? OWNER_CONTROL_MACH_SERVICE
     : `${brokerMachService}.owner-control`;
-  if (ownerControlMachService.length > 255) {
-    throw new Error("Derived owner-control Mach service exceeds the platform limit");
+  const workerGatewayMachService = `${brokerMachService}.private-worker`;
+  if (ownerControlMachService.length > 255 || workerGatewayMachService.length > 255) {
+    throw new Error("Derived private Mach service exceeds the platform limit");
   }
 
   const rootPackage = JSON.parse(
@@ -429,6 +465,7 @@ export async function buildLocalAlpha(options?: {
     `--define=AFTERNOTE_RELEASE_BUILD=${process.env.AFTERNOTE_RELEASE_BUILD === "1"}`,
     `--define=AFTERNOTE_BROKER_TESTING=${acceptanceBuild}`,
     `--define=AFTERNOTE_GATEWAY_CODE_REQUIREMENT=${JSON.stringify(gatewayRequirement)}`,
+    `--define=AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE=${JSON.stringify(workerGatewayMachService)}`,
     `--define=AFTERNOTE_ACCEPTANCE_TRACE=${acceptanceBuild}`,
     ...(process.env.AFTERNOTE_KEYCHAIN_ACCESS_GROUP
       ? [
@@ -646,6 +683,9 @@ export async function buildLocalAlpha(options?: {
       "__AFTERNOTE_OWNER_CONTROL_SERVICE__",
       ownerControlMachService,
     ).replaceAll(
+      "__AFTERNOTE_WORKER_GATEWAY_SERVICE__",
+      workerGatewayMachService,
+    ).replaceAll(
       "__AFTERNOTE_RELEASE_ARTIFACT__",
       signing.release ? "1" : "0",
     ).replaceAll(
@@ -669,8 +709,6 @@ export async function buildLocalAlpha(options?: {
   let payloadManifestSha256: string | null = null;
   let buildProvenanceSha256: string | null = null;
   if (signing.release) {
-    const payloadManifestPath = writePayloadManifest(portableDirectory);
-    payloadManifestSha256 = sha256(payloadManifestPath);
     const nativeInputsPath = join(repositoryRoot, "scripts/native-release-inputs.json");
     const buildProvenancePath = join(
       ownerControlAppPath,
@@ -680,12 +718,22 @@ export async function buildLocalAlpha(options?: {
       format: "afternote-signed-build-provenance",
       version: 1,
       sourceCommit,
+      sourceTree,
       dependencyLockSha256,
+      dependencyTreeSha256,
+      buildEnvironmentSha256,
+      toolchainSha256,
+      toolchain,
+      provisioningProfilesSha256,
+      provisioningProfiles,
       nativeReleaseInputsManifestSha256: sha256(nativeInputsPath),
       nativeReleaseInputs: JSON.parse(readFileSync(nativeInputsPath, "utf8")),
     }, null, 2)}\n`, { mode: 0o644 });
     buildProvenanceSha256 = sha256(buildProvenancePath);
     embedDesktopRuntime(portableDirectory, embeddedRuntimePath, includeSemanticRuntime);
+    assertEmbeddedRuntimeMatchesPortable(portableDirectory);
+    const payloadManifestPath = writePayloadManifest(portableDirectory);
+    payloadManifestSha256 = sha256(payloadManifestPath);
     runPackagingCommand([
       "codesign",
       "--force",
@@ -707,6 +755,11 @@ export async function buildLocalAlpha(options?: {
       ownerControlAppPath,
     ]);
     verifySigningTeam(ownerControlAppPath, signing.teamId!);
+    assertReleaseInputsUnchanged({
+      sourceCommit,
+      sourceTree,
+      dependencyTreeSha256: dependencyTreeSha256!,
+    });
   }
 
   runPackagingCommand([
@@ -750,8 +803,13 @@ export async function buildLocalAlpha(options?: {
     releaseFlavor: signing.release ? "public" : "development",
     semanticRuntimeIncluded: includeSemanticRuntime,
     sourceCommit,
+    sourceTree,
     sourceTreeClean,
     dependencyLockSha256,
+    dependencyTreeSha256,
+    buildEnvironmentSha256,
+    toolchainSha256,
+    provisioningProfilesSha256,
     payloadManifestSha256,
     buildProvenanceSha256,
   };
@@ -808,6 +866,7 @@ function embedDesktopRuntime(
 function gitOutput(args: string[]): string {
   const result = Bun.spawnSync(["/usr/bin/git", ...args], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -817,23 +876,86 @@ function gitOutput(args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function sourceRevision(): { commit: string; clean: boolean } {
+function sourceRevision(): { commit: string; tree: string; clean: boolean } {
   if (!existsSync(join(repositoryRoot, ".git"))) {
     if (process.env.AFTERNOTE_RELEASE_BUILD === "1") {
       throw new Error(
         "Release packaging requires this standalone source tree to have its own Git history",
       );
     }
-    return { commit: "uncommitted-source", clean: false };
+    return { commit: "uncommitted-source", tree: "uncommitted-source", clean: false };
   }
   return {
     commit: gitOutput(["rev-parse", "HEAD"]),
+    tree: gitOutput(["rev-parse", "HEAD^{tree}"]),
     clean: gitOutput([
       "status",
       "--porcelain",
       "--untracked-files=all",
     ]).length === 0,
   };
+}
+
+function requiredReleaseDigest(name: string): string {
+  const value = requiredReleaseEnvironment(name);
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error(`Release packaging requires a SHA-256 value in ${name}`);
+  }
+  return value;
+}
+
+function assertReleaseInputsUnchanged(expected: {
+  sourceCommit: string;
+  sourceTree: string;
+  dependencyTreeSha256: string;
+}): void {
+  const current = sourceRevision();
+  if (!current.clean || current.commit !== expected.sourceCommit || current.tree !== expected.sourceTree) {
+    throw new Error("Release source changed while packaging");
+  }
+  if (sha256DirectoryTree(join(repositoryRoot, "node_modules")) !== expected.dependencyTreeSha256) {
+    throw new Error("Installed release dependencies changed while packaging");
+  }
+}
+
+export function releaseToolchainIdentity(): Record<string, string> {
+  const capture = (command: string[]) => {
+    const result = Bun.spawnSync(command, {
+      cwd: repositoryRoot,
+      env: releaseCommandEnvironment(process.env),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`Could not identify release toolchain: ${command[0]}`);
+    }
+    return `${result.stdout.toString()}${result.stderr.toString()}`.trim();
+  };
+  const sdkPath = capture(["/usr/bin/xcrun", "--show-sdk-path"]);
+  return {
+    bunExecutableSha256: sha256(process.execPath),
+    bunVersion: process.versions.bun ?? "unknown",
+    clang: capture(["/usr/bin/clang++", "--version"]),
+    sdkPath,
+    sdkSettingsSha256: sha256(join(sdkPath, "SDKSettings.json")),
+    xcode: capture(["/usr/bin/xcodebuild", "-version"]),
+  };
+}
+
+export function releaseProvisioningProfileIdentity(): Record<string, string> {
+  const profiles: Record<string, string> = {};
+  for (const name of [
+    "AFTERNOTE_PROVISIONING_PROFILE",
+    "AFTERNOTE_CLIENT_SIGNER_PROVISIONING_PROFILE",
+  ]) {
+    const path = requiredReleaseEnvironment(name);
+    const info = lstatSync(path);
+    if (!info.isFile() || info.isSymbolicLink()) {
+      throw new Error(`Release provisioning profile must be a regular file: ${name}`);
+    }
+    profiles[name] = sha256(path);
+  }
+  return profiles;
 }
 
 export function assertReleaseArtifactHygiene(options: {
@@ -1018,7 +1140,7 @@ function runPackagingCommand(
   const resolvedCommand = resolveHostTool(command);
   const result = Bun.spawnSync(resolvedCommand, {
     cwd,
-    env: { ...process.env, ...environment },
+    env: subprocessEnvironment(environment),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1027,6 +1149,14 @@ function runPackagingCommand(
       `Command failed (${resolvedCommand.join(" ")}): ${result.stderr.toString()}`,
     );
   }
+}
+
+function subprocessEnvironment(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
+  return process.env.AFTERNOTE_RELEASE_BUILD === "1"
+    ? releaseCommandEnvironment(process.env, overrides)
+    : { ...process.env, ...overrides } as Record<string, string>;
 }
 
 const HOST_TOOLS: Readonly<Record<string, string>> = {
@@ -1200,6 +1330,7 @@ function readProvisioningProfile(
       decodedPath,
     ], {
       cwd: repositoryRoot,
+      env: subprocessEnvironment(),
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -1260,6 +1391,7 @@ function readProvisioningProfile(
       "-text",
     ], {
       cwd: repositoryRoot,
+      env: subprocessEnvironment(),
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -1304,6 +1436,7 @@ function readPlistBuddyValue(
     path,
   ], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1338,6 +1471,7 @@ function readPlutilData(path: string, keyPath: string): string {
     path,
   ], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1473,6 +1607,7 @@ export function releaseEntitlements(
 function verifySigningTeam(path: string, teamId: string): void {
   const result = Bun.spawnSync(["/usr/bin/codesign", "-d", "--verbose=4", path], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1484,6 +1619,7 @@ function verifySigningTeam(path: string, teamId: string): void {
 function designatedRequirement(path: string): string {
   const result = Bun.spawnSync(["/usr/bin/codesign", "-d", "-r-", path], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1501,6 +1637,7 @@ export function exactCodeRequirement(path: string): string {
   if (/\bcdhash H"[a-f0-9]{40,64}"/i.test(designated)) return designated;
   const result = Bun.spawnSync(["/usr/bin/codesign", "-d", "--verbose=4", path], {
     cwd: repositoryRoot,
+    env: subprocessEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
   });
