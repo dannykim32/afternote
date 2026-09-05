@@ -17,6 +17,7 @@ const repositoryRoot = resolve(process.cwd());
 const configurationPath = join(repositoryRoot, "scripts/native-release-inputs.json");
 const outputRoot = join(repositoryRoot, "apps/local/native/release-deps");
 const minimumMacosVersion = "13.3";
+const maximumSourceDownloadAttempts = 3;
 // OpenSSL records its build time in libcrypto. A fixed epoch makes clean builds
 // byte-for-byte reproducible instead of pinning a one-off timestamp.
 const sourceDateEpoch = "0";
@@ -151,19 +152,61 @@ function assertConfiguration(value: Configuration): void {
 }
 
 async function downloadSource(input: SourceInput, directory: string): Promise<string> {
-  const response = await fetch(input.url, { redirect: "follow" });
-  if (!response.ok) throw new Error(`Native source download failed: HTTP ${response.status}`);
-  const advertised = response.headers.get("content-length");
-  if (advertised && (!/^\d+$/.test(advertised) || Number(advertised) > input.maximumBytes)) {
-    throw new Error("Native source download exceeds its size limit");
+  let bytes: Uint8Array | null = null;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maximumSourceDownloadAttempts; attempt += 1) {
+    try {
+      bytes = await fetchSourceBytes(input);
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof RetryableSourceDownloadError) ||
+        attempt === maximumSourceDownloadAttempts) {
+        throw error;
+      }
+      await Bun.sleep(attempt * 500);
+    }
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > input.maximumBytes) throw new Error("Native source download exceeds its size limit");
+  if (bytes === null) throw lastError;
   const path = join(directory, basename(new URL(input.url).pathname));
   writeFileSync(path, bytes, { mode: 0o600, flag: "wx" });
   if (sha256(path) !== input.sha256) throw new Error("Native source archive failed verification");
   return path;
 }
+
+async function fetchSourceBytes(input: SourceInput): Promise<Uint8Array> {
+  let response: Response;
+  try {
+    response = await fetch(input.url, { redirect: "follow" });
+  } catch (error) {
+    throw new RetryableSourceDownloadError("Native source download connection failed", {
+      cause: error,
+    });
+  }
+  if (!response.ok) {
+    const message = `Native source download failed: HTTP ${response.status}`;
+    if (response.status === 408 || response.status === 429 || response.status >= 500) {
+      throw new RetryableSourceDownloadError(message);
+    }
+    throw new Error(message);
+  }
+  const advertised = response.headers.get("content-length");
+  if (advertised && (!/^\d+$/.test(advertised) || Number(advertised) > input.maximumBytes)) {
+    throw new Error("Native source download exceeds its size limit");
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    throw new RetryableSourceDownloadError("Native source download connection failed", {
+      cause: error,
+    });
+  }
+  if (bytes.byteLength > input.maximumBytes) throw new Error("Native source download exceeds its size limit");
+  return bytes;
+}
+
+class RetryableSourceDownloadError extends Error {}
 
 function assertPinnedOutput(label: string, expected: string | undefined, actual: string): void {
   if (expected !== undefined && expected !== actual) {

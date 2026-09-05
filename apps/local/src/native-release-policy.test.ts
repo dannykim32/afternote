@@ -38,6 +38,8 @@ describe("native release input policy", () => {
       "utf8",
     );
     expect(preparation).toContain('const sourceDateEpoch = "0"');
+    expect(preparation).toContain("maximumSourceDownloadAttempts = 3");
+    expect(preparation).toContain("RetryableSourceDownloadError");
     expect(preparation).toContain("SOURCE_DATE_EPOCH: sourceDateEpoch");
     expect(preparation).toContain('"-DSQLITE_ENABLE_FTS5"');
     expect(preparation).toContain("assertDeploymentTarget(cryptoPath)");
