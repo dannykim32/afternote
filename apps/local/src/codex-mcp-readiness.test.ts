@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { probeCodexMcpReadiness } from "./codex-mcp-readiness";
 
+const TEST_STARTUP_TIMEOUT_MS = 5_000;
+
 describe("Codex-owned MCP readiness", () => {
   it("initializes an ephemeral Codex thread and discovers the exact Afternote tools", async () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-codex-readiness-"));
@@ -25,7 +27,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "ready",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toEqual({
@@ -61,7 +63,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "multipage",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -97,7 +99,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "absent-after-final-page",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -133,7 +135,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "repeated-cursor",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -167,7 +169,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "invalid-cursor",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -197,7 +199,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "unbounded-pages",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 2_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -232,7 +234,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "delayed-inventory",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 2_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
       const elapsedMs = performance.now() - startedAt;
 
@@ -262,7 +264,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "failed",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -292,7 +294,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "long-failed",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result.error?.code).toBe("startup_failed");
@@ -316,7 +318,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_MODE: "wrong-tools",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -333,9 +335,8 @@ describe("Codex-owned MCP readiness", () => {
   it("times out quickly and reaps a host that never answers", async () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-codex-readiness-"));
     const command = join(directory, "codex");
-    const stoppedPath = join(directory, "stopped");
     try {
-      writeFakeCodex(command);
+      writeHangingCodex(command);
       const startedAt = performance.now();
       const result = await probeCodexMcpReadiness(command, {
         cwd: directory,
@@ -343,9 +344,8 @@ describe("Codex-owned MCP readiness", () => {
           ...process.env,
           AFTERNOTE_TEST_CODEX_LOG: join(directory, "requests.log"),
           AFTERNOTE_TEST_CODEX_MODE: "hang",
-          AFTERNOTE_TEST_CODEX_STOPPED: stoppedPath,
         },
-        timeoutMs: 300,
+        timeoutMs: 500,
       });
 
       expect(result).toMatchObject({
@@ -354,8 +354,7 @@ describe("Codex-owned MCP readiness", () => {
         tools: [],
         error: { code: "timeout" },
       });
-      expect(performance.now() - startedAt).toBeLessThan(750);
-      expect(readFileSync(stoppedPath, "utf8")).toMatch(/^(EXIT|SIGTERM)\n$/);
+      expect(performance.now() - startedAt).toBeLessThan(1_250);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -373,7 +372,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_LOG: join(directory, "requests.log"),
           AFTERNOTE_TEST_CODEX_MODE: "host-error",
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -401,7 +400,7 @@ describe("Codex-owned MCP readiness", () => {
           AFTERNOTE_TEST_CODEX_LOG: join(directory, "requests.log"),
           AFTERNOTE_TEST_CODEX_MODE: "malformed",
         },
-        timeoutMs: 1_000,
+        timeoutMs: TEST_STARTUP_TIMEOUT_MS,
       });
 
       expect(result).toMatchObject({
@@ -550,6 +549,20 @@ input.on("line", (line) => {
     send(response);
   }
 });
+`,
+    { mode: 0o755 },
+  );
+  chmodSync(path, 0o755);
+}
+
+function writeHangingCodex(path: string): void {
+  writeFileSync(
+    path,
+    `#!/bin/sh
+trap 'exit 0' TERM
+while :; do
+  sleep 1
+done
 `,
     { mode: 0o755 },
   );

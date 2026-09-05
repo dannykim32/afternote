@@ -1,3 +1,6 @@
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import {
   isOwnedLegacyClaudeCodeServer,
@@ -40,15 +43,18 @@ describe("Claude Code integration actions", () => {
   });
 
   it("discovers a shell-installed Claude Code CLI outside an app PATH", () => {
-    const originalPath = process.env.PATH;
-    process.env.PATH = "/usr/bin:/bin";
+    const directory = mkdtempSync(join(tmpdir(), "afternote-claude-command-"));
+    const candidate = join(directory, "claude");
     try {
-      const command = resolveClaudeCodeCommand();
-      if (command !== null) {
-        expect(command.endsWith("/claude")).toBe(true);
-      }
+      writeFileSync(candidate, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      chmodSync(candidate, 0o755);
+      expect(resolveClaudeCodeCommand({
+        pathCommand: null,
+        candidates: [candidate],
+        verifyCommand: (command) => command,
+      })).toBe(candidate);
     } finally {
-      process.env.PATH = originalPath;
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
