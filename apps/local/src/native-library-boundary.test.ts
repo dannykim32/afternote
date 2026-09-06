@@ -106,7 +106,7 @@ describe("native Library production boundary", () => {
       '@"RESULT  ·  %@  ·  R%@  ·  OPEN NOTE"',
     );
     expect(nativeAppSource).toContain('@"VisibleNoteDay"');
-    expect(nativeAppSource).toContain('@"VisibleResultMarker"');
+    expect(nativeAppSource).not.toContain('@"VisibleResultMarker"');
     expect(nativeAppSource).toContain('@"%ld revisions"');
     expect(nativeAppSource).toContain("defaultSource");
     expect(nativeAppSource).toContain("return beginsDay ? 128 : 104");
@@ -151,6 +151,8 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("NSLineBreakByWordWrapping");
     expect(nativeAppSource).toContain('action:@selector(returnToMemory:)');
     expect(nativeAppSource).toContain('@"Discard this new memory?"');
+    expect(nativeAppSource).toContain('buttonWithTitle:@"Discard changes"');
+    expect(nativeAppSource).toContain("AfternoteEditorHasUnsavedChanges");
     expect(nativeAppSource).toContain("self.noteEditor.textContainerInset = NSMakeSize(8, 16)");
     expect(nativeAppSource).toContain("noteColumn.width = 600");
     expect(nativeAppSource).toContain("NSTableViewLastColumnOnlyAutoresizingStyle");
@@ -184,6 +186,35 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("buildSetupView");
     expect(nativeAppSource).toContain("buildSettingsView");
     expect(nativeAppSource).toContain("kRecoveryTabIndex");
+  });
+
+  it("refreshes Notes after connector writes and exposes history from a search citation", () => {
+    expect(nativeAppSource).toContain("applicationDidBecomeActive:");
+    expect(nativeAppSource).toContain("libraryRefreshPending");
+    expect(nativeAppSource).toContain('buttonWithTitle:@"Refresh"');
+    expect(nativeAppSource).toContain("refreshVisibleLibraryNotes:");
+    expect(nativeAppSource).toContain("ActiveNoteIdentifier(");
+    expect(nativeAppSource).toContain(
+      "![ActiveNoteIdentifier(self.activeNote) isEqualToString:noteId]",
+    );
+    expect(nativeAppSource).toContain("if (revision == nil || self.inspectingCitation) [self loadRevisionHistory:NO]");
+    expect(nativeAppSource).not.toContain(
+      "self.revisionMenu.hidden = self.inspectingCitation || self.creatingNote",
+    );
+  });
+
+  it("tracks vault lock state in Settings and defaults routine authentication to once a day", () => {
+    expect(nativeAppSource).toContain("vaultAccessButton");
+    expect(nativeAppSource).toContain("updateVaultAccessButton");
+    expect(nativeAppSource).toContain('action:@selector(toggleVaultLock:)');
+    expect(nativeAppSource).toContain('@"Unlock vault"');
+    expect(nativeAppSource).toContain('@"Once a day"');
+    expect(nativeAppSource).toContain("RoutineAuthenticationTtlMilliseconds()");
+    expect(nativeAppSource).toContain("kRoutineAuthenticationDailyMilliseconds");
+    expect(nativeAppSource).toContain("vaultStatusCheckInFlight");
+    expect(nativeAppSource).toContain('@"owner.routine_authentication"');
+    expect(nativeAppSource).toContain('@"owner.set_routine_authentication"');
+    expect(nativeAppSource).toContain("clearLibraryPlaintext:");
   });
 
   it("opens on Notes and keeps a dismissible setup guide available", () => {

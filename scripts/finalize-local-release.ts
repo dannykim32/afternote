@@ -3,6 +3,7 @@ import {
 } from "node:crypto";
 import {
   copyFileSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -416,27 +417,108 @@ function resealDesktopApplication(options: {
   return sha256(manifestPath);
 }
 
-function createDesktopDmg(destination: string, applicationPath: string): void {
+export function createDesktopDmg(destination: string, applicationPath: string): void {
   const stage = mkdtempSync(join(tmpdir(), "afternote-dmg-stage-"));
+  const payload = join(stage, "payload");
+  const mountPoint = join(stage, "mount");
+  const readWriteDmg = join(stage, "afternote-layout.dmg");
+  let mounted = false;
   try {
-    const stagedApplication = join(stage, "Afternote.app");
+    mkdirSync(payload, { mode: 0o700 });
+    mkdirSync(mountPoint, { mode: 0o700 });
+    const stagedApplication = join(payload, "Afternote.app");
     run(["ditto", applicationPath, stagedApplication]);
-    run(["ln", "-s", "/Applications", join(stage, "Applications")]);
+    run(["ln", "-s", "/Applications", join(payload, "Applications")]);
     run([
       "hdiutil",
       "create",
       "-volname",
       "Afternote",
       "-srcfolder",
-      stage,
+      payload,
       "-ov",
       "-format",
-      "UDZO",
-      destination,
+      "UDRW",
+      readWriteDmg,
+    ]);
+    run([
+      "hdiutil", "attach", "-readwrite", "-noverify", "-nobrowse",
+      "-mountpoint", mountPoint, readWriteDmg,
+    ]);
+    mounted = true;
+    try {
+      run(["/bin/sleep", "1"]);
+      const layout = desktopDmgFinderLayout();
+      run([
+        "/usr/bin/osascript",
+        "-e",
+        `tell application "Finder"
+          set mountedVolume to POSIX file "${mountPoint}" as alias
+          open mountedVolume
+          set volumeWindow to container window of mountedVolume
+          set current view of volumeWindow to icon view
+          set toolbar visible of volumeWindow to false
+          set statusbar visible of volumeWindow to false
+          set bounds of volumeWindow to {${layout.windowBounds.join(", ")}}
+          set arrangement of icon view options of volumeWindow to not arranged
+          set icon size of icon view options of volumeWindow to ${layout.iconSize}
+          set text size of icon view options of volumeWindow to ${layout.textSize}
+          set position of item "Afternote.app" of mountedVolume to {${layout.appPosition.join(", ")}}
+          set position of item "Applications" of mountedVolume to {${layout.applicationsPosition.join(", ")}}
+          update mountedVolume without registering applications
+          delay 1
+          close volumeWindow
+        end tell`,
+      ]);
+      const finderMetadata = join(mountPoint, ".DS_Store");
+      const metadata = lstatSync(finderMetadata);
+      if (!metadata.isFile() || metadata.isSymbolicLink()) {
+        throw new Error("Finder did not create regular DMG layout metadata");
+      }
+      run(["/usr/bin/SetFile", "-a", "V", finderMetadata]);
+      for (const transientMetadata of [".fseventsd", ".Spotlight-V100", ".Trashes"]) {
+        rmSync(join(mountPoint, transientMetadata), { recursive: true, force: true });
+      }
+      run(["/bin/sync"]);
+    } finally {
+      detachDesktopDmg(mountPoint);
+      mounted = false;
+    }
+    run([
+      "hdiutil", "convert", readWriteDmg, "-ov", "-format", "UDZO",
+      "-imagekey", "zlib-level=9", "-o", destination,
     ]);
   } finally {
-    rmSync(stage, { recursive: true, force: true });
+    if (mounted) {
+      detachDesktopDmg(mountPoint);
+      mounted = false;
+    }
+    if (!mounted) rmSync(stage, { recursive: true, force: true });
   }
+}
+
+function detachDesktopDmg(mountPoint: string): void {
+  try {
+    run(["hdiutil", "detach", mountPoint]);
+  } catch {
+    run(["hdiutil", "detach", "-force", mountPoint]);
+  }
+}
+
+export function desktopDmgFinderLayout(): {
+  windowBounds: [number, number, number, number];
+  iconSize: number;
+  textSize: number;
+  appPosition: [number, number];
+  applicationsPosition: [number, number];
+} {
+  return {
+    windowBounds: [100, 100, 620, 440],
+    iconSize: 112,
+    textSize: 14,
+    appPosition: [150, 190],
+    applicationsPosition: [370, 190],
+  };
 }
 
 function verifyDesktopDmg(
@@ -456,6 +538,15 @@ function verifyDesktopDmg(
     const linkInfo = lstatSync(applicationsLink);
     if (!linkInfo.isSymbolicLink() || readlinkSync(applicationsLink) !== "/Applications") {
       throw new Error("DMG does not contain the expected Applications shortcut");
+    }
+    const finderMetadata = lstatSync(join(mountPoint, ".DS_Store"));
+    if (!finderMetadata.isFile() || finderMetadata.isSymbolicLink() || finderMetadata.size === 0) {
+      throw new Error("DMG does not contain valid Finder layout metadata");
+    }
+    for (const transientMetadata of [".fseventsd", ".Spotlight-V100", ".Trashes"]) {
+      if (existsSync(join(mountPoint, transientMetadata))) {
+        throw new Error(`DMG contains transient macOS metadata: ${transientMetadata}`);
+      }
     }
     run(["codesign", "--verify", "--deep", "--strict", "--verbose=4", appPath]);
     const details = run(["codesign", "-dv", "--verbose=4", appPath]).stderr;

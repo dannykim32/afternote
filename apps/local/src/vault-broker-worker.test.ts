@@ -523,12 +523,12 @@ describe("vault broker worker protocol", () => {
     });
   });
 
-  it("allows one ten-hour owner inspection only on the development trust path", async () => {
+  it("allows a configurable daily owner inspection on the production trust path", async () => {
     const now = Date.now();
     const development = workerFixture({ now: () => now });
     const connection = { connectionId: randomUUID(), peerPid: 40004 };
     const requestedScopes = ["owner.inspect_clients"];
-    const ttlMs = 10 * 60 * 60 * 1_000;
+    const ttlMs = 24 * 60 * 60 * 1_000;
 
     const session = await ownerRequest(
       development.worker,
@@ -543,17 +543,148 @@ describe("vault broker worker protocol", () => {
       now: () => now,
       trustPath: "production-signed",
     });
-    const denied = await rawOwnerRequest(
+    const productionSession = await ownerRequest(
       production.worker,
       { connectionId: randomUUID(), peerPid: 40005 },
       "owner.session.begin",
       { requestedScopes, ttlMs },
+      true,
     );
-    expect(denied).toMatchObject({
-      ok: false,
-      error: { code: "invalid_request" },
-    });
-    expect(denied.ownerPresenceChallenge).toBeUndefined();
+    expect(productionSession.expiresAt).toBe(new Date(now + ttlMs).toISOString());
+  });
+
+  it("lets the signed owner app configure routine connector authentication", async () => {
+    const now = Date.now();
+    const fixture = workerFixture({ now: () => now });
+    const ownerConnection = { connectionId: randomUUID(), peerPid: 40006 };
+    const daily = 24 * 60 * 60 * 1_000;
+    const fifteenMinutes = 15 * 60 * 1_000;
+    expect(await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.routine_authentication",
+      {},
+    )).toEqual({ ttlMs: daily });
+
+    const staleShortOwner = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.session.begin",
+      { requestedScopes: ["owner.inspect_clients"], ttlMs: fifteenMinutes },
+      true,
+    );
+    const staleShortLibrary = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "library.session.begin",
+      { requestedScopes: ["library.browse"], ttlMs: fifteenMinutes },
+      true,
+    );
+    expect(staleShortOwner.expiresAt).toBe(new Date(now + daily).toISOString());
+    expect(staleShortLibrary.expiresAt).toBe(new Date(now + daily).toISOString());
+
+    const ownerSession = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.session.begin",
+      {
+        requestedScopes: [
+          "owner.inspect_clients",
+          "owner.inspect_grants",
+          "owner.inspect_sessions",
+        ],
+        ttlMs: daily,
+      },
+      true,
+    );
+    const librarySession = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "library.session.begin",
+      { requestedScopes: ["library.browse"], ttlMs: daily },
+      true,
+    );
+    expect(ownerSession.expiresAt).toBe(new Date(now + daily).toISOString());
+    expect(librarySession.expiresAt).toBe(new Date(now + daily).toISOString());
+
+    expect(await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.set_routine_authentication",
+      { ttlMs: fifteenMinutes },
+    )).toEqual({ ttlMs: fifteenMinutes });
+    expect(await rawOwnerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.inspect_connections",
+      {},
+    )).toMatchObject({ ok: false, error: { code: "owner_session_required" } });
+    expect(await rawOwnerRequest(
+      fixture.worker,
+      ownerConnection,
+      "library.views",
+      {},
+    )).toMatchObject({ ok: false, error: { code: "library_session_required" } });
+
+    const cappedOwner = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.session.begin",
+      { requestedScopes: ["owner.inspect_clients"], ttlMs: daily },
+      true,
+    );
+    const cappedLibrary = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "library.session.begin",
+      { requestedScopes: ["library.browse"], ttlMs: daily },
+      true,
+    );
+    expect(cappedOwner.expiresAt).toBe(new Date(now + fifteenMinutes).toISOString());
+    expect(cappedLibrary.expiresAt).toBe(new Date(now + fifteenMinutes).toISOString());
+
+    const pendingOwner = await beginRawOwnerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.session.begin",
+      { requestedScopes: ["owner.inspect_clients"], ttlMs: daily },
+    );
+    const pendingLibrary = await beginRawOwnerRequest(
+      fixture.worker,
+      ownerConnection,
+      "library.session.begin",
+      { requestedScopes: ["library.browse"], ttlMs: daily },
+    );
+    await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.set_routine_authentication",
+      { ttlMs: 4 * 60 * 60 * 1_000 },
+    );
+    expect(await completeOwnerPresence(
+      fixture.worker,
+      ownerConnection,
+      pendingOwner.ownerPresenceChallenge.challengeId,
+    )).toMatchObject({ ok: false, error: { code: "replayed" } });
+    expect(await completeOwnerPresence(
+      fixture.worker,
+      ownerConnection,
+      pendingLibrary.ownerPresenceChallenge.challengeId,
+    )).toMatchObject({ ok: false, error: { code: "replayed" } });
+
+    expect(await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.routine_authentication",
+      {},
+    )).toEqual({ ttlMs: 4 * 60 * 60 * 1_000 });
+
+    expect(await rawOwnerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.set_routine_authentication",
+      { ttlMs: 60_000 },
+    )).toMatchObject({ ok: false, error: { code: "invalid_request" } });
   });
 
   it("revalidates the exact revocation target after owner presence", async () => {
@@ -678,7 +809,7 @@ describe("vault broker worker protocol", () => {
       {},
     );
     expect(wrongPid.error.code).toBe("owner_session_required");
-    now += 5 * 60 * 1_000 + 1;
+    now += 24 * 60 * 60 * 1_000 + 1;
     const expired = await rawOwnerRequest(
       fixture.worker,
       connection,
@@ -757,7 +888,7 @@ describe("vault broker worker protocol", () => {
       .map((offset) => verificationDigest.slice(offset, offset + 4))
       .join(" ");
     expect(completion.ownerPresenceChallenge.reason).toBe(
-      "Start a shared Afternote work session for 4 hours with a 1 hour idle limit? " +
+      "Start a shared Afternote work session for 24 hours with an inactivity limit of 24 hours? " +
       "During this work session, previously paired Codex and Claude Code apps may " +
       "silently establish their own connection-bound, least-privilege sessions for " +
       "up to 15 minutes, limited to Remember, Recall, and Get. This triggering " +
@@ -1031,8 +1162,9 @@ describe("vault broker worker protocol", () => {
     expect(copied.error.message).toContain("transport");
   });
 
-  it("expires trusted work authority on idle and absolute deadlines", async () => {
+  it("keeps trusted work authority for the day and expires it at the absolute deadline", async () => {
     let now = Date.parse("2026-08-29T08:00:00.000Z");
+    const startedAt = now;
     const fixture = workerFixture({ now: () => now });
     const connection = { connectionId: randomUUID(), peerPid: 41111 };
     const durable = p256();
@@ -1061,22 +1193,23 @@ describe("vault broker worker protocol", () => {
       true,
     );
 
-    now += 60 * 60 * 1_000 + 1;
-    const afterIdleKey = p256();
-    const afterIdleActivation = await beginActivation(
+    now += 4 * 60 * 60 * 1_000;
+    const sameDayKey = p256();
+    const sameDayActivation = await beginActivation(
       fixture,
       connection,
       paired,
-      afterIdleKey,
+      sameDayKey,
       capabilities,
     );
-    const afterIdle = await beginMemoryClientRequest(
+    const sameDay = await beginMemoryClientRequest(
       fixture.worker,
       connection,
       "session.complete",
-      activationProofs(afterIdleActivation, durable, afterIdleKey),
+      activationProofs(sameDayActivation, durable, sameDayKey),
     );
-    expect(afterIdle.ownerPresenceChallenge).toBeDefined();
+    expect(sameDay.ownerPresenceChallenge).toBeUndefined();
+    expect(sameDay.ok).toBe(true);
     expect(await rawMemoryRequest(
       fixture.worker,
       connection,
@@ -1089,43 +1222,7 @@ describe("vault broker worker protocol", () => {
       ),
       { query: "expired work session", limit: 5 },
     )).toMatchObject({ ok: false, error: { code: "denied" } });
-    expect(fixture.worker.readAuditForTest()).toContainEqual(expect.objectContaining({
-      sessionId: first.sessionId,
-      operation: "session.expire",
-      outcome: "success",
-      errorCode: "work_session_idle",
-    }));
-
-    const second = await completeMemoryOwnerPresence(
-      fixture.worker,
-      connection,
-      afterIdle.ownerPresenceChallenge.challengeId,
-      "approved",
-    );
-    expect(second.ok).toBe(true);
-    const secondStartedAt = now;
-
-    for (const elapsed of [50, 100, 150, 200] as const) {
-      now = secondStartedAt + elapsed * 60 * 1_000;
-      const key = p256();
-      const activation = await beginActivation(
-        fixture,
-        connection,
-        paired,
-        key,
-        capabilities,
-      );
-      const active = await beginMemoryClientRequest(
-        fixture.worker,
-        connection,
-        "session.complete",
-        activationProofs(activation, durable, key),
-      );
-      expect(active.ownerPresenceChallenge).toBeUndefined();
-      expect(active.ok).toBe(true);
-    }
-
-    now = secondStartedAt + 4 * 60 * 60 * 1_000 + 1;
+    now = startedAt + 24 * 60 * 60 * 1_000 + 1;
     const afterAbsoluteKey = p256();
     const afterAbsoluteActivation = await beginActivation(
       fixture,
@@ -1862,6 +1959,34 @@ async function rawOwnerRequest(
       approved: ownerOutcome === true,
       outcome: ownerOutcome === true ? "approved" : ownerOutcome || "denied",
     },
+  })));
+}
+
+async function beginRawOwnerRequest(
+  worker: VaultBrokerWorker,
+  connection: { connectionId: string; peerPid: number },
+  method: string,
+  params: Record<string, unknown>,
+): Promise<any> {
+  const requestId = randomUUID();
+  return JSON.parse(await worker.handleSerialized(JSON.stringify({
+    kind: "client",
+    peerRole: "owner-control",
+    ...connection,
+    payload: { protocolVersion: 1, requestId, method, params },
+  })));
+}
+
+async function completeOwnerPresence(
+  worker: VaultBrokerWorker,
+  connection: { connectionId: string; peerPid: number },
+  challengeId: string,
+): Promise<any> {
+  return JSON.parse(await worker.handleSerialized(JSON.stringify({
+    kind: "owner-presence",
+    peerRole: "owner-control",
+    ...connection,
+    payload: { challengeId, approved: true, outcome: "approved" },
   })));
 }
 

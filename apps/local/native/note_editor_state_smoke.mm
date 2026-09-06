@@ -29,6 +29,16 @@ int main() {
     Require([saved.title isEqualToString:@"Saved locally"], @"saved label");
     Require(saved.showsSavedConfirmation, @"saved confirmation");
 
+    NSDictionary *savedNote = @{ @"content" : @"unchanged" };
+    Require(!AfternoteEditorHasUnsavedChanges(savedNote, @"unchanged", NO),
+            @"unchanged existing note is not dirty");
+    Require(AfternoteEditorHasUnsavedChanges(savedNote, @"changed", NO),
+            @"changed existing note is dirty");
+    Require(!AfternoteEditorHasUnsavedChanges(@{ @"content" : @"" }, @"", YES),
+            @"empty new draft is not dirty");
+    Require(AfternoteEditorHasUnsavedChanges(@{ @"content" : @"" }, @"draft", YES),
+            @"nonempty new draft is dirty");
+
     NSArray<NSDictionary *> *rows = AfternoteHistoricalRevisionRows(
         @{ @"id" : @"note-1", @"revision" : @3 },
         @[

@@ -1268,6 +1268,9 @@ export class SqliteMemory implements Memory {
         ? parseSource(current.source_json)
         : normalizeSource(input.source ?? undefined);
     const sourceJson = source ? JSON.stringify(source) : null;
+    if (input.content === current.content && sourceJson === current.source_json) {
+      return rowToNote(current);
+    }
     const sourceSearch = sourceSearchText(source);
     this.#database
       .query(

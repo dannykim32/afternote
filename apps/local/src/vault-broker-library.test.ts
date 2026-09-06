@@ -94,6 +94,12 @@ describe("native Library broker protocol", () => {
     const fixture = workerFixture({ now: () => now });
     const connection = { connectionId: randomUUID(), peerPid: 51001 };
     const otherConnection = { connectionId: randomUUID(), peerPid: 51002 };
+    await ownerRequest(
+      fixture.worker,
+      connection,
+      "owner.set_routine_authentication",
+      { ttlMs: 15 * 60 * 1_000 },
+    );
     const params = {
       requestedScopes: ["library.browse", "library.search"],
       ttlMs: 1_000,
@@ -182,7 +188,7 @@ describe("native Library broker protocol", () => {
       true,
     );
 
-    now += 1_001;
+    now += 15 * 60 * 1_000 + 1;
     expect(await rawOwnerRequest(
       fixture.worker,
       connection,
@@ -248,6 +254,23 @@ describe("native Library broker protocol", () => {
         { cursor: null, limit: 10, view: null },
       )).toMatchObject({ ok: false, error: { code: "library_session_required" } });
     }
+  });
+
+  it("supports the user-selectable daily routine Notes session", async () => {
+    const now = Date.parse("2026-09-06T12:00:00.000Z");
+    const fixture = workerFixture({ now: () => now });
+    const connection = { connectionId: randomUUID(), peerPid: 51150 };
+    const ttlMs = 24 * 60 * 60 * 1_000;
+
+    const session = await ownerRequest(
+      fixture.worker,
+      connection,
+      "library.session.begin",
+      { requestedScopes: ["library.browse"], ttlMs },
+      true,
+    );
+
+    expect(session.expiresAt).toBe(new Date(now + ttlMs).toISOString());
   });
 
   it("pages bounded summaries and exact search citations with authenticated operation-bound cursors", async () => {
@@ -803,9 +826,9 @@ describe("native Library broker protocol", () => {
       },
     );
     expect(sessionBoundDelete.ownerPresenceChallenge.expiresAt).toBe(
-      new Date(now + 1_000).toISOString(),
+      new Date(now + 30_000).toISOString(),
     );
-    now += 1_001;
+    now += 30_001;
     expect(await completeOwnerPresence(
       fixture.worker,
       connection,

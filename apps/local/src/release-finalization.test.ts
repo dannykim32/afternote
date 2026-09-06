@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   assertPublicArtifactReport,
+  desktopDmgFinderLayout,
   releaseFinalizationPaths,
 } from "../../../scripts/finalize-local-release";
 
@@ -48,6 +50,22 @@ describe("release finalization gates", () => {
     expect(paths.verificationArchive).toContain("/.afternote-local-");
     expect(paths.verificationArchive).toEndWith("-verification.zip");
     expect(paths.checksums).toEndWith("/SHA256SUMS");
+  });
+
+  it("uses a compact Finder window with large, centered install icons", () => {
+    expect(desktopDmgFinderLayout()).toEqual({
+      windowBounds: [100, 100, 620, 440],
+      iconSize: 112,
+      textSize: 14,
+      appPosition: [150, 190],
+      applicationsPosition: [370, 190],
+    });
+    const finalizer = readFileSync(
+      new URL("../../../scripts/finalize-local-release.ts", import.meta.url),
+      "utf8",
+    );
+    expect(finalizer).toContain('"-mountpoint", mountPoint');
+    expect(finalizer).toContain('"detach", "-force", mountPoint');
   });
 
   it("accepts only the exact public Developer ID artifact", () => {

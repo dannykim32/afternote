@@ -23,7 +23,7 @@ export const LIBRARY_READ_SCOPES: readonly LibraryScope[] = [
 ];
 
 export const LIBRARY_SESSION_DEFAULT_TTL_MS = 15 * 60 * 1_000;
-export const LIBRARY_SESSION_MAX_TTL_MS = 30 * 60 * 1_000;
+export const LIBRARY_SESSION_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
 export const LIBRARY_CURSOR_TTL_MS = 10 * 60 * 1_000;
 export const LIBRARY_MAX_PAGE_SIZE = 20;
 export const LIBRARY_MAX_SEARCH_RESULTS = 20;

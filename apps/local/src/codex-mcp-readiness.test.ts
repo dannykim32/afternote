@@ -354,7 +354,9 @@ describe("Codex-owned MCP readiness", () => {
         tools: [],
         error: { code: "timeout" },
       });
-      expect(performance.now() - startedAt).toBeLessThan(1_250);
+      // The 500 ms protocol deadline and 250 ms TERM grace are the contract.
+      // Leave room for macOS to reap the SIGKILLed fixture under a full release run.
+      expect(performance.now() - startedAt).toBeLessThan(1_500);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

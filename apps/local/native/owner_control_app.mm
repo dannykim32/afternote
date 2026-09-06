@@ -37,12 +37,12 @@ constexpr CGFloat kAskIconSize = 15;
 constexpr CGFloat kAskFieldHeight = 20;
 constexpr CGFloat kAskFieldMaximumHeight = 62;
 constexpr CGFloat kAskSubmitButtonSize = 28;
-#if defined(AFTERNOTE_DEVELOPMENT_BUILD)
-constexpr int64_t kOwnerInspectionTtlMilliseconds = 10 * 60 * 60 * 1000;
-#else
-constexpr int64_t kOwnerInspectionTtlMilliseconds = 5 * 60 * 1000;
-#endif
-
+constexpr int64_t kRoutineAuthenticationFifteenMinutesMilliseconds =
+    15 * 60 * 1000;
+constexpr int64_t kRoutineAuthenticationFourHoursMilliseconds =
+    4 * 60 * 60 * 1000;
+constexpr int64_t kRoutineAuthenticationDailyMilliseconds =
+    24 * 60 * 60 * 1000;
 typedef NS_ENUM(NSInteger, AfternoteLibraryMode) {
   AfternoteLibraryModeWrite = 0,
   AfternoteLibraryModeAsk = 1,
@@ -64,6 +64,24 @@ NSString *const kLibraryResultKindKey = @"resultKind";
 NSString *const kLibrarySearchResultKind = @"search";
 NSString *const kSetupGuideDismissedDefaultsKey =
     @"dev.afternote.setup-guide-dismissed";
+NSString *const kRoutineAuthenticationDefaultsKey =
+    @"dev.afternote.routine-authentication-ttl-ms";
+
+int64_t RoutineAuthenticationTtlMilliseconds() {
+  NSNumber *stored = [NSUserDefaults.standardUserDefaults
+      objectForKey:kRoutineAuthenticationDefaultsKey];
+  int64_t value = [stored isKindOfClass:[NSNumber class]]
+      ? stored.longLongValue
+      : kRoutineAuthenticationDailyMilliseconds;
+  for (NSNumber *allowed in @[
+         @(kRoutineAuthenticationFifteenMinutesMilliseconds),
+         @(kRoutineAuthenticationFourHoursMilliseconds),
+         @(kRoutineAuthenticationDailyMilliseconds),
+       ]) {
+    if (value == allowed.longLongValue) return value;
+  }
+  return kRoutineAuthenticationDailyMilliseconds;
+}
 
 NSString *ServiceName() {
   return [NSString stringWithUTF8String:AFTERNOTE_OWNER_CONTROL_MACH_SERVICE];
@@ -75,6 +93,11 @@ NSString *Identifier() {
 
 NSString *StringValue(id value, NSString *fallback = @"") {
   return [value isKindOfClass:[NSString class]] ? value : fallback;
+}
+
+NSString *ActiveNoteIdentifier(NSDictionary *note) {
+  NSString *identifier = StringValue(note[@"id"]);
+  return identifier.length > 0 ? identifier : StringValue(note[@"noteId"]);
 }
 
 NSArray *ArrayValue(id value) {
@@ -728,7 +751,18 @@ BOOL IsLibraryResult(NSString *method, NSDictionary *result) {
   return NO;
 }
 
-BOOL IsOwnerResult(NSString *method, NSDictionary *result) {
+BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params) {
+  if ([method isEqualToString:@"owner.routine_authentication"] ||
+      [method isEqualToString:@"owner.set_routine_authentication"]) {
+    if (!ExactKeys(result, @[ @"ttlMs" ]) ||
+        ![result[@"ttlMs"] isKindOfClass:[NSNumber class]]) return NO;
+    int64_t ttlMs = [result[@"ttlMs"] longLongValue];
+    BOOL allowed = ttlMs == kRoutineAuthenticationFifteenMinutesMilliseconds ||
+        ttlMs == kRoutineAuthenticationFourHoursMilliseconds ||
+        ttlMs == kRoutineAuthenticationDailyMilliseconds;
+    return allowed && (![method isEqualToString:@"owner.set_routine_authentication"] ||
+        [params[@"ttlMs"] isEqual:result[@"ttlMs"]]);
+  }
   if ([method isEqualToString:@"owner.session.begin"]) {
     return ExactKeys(result, @[ @"scopes", @"expiresAt" ]) &&
         IsStringArrayFrom(result[@"scopes"], @[
@@ -1037,7 +1071,7 @@ BOOL IsBrokerResult(NSString *method, NSDictionary *result, NSDictionary *params
   return [method hasPrefix:@"library."]
       ? IsLibraryResult(method, result)
       : [method hasPrefix:@"owner."]
-        ? IsOwnerResult(method, result)
+        ? IsOwnerResult(method, result, params)
         : [method hasPrefix:@"admin."]
           ? IsAdminResult(method, result, params)
           : [method hasPrefix:@"lifecycle."]
@@ -1904,6 +1938,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSTextField *libraryStatusLabel;
 @property(nonatomic, strong) NSProgressIndicator *libraryProgress;
 @property(nonatomic, strong) NSButton *libraryAuthenticateButton;
+@property(nonatomic, strong) NSButton *libraryRefreshButton;
 @property(nonatomic, strong) NSSegmentedControl *libraryModeSelector;
 @property(nonatomic, strong) NSTabView *libraryWorkspaceTabs;
 @property(nonatomic, strong) NSTextField *libraryWorkspaceTitle;
@@ -1932,11 +1967,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSTextField *revisionLabel;
 @property(nonatomic, strong) NSPopUpButton *revisionMenu;
 @property(nonatomic, strong) NSButton *saveButton;
+@property(nonatomic, strong) NSButton *discardChangesButton;
 @property(nonatomic, strong) NSButton *deleteButton;
 @property(nonatomic, strong) NSButton *editCurrentNoteButton;
 @property(nonatomic, strong) NSButton *loadMoreNotesButton;
 @property(nonatomic, strong) NSButton *libraryRecentButton;
 @property(nonatomic, strong) NSButton *createNoteButton;
+@property(nonatomic, strong) NSButton *vaultAccessButton;
+@property(nonatomic, strong) NSPopUpButton *routineAuthenticationMenu;
 @property(nonatomic, strong) NSStackView *libraryViews;
 @property(nonatomic, strong) NSDictionary *activeNote;
 @property(nonatomic, strong) NSArray<NSDictionary *> *revisionSummaries;
@@ -1955,7 +1993,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL editorSaveConfirmationPending;
 @property(nonatomic) AfternoteEditorSaveState editorSaveState;
 @property(nonatomic) BOOL libraryListInFlight;
+@property(nonatomic) BOOL libraryRefreshPending;
 @property(nonatomic) BOOL vaultLocked;
+@property(nonatomic) BOOL vaultStatusCheckInFlight;
 @property(nonatomic) NSUInteger librarySessionGeneration;
 @property(nonatomic) NSUInteger libraryListRequestSequence;
 @property(nonatomic) NSUInteger libraryNoteRequestSequence;
@@ -2187,11 +2227,26 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 #endif
 }
 
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+  (void)notification;
+  if (self.window == nil || self.broker == nil || self.libraryExpiresAt.length == 0 ||
+      self.libraryMutationInFlight || self.libraryListInFlight ||
+      self.surfaceTabs.selectedTabViewItem == nil ||
+      ![self.surfaceTabs.selectedTabViewItem.identifier isEqual:@"library"]) return;
+  if (self.libraryModeSelector.selectedSegment == AfternoteLibraryModeWrite) {
+    self.libraryRefreshPending = YES;
+    return;
+  }
+  [self refreshVisibleLibraryNotes:nil];
+}
+
 - (void)vaultDidLock:(NSNotification *)notification {
   (void)notification;
   self.lifecycleStatusRequestSequence += 1;
   self.vaultLocked = YES;
+  self.vaultStatusCheckInFlight = NO;
   self.libraryAuthenticateButton.title = @"Unlock vault";
+  [self updateVaultAccessButton];
   [self clearLibraryPlaintext:LockedLibraryMessage()];
 }
 
@@ -2199,7 +2254,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   (void)notification;
   NSUInteger requestSequence = ++self.lifecycleStatusRequestSequence;
   self.vaultLocked = YES;
+  self.vaultStatusCheckInFlight = YES;
   self.libraryAuthenticateButton.title = @"Checking vault state…";
+  [self updateVaultAccessButton];
   [self setLibraryBusy:YES status:@"Confirming the unlock with the Afternote broker…"];
   [self.broker requestMethod:@"lifecycle.status" params:@{}
                        reply:^(NSDictionary *result, NSDictionary *error) {
@@ -2213,15 +2270,18 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                             error:(NSDictionary *)error
                   requestSequence:(NSUInteger)requestSequence {
   if (requestSequence != self.lifecycleStatusRequestSequence) return;
+  self.vaultStatusCheckInFlight = NO;
   if (error != nil || !IsLifecycleResult(@"lifecycle.status", result) ||
       ![result[@"state"] isEqualToString:@"unlocked"]) {
     self.vaultLocked = YES;
     self.libraryAuthenticateButton.title = @"Unlock vault";
+    [self updateVaultAccessButton];
     [self setLibraryBusy:NO status:LockedLibraryMessage()];
     return;
   }
   self.vaultLocked = NO;
   self.libraryAuthenticateButton.title = @"Authenticate & Open";
+  [self updateVaultAccessButton];
   [self setLibraryBusy:NO status:@"The vault is unlocked. Authenticate to reopen Notes."];
 }
 
@@ -2529,11 +2589,31 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   exportControls.spacing = 8;
 
   NSTextField *securityHeading = [self label:@"Security" size:18 weight:NSFontWeightSemibold];
-  NSButton *lock = [AfternoteButton buttonWithTitle:@"Lock vault" target:self action:@selector(lockVault:)];
-  [self styleSecondaryButton:lock];
-  lock.accessibilityLabel = @"Lock the Afternote vault and disconnect all sessions";
-  NSTextField *sessionState = [self label:@"15 minutes" size:12 weight:NSFontWeightMedium];
-  sessionState.textColor = AfternoteMutedTextColor();
+  self.vaultAccessButton = [AfternoteButton buttonWithTitle:@"Lock vault"
+                                                     target:self
+                                                     action:@selector(toggleVaultLock:)];
+  [self styleSecondaryButton:self.vaultAccessButton];
+  [self updateVaultAccessButton];
+  self.routineAuthenticationMenu = [[NSPopUpButton alloc] init];
+  for (NSDictionary *option in @[
+         @{ @"title" : @"15 minutes", @"ttl" : @(kRoutineAuthenticationFifteenMinutesMilliseconds) },
+         @{ @"title" : @"4 hours", @"ttl" : @(kRoutineAuthenticationFourHoursMilliseconds) },
+         @{ @"title" : @"Once a day", @"ttl" : @(kRoutineAuthenticationDailyMilliseconds) },
+       ]) {
+    [self.routineAuthenticationMenu addItemWithTitle:option[@"title"]];
+    self.routineAuthenticationMenu.lastItem.representedObject = option[@"ttl"];
+  }
+  self.routineAuthenticationMenu.target = self;
+  self.routineAuthenticationMenu.action = @selector(routineAuthenticationChanged:);
+  self.routineAuthenticationMenu.accessibilityLabel = @"Routine authentication frequency";
+  [self styleSecondaryButton:self.routineAuthenticationMenu];
+  int64_t routineTtl = RoutineAuthenticationTtlMilliseconds();
+  for (NSMenuItem *item in self.routineAuthenticationMenu.itemArray) {
+    if ([item.representedObject longLongValue] == routineTtl) {
+      [self.routineAuthenticationMenu selectItem:item];
+      break;
+    }
+  }
   NSTextField *identityState = [self label:@"One identity per tool" size:12 weight:NSFontWeightMedium];
   identityState.textColor = AfternoteMutedTextColor();
 
@@ -2575,8 +2655,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self settingsRowWithTitle:@"Semantic recall" detail:@"Optional local semantic recall can be installed explicitly. Exact search is the release default." control:self.semanticSettingsState],
     [self settingsRowWithTitle:@"Export & diagnostics" detail:@"Lossless export and share-safe diagnostics run through owner-approved native broker actions." control:exportControls],
     securityHeading,
-    [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:lock],
-    [self settingsRowWithTitle:@"Note sessions" detail:@"Native plaintext clears when the owner-approved Notes window ends." control:sessionState],
+    [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
+    [self settingsRowWithTitle:@"Routine authentication" detail:@"Used for Notes, Connections, Codex, and Claude Code while Afternote stays open. Export, deletion, recovery, lock, and unlock still require fresh approval." control:self.routineAuthenticationMenu],
     [self settingsRowWithTitle:@"Connector identities" detail:@"Rotation and exact revocation remain scoped to one local connector." control:identityState],
     [self settingsRowWithTitle:@"Build policy" detail:@"Development convenience is isolated from release builds." control:developmentState],
     productHeading,
@@ -3091,6 +3171,11 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.createNoteButton.keyEquivalent = @"n";
   self.createNoteButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
   self.createNoteButton.accessibilityLabel = @"Create a new local memory";
+  self.libraryRefreshButton = [AfternoteButton buttonWithTitle:@"Refresh"
+                                                        target:self
+                                                        action:@selector(refreshVisibleLibraryNotes:)];
+  [self styleSecondaryButton:self.libraryRefreshButton];
+  self.libraryRefreshButton.accessibilityLabel = @"Refresh notes";
   NSStackView *statusRow = [NSStackView stackViewWithViews:@[
     self.libraryProgress, self.libraryStatusLabel, self.libraryAuthenticateButton
   ]];
@@ -3348,6 +3433,11 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.saveButton.keyEquivalent = @"s";
   self.saveButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
   [self.saveButton.widthAnchor constraintEqualToConstant:132].active = YES;
+  self.discardChangesButton = [AfternoteButton buttonWithTitle:@"Discard changes"
+                                                         target:self
+                                                         action:@selector(discardEditorChanges:)];
+  [self styleSecondaryButton:self.discardChangesButton];
+  self.discardChangesButton.accessibilityLabel = @"Discard unsaved note changes";
   self.deleteButton = [AfternoteButton buttonWithTitle:@"Delete permanently" target:self action:@selector(confirmDeleteNote:)];
   [self styleDestructiveButton:self.deleteButton];
   self.editCurrentNoteButton = [AfternoteButton buttonWithTitle:@"Edit current note"
@@ -3357,7 +3447,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.editCurrentNoteButton.hidden = YES;
   NSStackView *actions = [NSStackView stackViewWithViews:@[
     self.revisionMenu, [NSView new], self.editCurrentNoteButton,
-    self.deleteButton, self.saveButton
+    self.deleteButton, self.discardChangesButton, self.saveButton
   ]];
   actions.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   actions.alignment = NSLayoutAttributeCenterY;
@@ -3438,7 +3528,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self.libraryWorkspaceTabs selectTabViewItemAtIndex:1];
 
   NSStackView *modeRow = [NSStackView stackViewWithViews:@[
-    statusRow, [NSView new], self.createNoteButton
+    statusRow, [NSView new], self.libraryRefreshButton, self.createNoteButton
   ]];
   modeRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   modeRow.alignment = NSLayoutAttributeCenterY;
@@ -3483,7 +3573,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     if (self.libraryExpiresAt.length == 0) {
       if (self.vaultLocked) [self setLibraryBusy:NO status:LockedLibraryMessage()];
       else [self authenticateLibrary:nil];
-    }
+    } else [self refreshVisibleLibraryNotes:nil];
     return;
   }
   [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
@@ -3496,6 +3586,106 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.surfaceSelector.selectedSegment = -1;
   [self updateProductNavigationState];
   [self.surfaceTabs selectTabViewItemAtIndex:kSettingsTabIndex];
+  if (self.broker == nil) return;
+  [self refreshRoutineAuthenticationPreference];
+  NSUInteger requestSequence = ++self.lifecycleStatusRequestSequence;
+  self.vaultStatusCheckInFlight = YES;
+  [self updateVaultAccessButton];
+  [self.broker requestMethod:@"lifecycle.status" params:@{}
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self applyVaultLifecycleStatus:result error:error requestSequence:requestSequence];
+    });
+  }];
+}
+
+- (void)selectRoutineAuthenticationTtl:(int64_t)ttlMs {
+  for (NSMenuItem *item in self.routineAuthenticationMenu.itemArray) {
+    if ([item.representedObject longLongValue] == ttlMs) {
+      [self.routineAuthenticationMenu selectItem:item];
+      return;
+    }
+  }
+}
+
+- (void)refreshRoutineAuthenticationPreference {
+  [self.broker requestMethod:@"owner.routine_authentication" params:@{}
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (error != nil) return;
+      int64_t ttlMs = [result[@"ttlMs"] longLongValue];
+      [NSUserDefaults.standardUserDefaults setInteger:ttlMs
+                                                forKey:kRoutineAuthenticationDefaultsKey];
+      [self selectRoutineAuthenticationTtl:ttlMs];
+    });
+  }];
+}
+
+- (void)updateVaultAccessButton {
+  if (self.vaultAccessButton == nil) return;
+  if (self.vaultStatusCheckInFlight) {
+    self.vaultAccessButton.enabled = NO;
+    self.vaultAccessButton.title = @"Checking…";
+    self.vaultAccessButton.accessibilityLabel = @"Checking the Afternote vault state";
+    return;
+  }
+  self.vaultAccessButton.enabled = YES;
+  self.vaultAccessButton.title = self.vaultLocked ? @"Unlock vault" : @"Lock vault";
+  self.vaultAccessButton.accessibilityLabel = self.vaultLocked
+      ? @"Unlock the Afternote vault"
+      : @"Lock the Afternote vault and disconnect all sessions";
+}
+
+- (void)routineAuthenticationChanged:(NSPopUpButton *)sender {
+  NSNumber *ttl = [sender.selectedItem.representedObject isKindOfClass:[NSNumber class]]
+      ? sender.selectedItem.representedObject
+      : @(kRoutineAuthenticationDailyMilliseconds);
+  int64_t previousTtl = RoutineAuthenticationTtlMilliseconds();
+  if (self.broker == nil) {
+    [NSUserDefaults.standardUserDefaults setInteger:ttl.longLongValue
+                                              forKey:kRoutineAuthenticationDefaultsKey];
+    return;
+  }
+  sender.enabled = NO;
+  [self.broker requestMethod:@"owner.set_routine_authentication"
+                      params:@{ @"ttlMs" : ttl }
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      sender.enabled = YES;
+      if (error != nil) {
+        [self selectRoutineAuthenticationTtl:previousTtl];
+        [self showSettingsResultWithTitle:@"Authentication setting unchanged"
+                                  message:StringValue(error[@"message"],
+                                                      @"Afternote could not save this setting.")];
+        return;
+      }
+      int64_t savedTtl = [result[@"ttlMs"] longLongValue];
+      [NSUserDefaults.standardUserDefaults setInteger:savedTtl
+                                                forKey:kRoutineAuthenticationDefaultsKey];
+      [self selectRoutineAuthenticationTtl:savedTtl];
+      if (savedTtl != previousTtl) {
+        self.ownerSessionGeneration += 1;
+        self.connections = nil;
+        self.ownerExpiresAt = nil;
+        self.auditCursor = nil;
+        [self.auditEvents removeAllObjects];
+        [self.revocationTargets removeAllObjects];
+        [self clearLibraryPlaintext:
+            @"Authentication frequency changed. Authenticate again to reopen Notes."];
+        if (self.content != nil) [self render];
+        [self setBusy:NO status:
+            @"Authentication frequency changed. Authenticate again to inspect connections."];
+      }
+    });
+  }];
+}
+
+- (void)toggleVaultLock:(id)sender {
+  if (self.vaultLocked) {
+    [self unlockVaultFromSettings:sender];
+  } else {
+    [self lockVault:sender];
+  }
 }
 
 - (void)lockVault:(id)sender {
@@ -3510,10 +3700,35 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         return;
       }
       self.vaultLocked = YES;
+      self.vaultStatusCheckInFlight = NO;
+      [self updateVaultAccessButton];
       [self clearLibraryPlaintext:@"Vault locked. Connector sessions were disconnected."];
       self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
       [self updateProductNavigationState];
       [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    });
+  }];
+}
+
+- (void)unlockVaultFromSettings:(id)sender {
+  NSButton *button = [sender isKindOfClass:[NSButton class]] ? sender : self.vaultAccessButton;
+  button.enabled = NO;
+  button.title = @"Unlocking…";
+  [self.broker requestLifecycleTransitionMethod:@"lifecycle.unlock"
+                                          reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (error != nil || !IsLifecycleResult(@"lifecycle.unlock", result)) {
+        [self updateVaultAccessButton];
+        [self showSettingsResultWithTitle:@"Vault could not unlock"
+                                  message:StringValue(error[@"message"],
+                                                      @"The broker returned an invalid unlock response.")];
+        return;
+      }
+      self.vaultLocked = NO;
+      self.vaultStatusCheckInFlight = NO;
+      self.libraryAuthenticateButton.title = @"Authenticate & Open";
+      [self updateVaultAccessButton];
+      [self setLibraryBusy:NO status:@"Vault unlocked. Open Notes when you are ready."];
     });
   }];
 }
@@ -3671,6 +3886,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
             if (verified) {
               self.vaultLocked = ![StringValue(lifecycle[@"state"])
                   isEqualToString:@"unlocked"];
+              self.vaultStatusCheckInFlight = NO;
+              [self updateVaultAccessButton];
             }
             [self finishBrokerRecoveryForSequence:sequence
                                            attempt:attempt ready:verified];
@@ -3864,6 +4081,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       self.recoveryState = @"ready";
       [self setPrivilegedSurfacesReady:YES];
       self.vaultLocked = ![result[@"state"] isEqualToString:@"unlocked"];
+      self.vaultStatusCheckInFlight = NO;
+      [self updateVaultAccessButton];
       self.libraryAuthenticateButton.title = self.vaultLocked
           ? @"Unlock vault" : @"Authenticate & Open";
       [self setRecoveryBusy:NO status:@"Vault ready"];
@@ -3989,12 +4208,18 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     self.loadMoreNotesButton.enabled = !controlsBusy && self.noteCursor != nil;
     self.libraryRecentButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.createNoteButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
+    self.libraryRefreshButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     for (NSView *view in self.libraryViews.arrangedSubviews) {
       if ([view isKindOfClass:[NSButton class]]) {
         ((NSButton *)view).enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
       }
     }
-    self.saveButton.enabled = !controlsBusy && (self.activeNote != nil || self.creatingNote);
+    BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
+        self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
+    self.saveButton.enabled = !controlsBusy && !self.inspectingCitation &&
+        hasUnsavedChanges && (self.activeNote != nil || self.creatingNote);
+    self.discardChangesButton.enabled = !controlsBusy && !self.inspectingCitation &&
+        hasUnsavedChanges;
     self.deleteButton.enabled = !controlsBusy && self.activeNote != nil && !self.creatingNote;
     self.memoryBackButton.enabled = !controlsBusy;
     self.checklistButton.enabled = !controlsBusy && self.noteEditor.editable;
@@ -4021,12 +4246,16 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   AfternoteLibraryMode normalizedMode = MAX(AfternoteLibraryModeWrite,
       MIN(AfternoteLibraryModeBrowse, mode));
   self.libraryModeSelector.selectedSegment = normalizedMode;
+  self.libraryRefreshButton.hidden = normalizedMode == AfternoteLibraryModeWrite;
   if (normalizedMode == AfternoteLibraryModeWrite) {
     [self.libraryWorkspaceTabs selectTabViewItemAtIndex:0];
     [self updateSetupBannerVisibility];
     return;
   }
   [self.libraryWorkspaceTabs selectTabViewItemAtIndex:1];
+  BOOL refreshPending = self.libraryRefreshPending &&
+      self.libraryExpiresAt.length > 0 && self.broker != nil;
+  self.libraryRefreshPending = NO;
   BOOL asking = normalizedMode == AfternoteLibraryModeAsk;
   self.askControls.hidden = NO;
   self.browseControls.hidden = asking || !self.hasVisibleSmartCategories;
@@ -4042,6 +4271,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
           : [NSString stringWithFormat:@"Results · %lu", (unsigned long)matchCount];
     [self.noteTable reloadData];
     [self updateSetupBannerVisibility];
+    if (refreshPending) [self loadLibraryNotes:NO];
     return;
   }
   self.libraryWorkspaceTitle.stringValue = @"Notes";
@@ -4060,7 +4290,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   }
   [self.noteTable reloadData];
   [self updateSetupBannerVisibility];
-  if (loadBrowse && self.libraryExpiresAt.length > 0 && self.broker != nil) {
+  if ((loadBrowse || refreshPending) && self.libraryExpiresAt.length > 0 && self.broker != nil) {
     [self loadLibraryNotes:NO];
   }
 }
@@ -4089,7 +4319,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     @"library.remember", @"library.update_note"
   ];
   [self.broker requestMethod:@"library.session.begin"
-                      params:@{ @"requestedScopes" : scopes, @"ttlMs" : @900000 }
+                      params:@{ @"requestedScopes" : scopes,
+                                @"ttlMs" : @(RoutineAuthenticationTtlMilliseconds()) }
                        reply:^(NSDictionary *result, NSDictionary *error) {
     dispatch_async(dispatch_get_main_queue(), ^{
       if (generation != self.librarySessionGeneration) return;
@@ -4098,6 +4329,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         return;
       }
       self.vaultLocked = NO;
+      self.vaultStatusCheckInFlight = NO;
+      [self updateVaultAccessButton];
       self.libraryAuthenticateButton.title = @"Authenticate & Open";
       self.libraryExpiresAt = StringValue(result[@"expiresAt"]);
       [self applySearchMode:StringValue(result[@"searchMode"], @"exact")];
@@ -4130,6 +4363,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         return;
       }
       self.vaultLocked = NO;
+      self.vaultStatusCheckInFlight = NO;
+      [self updateVaultAccessButton];
       self.libraryAuthenticateButton.title = @"Authenticate & Open";
       [self refreshRecoveryStatusAndContinue:YES];
     });
@@ -4213,10 +4448,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)textDidChange:(NSNotification *)notification {
-  if (notification.object == self.noteEditor &&
-      self.editorSaveState == AfternoteEditorSaveStateSaved) {
+  if (notification.object != self.noteEditor) return;
+  if (self.editorSaveState == AfternoteEditorSaveStateSaved) {
     [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:YES];
   }
+  BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
+      self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
+  self.saveButton.enabled = hasUnsavedChanges && !self.libraryMutationInFlight;
+  self.discardChangesButton.enabled = hasUnsavedChanges && !self.libraryMutationInFlight;
 }
 
 - (BOOL)control:(NSControl *)control
@@ -4263,6 +4502,14 @@ doCommandBySelector:(SEL)commandSelector {
   self.clearSearchButton.hidden = YES;
   [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:YES];
   [self.librarySearch.window makeFirstResponder:self.librarySearch];
+}
+
+- (void)refreshVisibleLibraryNotes:(id)sender {
+  (void)sender;
+  if (self.libraryExpiresAt.length == 0 || self.vaultLocked ||
+      self.libraryMutationInFlight || self.libraryListInFlight ||
+      self.libraryModeSelector.selectedSegment == AfternoteLibraryModeWrite) return;
+  [self loadLibraryNotes:NO];
 }
 
 - (void)searchLibrary:(id)sender {
@@ -4469,10 +4716,6 @@ doCommandBySelector:(SEL)commandSelector {
   if (cell == nil) {
     cell = [[NSTableCellView alloc] init];
     cell.identifier = @"LibraryNoteCell";
-    NSView *resultMarker = [[NSView alloc] init];
-    resultMarker.identifier = @"VisibleResultMarker";
-    resultMarker.wantsLayer = YES;
-    resultMarker.layer.backgroundColor = AfternoteMemoryThreadColor().CGColor;
     NSTextField *text = [self label:@"" size:16 weight:NSFontWeightRegular];
     text.identifier = @"VisibleNoteExcerpt";
     text.maximumNumberOfLines = 3;
@@ -4492,16 +4735,10 @@ doCommandBySelector:(SEL)commandSelector {
     content.orientation = NSUserInterfaceLayoutOrientationVertical;
     content.alignment = NSLayoutAttributeLeading;
     content.spacing = 7;
-    resultMarker.translatesAutoresizingMaskIntoConstraints = NO;
     content.translatesAutoresizingMaskIntoConstraints = NO;
     cell.textField = text;
-    [cell addSubview:resultMarker];
     [cell addSubview:content];
     [NSLayoutConstraint activateConstraints:@[
-      [resultMarker.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:8],
-      [resultMarker.topAnchor constraintEqualToAnchor:cell.topAnchor constant:14],
-      [resultMarker.bottomAnchor constraintEqualToAnchor:cell.bottomAnchor constant:-14],
-      [resultMarker.widthAnchor constraintEqualToConstant:1],
       [content.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:8],
       [content.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor constant:-8],
       [content.topAnchor constraintEqualToAnchor:cell.topAnchor constant:14],
@@ -4513,11 +4750,8 @@ doCommandBySelector:(SEL)commandSelector {
   }
   NSTextField *context = nil;
   NSTextField *dayHeading = nil;
-  NSView *resultMarker = nil;
   for (NSView *subview in cell.subviews) {
-    if ([subview.identifier isEqualToString:@"VisibleResultMarker"]) {
-      resultMarker = subview;
-    } else if ([subview.identifier isEqualToString:@"VisibleNoteContent"] &&
+    if ([subview.identifier isEqualToString:@"VisibleNoteContent"] &&
                [subview isKindOfClass:[NSStackView class]]) {
       for (NSView *contentSubview in ((NSStackView *)subview).arrangedSubviews) {
         if ([contentSubview.identifier isEqualToString:@"VisibleNoteContext"]) {
@@ -4551,7 +4785,6 @@ doCommandBySelector:(SEL)commandSelector {
   }
   dayHeading.stringValue = day;
   dayHeading.hidden = searchResult || !beginsDay;
-  resultMarker.hidden = !searchResult;
   context.stringValue = searchResult
       ? [NSString stringWithFormat:@"RESULT  ·  %@  ·  R%@  ·  OPEN NOTE",
                                    sourceName, revisionNumber]
@@ -4622,7 +4855,7 @@ doCommandBySelector:(SEL)commandSelector {
       if (showSavedStateAfterOpen) {
         [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:YES];
       }
-      if (revision == nil) [self loadRevisionHistory:NO];
+      if (revision == nil || self.inspectingCitation) [self loadRevisionHistory:NO];
       [self setLibraryBusy:NO status:[NSString stringWithFormat:@"Authenticated until %@", DateLabel(self.libraryExpiresAt)]];
     });
   }];
@@ -4631,7 +4864,7 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)loadRevisionHistory:(BOOL)append {
   NSUInteger generation = self.librarySessionGeneration;
   NSUInteger requestSequence = ++self.libraryRevisionRequestSequence;
-  NSString *noteId = StringValue(self.activeNote[@"id"]);
+  NSString *noteId = ActiveNoteIdentifier(self.activeNote);
   if (noteId.length == 0) return;
   NSString *cursor = append ? self.revisionCursor : nil;
   [self.broker requestMethod:@"library.list_revisions"
@@ -4641,7 +4874,7 @@ doCommandBySelector:(SEL)commandSelector {
     dispatch_async(dispatch_get_main_queue(), ^{
       if (generation != self.librarySessionGeneration ||
           requestSequence != self.libraryRevisionRequestSequence ||
-          ![StringValue(self.activeNote[@"id"]) isEqualToString:noteId]) return;
+          ![ActiveNoteIdentifier(self.activeNote) isEqualToString:noteId]) return;
       if (error != nil) {
         [self showLibraryError:error];
         return;
@@ -4691,6 +4924,18 @@ doCommandBySelector:(SEL)commandSelector {
     more.representedObject = @{ @"loadMore" : @YES };
     [self.revisionMenu.menu addItem:more];
   }
+  if (self.inspectingCitation) {
+    NSInteger displayedRevision = [self.activeNote[@"revision"] integerValue];
+    for (NSMenuItem *item in self.revisionMenu.itemArray) {
+      NSDictionary *revision = [item.representedObject isKindOfClass:[NSDictionary class]]
+          ? item.representedObject
+          : nil;
+      if ([revision[@"revision"] integerValue] == displayedRevision) {
+        [self.revisionMenu selectItem:item];
+        break;
+      }
+    }
+  }
 }
 
 - (void)selectRevision:(NSPopUpButton *)sender {
@@ -4701,10 +4946,9 @@ doCommandBySelector:(SEL)commandSelector {
     [self loadRevisionHistory:YES];
     return;
   }
-  self.inspectingCitation = NO;
   if (revision == nil) {
-    NSString *noteId = StringValue(self.activeNote[@"id"]);
-    if (noteId.length == 0) noteId = StringValue(self.activeNote[@"noteId"]);
+    self.inspectingCitation = NO;
+    NSString *noteId = ActiveNoteIdentifier(self.activeNote);
     if (noteId.length == 0) {
       NSInteger row = self.noteTable.selectedRow;
       if (row >= 0 && row < (NSInteger)self.noteSummaries.count) {
@@ -4714,6 +4958,7 @@ doCommandBySelector:(SEL)commandSelector {
     if (noteId.length > 0) [self openNoteId:noteId revision:nil];
     return;
   }
+  self.inspectingCitation = YES;
   [self openNoteId:StringValue(revision[@"noteId"]) revision:revision[@"revision"]];
 }
 
@@ -4730,6 +4975,7 @@ doCommandBySelector:(SEL)commandSelector {
     self.bulletListButton.enabled = NO;
     self.numberedListButton.enabled = NO;
     self.deleteButton.hidden = YES;
+    self.discardChangesButton.hidden = YES;
     self.editCurrentNoteButton.hidden = YES;
     self.saveButton.hidden = NO;
     self.revisionMenu.hidden = YES;
@@ -4761,19 +5007,22 @@ doCommandBySelector:(SEL)commandSelector {
   self.sourceLabel.stringValue = parts.count > 0
       ? [parts componentsJoinedByString:@" · "]
       : @"Saved locally · No source attached";
-  self.saveButton.enabled = !self.inspectingCitation &&
+  BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
+      self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
+  self.saveButton.enabled = !self.inspectingCitation && hasUnsavedChanges &&
       (self.creatingNote || isCurrentRevision);
   self.saveButton.hidden = self.inspectingCitation;
   self.editCurrentNoteButton.hidden = !self.inspectingCitation;
+  self.discardChangesButton.hidden = self.inspectingCitation;
+  self.discardChangesButton.enabled = hasUnsavedChanges;
   self.deleteButton.hidden = self.inspectingCitation || self.creatingNote ||
       !isCurrentRevision;
-  self.revisionMenu.hidden = self.inspectingCitation || self.creatingNote;
+  self.revisionMenu.hidden = self.creatingNote;
 }
 
 - (void)editCurrentNote:(id)sender {
   (void)sender;
-  NSString *noteId = StringValue(self.activeNote[@"id"]);
-  if (noteId.length == 0) noteId = StringValue(self.activeNote[@"noteId"]);
+  NSString *noteId = ActiveNoteIdentifier(self.activeNote);
   if (noteId.length == 0) return;
   self.inspectingCitation = NO;
   [self openNoteId:noteId revision:nil];
@@ -4797,11 +5046,25 @@ doCommandBySelector:(SEL)commandSelector {
   [self.noteEditor.window makeFirstResponder:self.noteEditor];
 }
 
+- (void)discardEditorChanges:(id)sender {
+  (void)sender;
+  if (!AfternoteEditorHasUnsavedChanges(
+          self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote)) return;
+  self.noteEditor.string = StringValue(self.activeNote[@"content"]);
+  [self.noteEditor.undoManager removeAllActions];
+  [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+  [self renderActiveNote];
+  [self setLibraryBusy:NO status:self.creatingNote
+      ? @"Draft cleared."
+      : @"Changes discarded. The saved revision is unchanged."];
+  [self.noteEditor.window makeFirstResponder:self.noteEditor];
+}
+
 - (void)returnToMemory:(id)sender {
   (void)sender;
-  NSString *savedText = StringValue(self.activeNote[@"content"]);
   BOOL hasUnsavedChanges = self.noteEditor.editable &&
-      ![self.noteEditor.string isEqualToString:savedText];
+      AfternoteEditorHasUnsavedChanges(
+          self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
   void (^finish)(void) = ^{
     if (self.creatingNote) {
       self.creatingNote = NO;
@@ -4936,8 +5199,12 @@ doCommandBySelector:(SEL)commandSelector {
     [self setLibraryBusy:NO status:@"A note cannot be empty."];
     return;
   }
-  if (self.editorSaveState == AfternoteEditorSaveStateSaved &&
-      [content isEqualToString:StringValue(self.activeNote[@"content"])]) return;
+  if (!AfternoteEditorHasUnsavedChanges(
+          self.activeNote ?: @{}, content, self.creatingNote)) {
+    [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:YES];
+    [self setLibraryBusy:NO status:@"No changes to save. The revision is unchanged."];
+    return;
+  }
   self.editorSaveConfirmationPending = NO;
   [self setEditorSaveButtonState:AfternoteEditorSaveStateSaving animated:YES];
   sender.enabled = NO;
@@ -5065,6 +5332,7 @@ doCommandBySelector:(SEL)commandSelector {
   self.editorSaveConfirmationPending = NO;
   [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
   self.libraryListInFlight = NO;
+  self.libraryRefreshPending = NO;
   self.revisionHistoryLoaded = NO;
   self.revisionSummaries = @[];
   [self.noteSummaries removeAllObjects];
@@ -5101,7 +5369,9 @@ doCommandBySelector:(SEL)commandSelector {
   NSString *message = messages[code] ?: StringValue(error[@"message"], @"The broker denied the Notes request.");
   if ([code isEqualToString:@"vault_locked"]) {
     self.vaultLocked = YES;
+    self.vaultStatusCheckInFlight = NO;
     self.libraryAuthenticateButton.title = @"Unlock vault";
+    [self updateVaultAccessButton];
   }
   BOOL mustClear = [code isEqualToString:@"library_session_expired"] ||
       [code isEqualToString:@"library_session_required"] ||
@@ -5438,7 +5708,7 @@ doCommandBySelector:(SEL)commandSelector {
   ];
   [self.broker requestMethod:@"owner.session.begin"
                       params:@{ @"requestedScopes" : scopes,
-                                @"ttlMs" : @(kOwnerInspectionTtlMilliseconds) }
+                                @"ttlMs" : @(RoutineAuthenticationTtlMilliseconds()) }
                        reply:^(NSDictionary *result, NSDictionary *error) {
     [self applyOwnerSessionResult:result error:error generation:generation];
   }];

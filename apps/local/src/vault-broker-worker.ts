@@ -72,9 +72,8 @@ import {
 import {
   canonicalBrokerTranscript,
   NativeLibraryAuditCommitError,
+  ROUTINE_AUTHENTICATION_TTLS_MS,
   TRUSTED_MCP_CONNECTION_TTL_MS,
-  TRUSTED_MCP_WORK_SESSION_IDLE_MS,
-  TRUSTED_MCP_WORK_SESSION_TTL_MS,
   VaultBrokerAuthorization,
   type BrokerCapability,
   type BrokerClientKind,
@@ -110,8 +109,8 @@ declare const AFTERNOTE_ACCEPTANCE_TRACE: boolean | undefined;
 const MAXIMUM_MESSAGE_BYTES = 1_048_576;
 const DEFAULT_SESSION_TTL_MS = 4 * 60 * 60 * 1_000;
 const OWNER_SESSION_DEFAULT_TTL_MS = 5 * 60 * 1_000;
-const OWNER_SESSION_MAX_TTL_MS = 10 * 60 * 1_000;
-const DEVELOPMENT_OWNER_SESSION_MAX_TTL_MS = 10 * 60 * 60 * 1_000;
+const OWNER_SESSION_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
+const DEVELOPMENT_OWNER_SESSION_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
 const OWNER_CHALLENGE_TTL_MS = 2 * 60 * 1_000;
 const OWNER_INSPECTION_SCOPES = [
   "owner.inspect_clients",
@@ -895,6 +894,12 @@ export class VaultBrokerWorker {
       case "owner.session.begin":
         assertPeerRole(peerRole, "owner-control");
         return this.#beginOwnerSession(request, transportBinding);
+      case "owner.routine_authentication":
+        assertPeerRole(peerRole, "owner-control");
+        return this.#routineAuthentication(request);
+      case "owner.set_routine_authentication":
+        assertPeerRole(peerRole, "owner-control");
+        return this.#setRoutineAuthentication(request);
       case "owner.inspect_connections":
         assertPeerRole(peerRole, "owner-control");
         return this.#inspectConnections(request, transportBinding);
@@ -1185,6 +1190,7 @@ export class VaultBrokerWorker {
       });
     }
     const phrase = createHash("sha256").update(ownerTranscript).digest("hex").slice(0, 12);
+    const workSessionTtlMs = this.#authority().routineAuthenticationTtlMilliseconds();
     this.#assertOwnerChallengeCapacity();
     const challengeId = randomUUID();
     const challengeExpiresAt = this.#currentTime() + OWNER_CHALLENGE_TTL_MS;
@@ -1201,7 +1207,7 @@ export class VaultBrokerWorker {
     });
     return ownerPresenceChallenge(
       challengeId,
-      `Start a shared Afternote work session for ${formatSessionDuration(TRUSTED_MCP_WORK_SESSION_TTL_MS)} with a ${formatSessionDuration(TRUSTED_MCP_WORK_SESSION_IDLE_MS)} idle limit? During this work session, previously paired Codex and Claude Code apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, and Get. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
+      `Start a shared Afternote work session for ${formatSessionDuration(workSessionTtlMs)} with an inactivity limit of ${formatSessionDuration(workSessionTtlMs)}? During this work session, previously paired Codex and Claude Code apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, and Get. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
       challengeExpiresAt,
     );
   }
@@ -1291,7 +1297,8 @@ export class VaultBrokerWorker {
     this.#librarySessions.delete(ownerSessionKey(transportBinding));
     assertExactObject(request.params, ["requestedScopes", "ttlMs"]);
     const scopes = libraryScopes(request.params.requestedScopes);
-    const ttlMs = librarySessionTtl(request.params.ttlMs);
+    librarySessionTtl(request.params.ttlMs);
+    const ttlMs = this.#authority().routineAuthenticationTtlMilliseconds();
     const challengeId = randomUUID();
     const sessionId = randomUUID();
     const now = this.#currentTime();
@@ -2879,7 +2886,8 @@ export class VaultBrokerWorker {
   ): string {
     assertExactObject(request.params, ["requestedScopes", "ttlMs"]);
     const scopes = ownerInspectionScopes(request.params.requestedScopes);
-    const ttlMs = ownerSessionTtl(request.params.ttlMs, this.#trustPath);
+    ownerSessionTtl(request.params.ttlMs, this.#trustPath);
+    const ttlMs = this.#authority().routineAuthenticationTtlMilliseconds();
     const challengeId = randomUUID();
     const now = this.#currentTime();
     const challengeExpiresAt = now + OWNER_CHALLENGE_TTL_MS;
@@ -2912,6 +2920,33 @@ export class VaultBrokerWorker {
       )}?`,
       challengeExpiresAt,
     );
+  }
+
+  #routineAuthentication(request: BrokerRequest): string {
+    assertExactObject(request.params, []);
+    return success(request.requestId, {
+      ttlMs: this.#authority().routineAuthenticationTtlMilliseconds(),
+    });
+  }
+
+  #setRoutineAuthentication(request: BrokerRequest): string {
+    assertExactObject(request.params, ["ttlMs"]);
+    const ttlMs = routineAuthenticationTtl(request.params.ttlMs);
+    const previousTtlMs = this.#authority().routineAuthenticationTtlMilliseconds();
+    this.#authority().configureRoutineAuthentication(ttlMs);
+    if (ttlMs !== previousTtlMs) {
+      this.#ownerSessions.clear();
+      this.#librarySessions.clear();
+      for (const [challengeId, pending] of this.#pendingPresence) {
+        if (pending.kind !== "owner-session" && pending.kind !== "library-session" &&
+            pending.kind !== "activation") continue;
+        this.#pendingPresence.delete(challengeId);
+        if (pending.kind === "activation") {
+          this.#activationTtls.delete(pending.activationId);
+        }
+      }
+    }
+    return success(request.requestId, { ttlMs });
   }
 
   #inspectConnections(
@@ -3656,7 +3691,7 @@ function librarySessionTtl(value: unknown): number {
   ) {
     throw new BrokerProtocolError(
       "invalid_request",
-      "Library session lifetime must be between one millisecond and 30 minutes",
+      `Library session lifetime must be between one millisecond and ${formatSessionDuration(LIBRARY_SESSION_MAX_TTL_MS)}`,
     );
   }
   return value as number;
@@ -3926,6 +3961,18 @@ function ownerSessionTtl(value: unknown, trustPath: OwnerTrustPath): number {
     throw new BrokerProtocolError(
       "invalid_request",
       `Owner inspection lifetime must be between one millisecond and ${formatSessionDuration(maximum)}`,
+    );
+  }
+  return value as number;
+}
+
+function routineAuthenticationTtl(value: unknown): number {
+  if (!Number.isInteger(value) || !ROUTINE_AUTHENTICATION_TTLS_MS.includes(
+    value as (typeof ROUTINE_AUTHENTICATION_TTLS_MS)[number],
+  )) {
+    throw new BrokerProtocolError(
+      "invalid_request",
+      "Routine authentication window is invalid",
     );
   }
   return value as number;

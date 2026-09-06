@@ -747,6 +747,27 @@ describe("SqliteMemory interchange", () => {
 });
 
 describe("SqliteMemory storage and schema migrations", () => {
+  it("does not create a new revision when an update changes nothing", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-noop-update-"));
+    tempDirectories.push(directory);
+    const memory = new SqliteMemory(join(directory, "vault.db"), localVault);
+    const original = await memory.remember(localVault, {
+      content: "Keep this revision unchanged.",
+      source: { application: "Claude Code", label: "No-op canary" },
+    });
+
+    const unchanged = await memory.updateNote(localVault, original.id, {
+      content: original.content,
+      expectedRevision: original.revision,
+      source: original.source,
+    });
+
+    expect(unchanged).toEqual(original);
+    expect((await memory.listNoteRevisions(localVault, original.id)).revisions)
+      .toHaveLength(1);
+    memory.close();
+  });
+
   it("normalizes source timestamps and rejects ambiguous connector dates", async () => {
     const memory = new SqliteMemory(":memory:", localVault);
     try {

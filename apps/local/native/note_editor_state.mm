@@ -21,6 +21,19 @@ AfternoteEditorSavePresentation *AfternoteEditorSavePresentationForState(
   return presentation;
 }
 
+BOOL AfternoteEditorHasUnsavedChanges(NSDictionary *activeNote,
+                                      NSString *editorText,
+                                      BOOL creatingNote) {
+  NSString *savedText = [activeNote[@"content"] isKindOfClass:[NSString class]]
+      ? activeNote[@"content"]
+      : @"";
+  NSString *currentText = [editorText isKindOfClass:[NSString class]]
+      ? editorText
+      : @"";
+  if (creatingNote && currentText.length == 0) return NO;
+  return ![currentText isEqualToString:savedText];
+}
+
 NSArray<NSDictionary *> *AfternoteHistoricalRevisionRows(
     NSDictionary *activeNote,
     NSArray<NSDictionary *> *revisionSummaries) {

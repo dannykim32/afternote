@@ -868,7 +868,7 @@ describe("VaultBrokerAuthorization", () => {
     });
   });
 
-  it("expires idle trusted work before presenting owner connection state", () => {
+  it("expires elapsed daily trusted work before presenting owner connection state", () => {
     const fixture = brokerFixture();
     const client = p256();
     const session = p256();
@@ -887,7 +887,7 @@ describe("VaultBrokerAuthorization", () => {
       ["memory.recall"],
     );
 
-    fixture.advanceTime(60 * 60 * 1_000 + 1);
+    fixture.advanceTime(24 * 60 * 60 * 1_000 + 1);
 
     expect(fixture.broker.inspectConnections("development-only")).toMatchObject({
       clients: [{
@@ -901,8 +901,26 @@ describe("VaultBrokerAuthorization", () => {
       sessionId: activated.sessionId,
       operation: "session.expire",
       outcome: "success",
-      errorCode: "work_session_idle",
+      errorCode: "work_session_expired",
     }));
+  });
+
+  it("persists the user-selected routine authentication window", () => {
+    const fixture = brokerFixture();
+    expect(fixture.broker.routineAuthenticationTtlMilliseconds()).toBe(
+      24 * 60 * 60 * 1_000,
+    );
+
+    fixture.broker.configureRoutineAuthentication(4 * 60 * 60 * 1_000);
+    expect(fixture.broker.routineAuthenticationTtlMilliseconds()).toBe(
+      4 * 60 * 60 * 1_000,
+    );
+    expect(fixture.reopen("boot-two").routineAuthenticationTtlMilliseconds()).toBe(
+      4 * 60 * 60 * 1_000,
+    );
+    expect(() => fixture.broker.configureRoutineAuthentication(60_000)).toThrow(
+      "Routine authentication window is invalid",
+    );
   });
 
   it("revokes the exact displayed client atomically with its audit record", () => {

@@ -15,6 +15,10 @@ typedef NS_ENUM(NSInteger, AfternoteEditorSaveState) {
 AfternoteEditorSavePresentation *AfternoteEditorSavePresentationForState(
     AfternoteEditorSaveState state);
 
+BOOL AfternoteEditorHasUnsavedChanges(NSDictionary *activeNote,
+                                      NSString *editorText,
+                                      BOOL creatingNote);
+
 NSArray<NSDictionary *> *AfternoteHistoricalRevisionRows(
     NSDictionary *activeNote,
     NSArray<NSDictionary *> *revisionSummaries);

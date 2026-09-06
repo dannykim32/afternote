@@ -23,8 +23,13 @@ const DECISION_TTL_MS = 2 * 60 * 1_000;
 const ACTIVATION_DECISION_TTL_MS = 3 * 60 * 1_000;
 const MAX_SESSION_TTL_MS = 12 * 60 * 60 * 1_000;
 export const TRUSTED_MCP_CONNECTION_TTL_MS = 15 * 60 * 1_000;
-export const TRUSTED_MCP_WORK_SESSION_TTL_MS = 4 * 60 * 60 * 1_000;
-export const TRUSTED_MCP_WORK_SESSION_IDLE_MS = 60 * 60 * 1_000;
+export const TRUSTED_MCP_WORK_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
+export const TRUSTED_MCP_WORK_SESSION_IDLE_MS = 24 * 60 * 60 * 1_000;
+export const ROUTINE_AUTHENTICATION_TTLS_MS = [
+  15 * 60 * 1_000,
+  4 * 60 * 60 * 1_000,
+  TRUSTED_MCP_WORK_SESSION_TTL_MS,
+] as const;
 const MAX_CLOCK_SKEW_MS = 60 * 1_000;
 const AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 const AUDIT_FLOOR = 10_000;
@@ -263,6 +268,30 @@ export class VaultBrokerAuthorization {
 
   get bootId(): string {
     return this.#bootId;
+  }
+
+  routineAuthenticationTtlMilliseconds(): number {
+    const stored = this.#database.query<{ ttl_ms: number }, [string]>(`
+      select ttl_ms from broker_preferences where key = ?
+    `).get("routine_authentication_ttl_ms")?.ttl_ms;
+    if (typeof stored === "number" && ROUTINE_AUTHENTICATION_TTLS_MS.includes(
+      stored as (typeof ROUTINE_AUTHENTICATION_TTLS_MS)[number],
+    )) return stored;
+    return TRUSTED_MCP_WORK_SESSION_TTL_MS;
+  }
+
+  configureRoutineAuthentication(ttlMs: number): void {
+    if (!ROUTINE_AUTHENTICATION_TTLS_MS.includes(
+      ttlMs as (typeof ROUTINE_AUTHENTICATION_TTLS_MS)[number],
+    )) {
+      throw new Error("Routine authentication window is invalid");
+    }
+    if (ttlMs === this.routineAuthenticationTtlMilliseconds()) return;
+    this.#expireTrustedMcpWorkSession("work_session_policy_changed");
+    this.#database.query(`
+      insert into broker_preferences (key, ttl_ms) values (?, ?)
+      on conflict(key) do update set ttl_ms = excluded.ttl_ms
+    `).run("routine_authentication_ttl_ms", ttlMs);
   }
 
   requestPairing(input: {
@@ -2291,10 +2320,11 @@ export class VaultBrokerAuthorization {
 
   #startTrustedMcpWorkSession(): TrustedMcpWorkSession {
     const now = this.#now();
+    const ttlMs = this.routineAuthenticationTtlMilliseconds();
     const workSession = {
       id: randomUUID(),
       startedAt: now,
-      expiresAt: now + TRUSTED_MCP_WORK_SESSION_TTL_MS,
+      expiresAt: now + ttlMs,
       lastActivityAt: now,
       lastObservedAt: now,
     };
@@ -2306,12 +2336,13 @@ export class VaultBrokerAuthorization {
     const workSession = this.#trustedMcpWorkSession;
     if (!workSession) return undefined;
     const now = this.#now();
+    const idleMs = this.routineAuthenticationTtlMilliseconds();
     const clockMovedBackward = now < workSession.lastObservedAt;
     workSession.lastObservedAt = Math.max(workSession.lastObservedAt, now);
     if (
       clockMovedBackward ||
       now >= workSession.expiresAt ||
-      now - workSession.lastActivityAt >= TRUSTED_MCP_WORK_SESSION_IDLE_MS
+      now - workSession.lastActivityAt >= idleMs
     ) {
       this.#expireTrustedMcpWorkSession(
         clockMovedBackward
@@ -2955,6 +2986,10 @@ function safeErrorCode(value: string): string {
 }
 
 const BROKER_SCHEMA = `
+  create table if not exists broker_preferences (
+    key text primary key,
+    ttl_ms integer not null
+  );
   create table if not exists broker_pairing_requests (
     id text primary key,
     vault_id text not null,
