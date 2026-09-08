@@ -15,7 +15,7 @@ import { join, resolve } from "node:path";
 import {
   resolvedPeerRequirement,
   signedRequirement,
-} from "./build-local-alpha";
+} from "./release-policy";
 import { releaseCommandEnvironment } from "./release-environment";
 
 const repositoryRoot = resolve(process.cwd());

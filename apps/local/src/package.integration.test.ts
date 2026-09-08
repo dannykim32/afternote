@@ -11,15 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
-  acceptanceBrokerMachService,
   buildLocalAlpha,
+  type LocalAlphaArtifacts,
+} from "../../../scripts/build-local-alpha";
+import {
+  acceptanceBrokerMachService,
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseWorkerEntrypoint,
   renderPackagingText,
   signedRequirement,
-  type LocalAlphaArtifacts,
-} from "../../../scripts/build-local-alpha";
+} from "../../../scripts/release-policy";
 
 describe("package policy", () => {
   it("selects a separate release worker and excludes retired connector payloads", () => {
