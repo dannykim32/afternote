@@ -9,6 +9,7 @@
 #import "broker_recovery_state.h"
 #import "connector_presentation.h"
 #import "note_editor_state.h"
+#import "owner_broker.h"
 #import "setup_guide_state.h"
 #import "application_installation.h"
 
@@ -1038,9 +1039,7 @@ BOOL IsBrokerResult(NSString *method, NSDictionary *result, NSDictionary *params
 
 }  // namespace
 
-typedef void (^BrokerReply)(NSDictionary *result, NSDictionary *error);
-
-@interface OwnerBrokerConnection : NSObject {
+@interface OwnerBrokerConnection : NSObject <AfternoteOwnerBroker> {
   xpc_connection_t _connection;
   NSString *_service;
   dispatch_queue_t _connectionQueue;
@@ -1871,7 +1870,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) NSUInteger brokerRecoveryAttempt;
 @property(nonatomic) NSInteger brokerRecoverySurface;
 @property(nonatomic) BOOL brokerRecoveryInFlight;
-@property(nonatomic, strong) OwnerBrokerConnection *broker;
+@property(nonatomic, strong) id<AfternoteOwnerBroker> broker;
 @property(nonatomic, strong) NSDictionary *connections;
 @property(nonatomic, strong) NSMutableArray *auditEvents;
 @property(nonatomic, copy) NSString *auditCursor;
@@ -6631,12 +6630,13 @@ int RunIntegrationGenerationSmoke() {
       claudeStatusStayedCurrent ? 0 : 2;
 }
 
-@interface BrokerRecoveryProbeConnection : OwnerBrokerConnection
+@interface BrokerRecoveryProbeConnection : NSObject <AfternoteOwnerBroker>
 @property(nonatomic) NSUInteger recoveryFailuresRemaining;
 @property(nonatomic) NSUInteger replacementCount;
 @property(nonatomic, strong) NSMutableArray<NSString *> *requestedMethods;
 @property(nonatomic, copy) NSString *lifecycleState;
 @property(nonatomic, copy) void (^afterLifecycleReply)(void);
+@property(nonatomic, copy) void (^disconnectHandler)(void);
 - (instancetype)initWithRecoveryFailures:(NSUInteger)failures;
 @end
 
@@ -6681,6 +6681,11 @@ int RunIntegrationGenerationSmoke() {
   }
   reply(nil, @{ @"code" : @"invalid_request",
                 @"message" : @"Unexpected fixture request." });
+}
+
+- (void)requestLifecycleTransitionMethod:(NSString *)method
+                                   reply:(BrokerReply)reply {
+  [self requestMethod:method params:@{} reply:reply];
 }
 @end
 

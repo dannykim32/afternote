@@ -16,8 +16,22 @@ const sqlcipherAddonSource = readFileSync(
   join(sourceDirectory, "../native/sqlcipher_addon.cc"),
   "utf8",
 );
+const ownerBrokerHeader = readFileSync(
+  join(sourceDirectory, "../native/owner_broker.h"),
+  "utf8",
+);
 
 describe("native owner administration production boundary", () => {
+  it("depends on a typed owner-broker interface with a non-production fake", () => {
+    expect(ownerBrokerHeader).toContain("@protocol AfternoteOwnerBroker");
+    expect(nativeAppSource).toContain(
+      "@property(nonatomic, strong) id<AfternoteOwnerBroker> broker;",
+    );
+    expect(nativeAppSource).toContain(
+      "@interface BrokerRecoveryProbeConnection : NSObject <AfternoteOwnerBroker>",
+    );
+  });
+
   it("routes public admin commands through the signed owner-control executable", () => {
     expect(cliSource).toContain("runNativeAdminCommand");
     expect(cliSource).toContain('"--admin-export"');
