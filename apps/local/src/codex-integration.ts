@@ -1,12 +1,11 @@
 import {
   accessSync,
   constants,
-  existsSync,
   realpathSync,
   statSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   probeCodexMcpReadiness,
   type CodexMcpReadiness,
@@ -16,9 +15,13 @@ import {
   verifyIntegrationHostCommand,
 } from "./integration-host-command";
 import { integrationIdentityIsHealthy } from "./integration-identity";
+import { installedAfternoteCommand } from "./connector-runtime";
+import {
+  manageConnectorLifecycle,
+  type ConnectorHostAdapter,
+} from "./connector-lifecycle";
 
 const CODEX_SERVER_NAME = "afternote";
-const RUNTIME_PROBE_TIMEOUT_MS = 10_000;
 
 export type CodexIntegrationAction =
   | "install"
@@ -69,6 +72,98 @@ export type CodexIntegrationDependencies = {
   runTool?: (args: readonly string[]) => void;
 };
 
+export function createCodexConnectorAdapter(
+  dependencies: CodexIntegrationDependencies = {},
+): ConnectorHostAdapter<CodexServer, CodexIntegrationStatus> {
+  const afternoteCommand = dependencies.afternoteCommand ??
+    installedAfternoteCommand();
+  const toolCommand = dependencies.toolCommand === undefined
+    ? resolveCodexCommand()
+    : dependencies.toolCommand;
+  const readServer = dependencies.readServer ?? readCodexServer;
+  const probeReadiness = dependencies.probeReadiness ?? probeCodexMcpReadiness;
+  const probeIdentity = dependencies.probeIdentity ?? (() => true);
+  const runTool = dependencies.runTool ?? ((args: readonly string[]) => {
+    if (!toolCommand) throw new Error("Codex CLI is unavailable");
+    runCodex(toolCommand, [...args]);
+  });
+  const readConfiguration = () => toolCommand ? readServer(toolCommand) : null;
+  const status = (server: CodexServer | null) =>
+    classifyConfiguration(
+      configurationStatus(server, afternoteCommand),
+      server,
+      isOwnedLegacyServer(server, afternoteCommand),
+    );
+  return {
+    displayName: "Codex",
+    afternoteCommand,
+    toolCommand,
+    unavailableError:
+      "Afternote requires the signed native Codex build; npm scripts and wrapper processes are not supported. Install the official Codex or ChatGPT app, then try again.",
+    conflictError:
+      "Codex already has a different MCP server named afternote; remove or rename it before installing",
+    removalRefusedError:
+      "Refusing to remove a Codex MCP server that is not owned by this Afternote installation",
+    stillInstalledError: "Codex still reports the Afternote MCP server after removal",
+    installRollbackError:
+      "Codex installation failed and its Afternote entry could not be rolled back safely",
+    removalRollbackError:
+      "Codex removal failed and its Afternote entry could not be rolled back safely",
+    unavailableStatus: () => ({
+      format: "afternote-codex-integration",
+      schemaVersion: 4,
+      toolAvailable: false,
+      installed: false,
+      healthy: false,
+      configHealthy: false,
+      identityHealthy: false,
+      runtimeHealthy: false,
+      repairable: false,
+      problemCode: null,
+      readiness: null,
+      command: afternoteCommand,
+      args: ["mcp", "--client", "codex"],
+    }),
+    readConfiguration,
+    status,
+    isOwnedLegacy: (server) => isOwnedLegacyServer(server, afternoteCommand),
+    withRuntimeStatus: (value) => {
+      if (!toolCommand) return Promise.resolve(value);
+      return withRuntimeStatus(value, toolCommand, probeReadiness, probeIdentity);
+    },
+    existingConfigurationError: (value) => readinessFailure(
+      "Codex has the expected Afternote entry, but its MCP startup validation failed",
+      value.readiness,
+    ),
+    installedConfigurationError: (value) => readinessFailure(
+      "Codex did not retain a working Afternote MCP configuration",
+      value.readiness,
+    ),
+    add: () => runTool([
+      "mcp",
+      "add",
+      CODEX_SERVER_NAME,
+      "--",
+      afternoteCommand,
+      "mcp",
+      "--client",
+      "codex",
+    ]),
+    remove: () => runTool(["mcp", "remove", CODEX_SERVER_NAME]),
+    restore: (previous) => {
+      if (!toolCommand) throw new Error("Codex CLI is unavailable");
+      restoreCodexEntry(
+        toolCommand,
+        previous,
+        readServer,
+        afternoteCommand,
+        runTool,
+      );
+    },
+    identityIsHealthy: () => Promise.resolve(probeIdentity()),
+  };
+}
+
 export function parseCodexIntegrationAction(
   action: string | undefined,
 ): CodexIntegrationAction {
@@ -94,169 +189,14 @@ export async function manageCodexIntegration(
   removed?: boolean;
   backup?: string | null;
 }> {
-  if (!standalone) {
-    throw new Error(
-      "Codex integration must be configured from a standalone Afternote artifact",
-    );
-  }
   if (action === "rotate-identity") {
     throw new Error("Codex identity rotation must be routed separately");
   }
-
-  const afternoteCommand = dependencies.afternoteCommand ??
-    installedAfternoteCommand();
-  const codexCommand = dependencies.toolCommand === undefined
-    ? resolveCodexCommand()
-    : dependencies.toolCommand;
-  if (!codexCommand) {
-    if (action === "status") {
-      return {
-        format: "afternote-codex-integration",
-        schemaVersion: 4,
-        toolAvailable: false,
-        installed: false,
-        healthy: false,
-        configHealthy: false,
-        identityHealthy: false,
-        runtimeHealthy: false,
-        repairable: false,
-        problemCode: null,
-        readiness: null,
-        command: afternoteCommand,
-        args: ["mcp", "--client", "codex"],
-      };
-    }
-    throw new Error(
-      "Afternote requires the signed native Codex build; npm scripts and wrapper processes are not supported. Install the official Codex or ChatGPT app, then try again.",
-    );
-  }
-  const readServer = dependencies.readServer ?? readCodexServer;
-  const probeReadiness = dependencies.probeReadiness ?? probeCodexMcpReadiness;
-  const probeIdentity = dependencies.probeIdentity ?? (() => true);
-  const runTool = dependencies.runTool ?? ((args: readonly string[]) =>
-    runCodex(codexCommand, [...args]));
-  const current = readServer(codexCommand);
-  const status = configurationStatus(current, afternoteCommand);
-  const legacyOwned = isOwnedLegacyServer(current, afternoteCommand);
-  const classified = classifyConfiguration(status, current, legacyOwned);
-  if (action === "status") {
-    return await withRuntimeStatus(
-      classified,
-      codexCommand,
-      probeReadiness,
-      probeIdentity,
-    );
-  }
-
-  if (action === "install") {
-    if (current && !classified.configHealthy && !legacyOwned) {
-      throw new Error(
-        "Codex already has a different MCP server named afternote; remove or rename it before installing",
-      );
-    }
-    if (classified.configHealthy) {
-      const validated = await withRuntimeStatus(
-        classified,
-        codexCommand,
-        probeReadiness,
-        probeIdentity,
-      );
-      if (!validated.healthy) {
-        throw new Error(
-          readinessFailure(
-            "Codex has the expected Afternote entry, but its MCP startup validation failed",
-            validated.readiness,
-          ),
-        );
-      }
-      return {
-        ...validated,
-        changed: false,
-        backup: null,
-      };
-    }
-
-    if (!await integrationIdentityIsHealthy(probeIdentity)) {
-      throw new Error("Afternote client signing identity is unavailable");
-    }
-    try {
-      if (legacyOwned) {
-        runTool(["mcp", "remove", CODEX_SERVER_NAME]);
-      }
-      runTool([
-        "mcp",
-        "add",
-        CODEX_SERVER_NAME,
-        "--",
-        afternoteCommand,
-        "mcp",
-        "--client",
-        "codex",
-      ]);
-      const installedServer = readServer(codexCommand);
-      const installed = await withRuntimeStatus(
-        classifyConfiguration(
-          configurationStatus(installedServer, afternoteCommand),
-          installedServer,
-          false,
-        ),
-        codexCommand,
-        probeReadiness,
-        probeIdentity,
-      );
-      if (!installed.healthy) {
-        throw new Error(
-          readinessFailure(
-            "Codex did not retain a working Afternote MCP configuration",
-            installed.readiness,
-          ),
-        );
-      }
-      return { ...installed, changed: true, backup: null };
-    } catch (error) {
-      try {
-        restoreCodexEntry(codexCommand, current, readServer, afternoteCommand, runTool);
-      } catch (rollbackError) {
-        throw new AggregateError(
-          [error, rollbackError],
-          "Codex installation failed and its Afternote entry could not be rolled back safely",
-        );
-      }
-      throw error;
-    }
-  }
-
-  if (!current) {
-    return { ...classified, removed: false, backup: null };
-  }
-  if (!classified.configHealthy) {
-    throw new Error(
-      "Refusing to remove a Codex MCP server that is not owned by this Afternote installation",
-    );
-  }
-  try {
-    runTool(["mcp", "remove", CODEX_SERVER_NAME]);
-    const removedServer = readServer(codexCommand);
-    const removed = classifyConfiguration(
-      configurationStatus(removedServer, afternoteCommand),
-      removedServer,
-      false,
-    );
-    if (removed.installed) {
-      throw new Error("Codex still reports the Afternote MCP server after removal");
-    }
-    return { ...removed, removed: true, backup: null };
-  } catch (error) {
-    try {
-      restoreCodexEntry(codexCommand, current, readServer, afternoteCommand, runTool);
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [error, rollbackError],
-        "Codex removal failed and its Afternote entry could not be rolled back safely",
-      );
-    }
-    throw error;
-  }
+  return manageConnectorLifecycle(
+    action,
+    standalone,
+    createCodexConnectorAdapter(dependencies),
+  );
 }
 
 export function resolveCodexCommand(options: {
@@ -369,22 +309,6 @@ function classifyConfiguration(
   return { ...status, repairable: true, problemCode: "connector_missing" };
 }
 
-export function installedAfternoteCommand(): string {
-  const installedLink = join(
-    process.env.AFTERNOTE_BIN_ROOT ?? join(homedir(), ".local", "bin"),
-    "afternote",
-  );
-  if (
-    existsSync(installedLink) &&
-    realpathSync.native(installedLink) === realpathSync.native(process.execPath)
-  ) {
-    return installedLink;
-  }
-  throw new Error(
-    "Could not identify this Afternote installation; install Afternote Local first, then run the installed afternote command",
-  );
-}
-
 async function withRuntimeStatus(
   status: CodexIntegrationStatus,
   codexCommand: string,
@@ -422,51 +346,6 @@ function readinessFailure(
   return readiness?.error ? `${prefix}: ${readiness.error.message}` : prefix;
 }
 
-export async function probeMcpRuntime(
-  command: string,
-  args: readonly string[],
-): Promise<boolean> {
-  void args;
-  const healthcheck = process.env.AFTERNOTE_BROKER_HEALTHCHECK;
-  const child = Bun.spawn(healthcheck ? [healthcheck] : [command, "broker-health"], {
-    env: process.env,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  try {
-    const exitCode = await withTimeout(child.exited, "health response");
-    if (exitCode !== 0) return false;
-    const output = await new Response(child.stdout).text();
-    const health = JSON.parse(output) as {
-      protocolVersion?: unknown;
-      publicMetadata?: { transport?: unknown };
-    };
-    return health.protocolVersion === 1 &&
-      health.publicMetadata?.transport === "launchd-mach-service";
-  } catch {
-    return false;
-  } finally {
-    if (child.exitCode === null) child.kill();
-  }
-}
-
-async function withTimeout<T>(operation: Promise<T>, label: string): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error(`Afternote MCP ${label} timed out`)),
-          RUNTIME_PROBE_TIMEOUT_MS,
-        );
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
 
 function readCodexServer(codexCommand: string): CodexServer | null {
   const output = runCodex(codexCommand, ["mcp", "list", "--json"]);
@@ -528,13 +407,4 @@ function restoreCodexEntry(
     command,
     ...args,
   ]);
-}
-
-function codexHome(): string {
-  const configured = process.env.CODEX_HOME;
-  if (!configured) return join(homedir(), ".codex");
-  if (!isAbsolute(configured)) {
-    throw new Error("CODEX_HOME must be absolute");
-  }
-  return resolve(configured);
 }

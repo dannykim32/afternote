@@ -4,15 +4,16 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  installedAfternoteCommand,
-  probeMcpRuntime,
-} from "./codex-integration";
+import { installedAfternoteCommand, probeMcpRuntime } from "./connector-runtime";
 import {
   runIntegrationHostCommand,
   verifyIntegrationHostCommand,
 } from "./integration-host-command";
 import { integrationIdentityIsHealthy } from "./integration-identity";
+import {
+  manageConnectorLifecycle,
+  type ConnectorHostAdapter,
+} from "./connector-lifecycle";
 
 const CLAUDE_SERVER_NAME = "afternote";
 
@@ -66,6 +67,98 @@ export type ClaudeCodeIntegrationDependencies = {
   runTool?: (args: readonly string[]) => void;
 };
 
+export function createClaudeCodeConnectorAdapter(
+  dependencies: ClaudeCodeIntegrationDependencies = {},
+): ConnectorHostAdapter<ClaudeCodeServer, ClaudeCodeIntegrationStatus> {
+  const afternoteCommand = dependencies.afternoteCommand ??
+    installedAfternoteCommand();
+  const toolCommand = dependencies.toolCommand === undefined
+    ? resolveClaudeCodeCommand()
+    : dependencies.toolCommand;
+  const readServer = dependencies.readServer ?? readClaudeCodeServer;
+  const probeRuntime = dependencies.probeRuntime ?? probeMcpRuntime;
+  const probeIdentity = dependencies.probeIdentity ?? (() => true);
+  const runTool = dependencies.runTool ?? ((args: readonly string[]) => {
+    if (!toolCommand) throw new Error("Claude Code CLI is unavailable");
+    runClaude(toolCommand, [...args]);
+  });
+  const readConfiguration = () => readServer();
+  const status = (server: ClaudeCodeServer | null) =>
+    classifyConfiguration(
+      configurationStatus(server, afternoteCommand),
+      server,
+      isOwnedLegacyClaudeCodeServer(server, afternoteCommand),
+    );
+  return {
+    displayName: "Claude Code",
+    afternoteCommand,
+    toolCommand,
+    unavailableError:
+      "Afternote requires the signed native Claude Code build; npm scripts and wrapper processes are not supported. Install Anthropic's native build, then try again.",
+    conflictError:
+      "Claude Code already has a different MCP server named afternote; remove or rename it before installing",
+    removalRefusedError:
+      "Refusing to remove a Claude Code MCP server that is not owned by this Afternote installation",
+    stillInstalledError:
+      "Claude Code still reports the Afternote MCP server after removal",
+    installRollbackError:
+      "Claude Code installation failed and its Afternote entry could not be rolled back safely",
+    removalRollbackError:
+      "Claude Code removal failed and its Afternote entry could not be rolled back safely",
+    unavailableStatus: () => ({
+      format: "afternote-claude-code-integration",
+      schemaVersion: 3,
+      toolAvailable: false,
+      installed: false,
+      healthy: false,
+      configHealthy: false,
+      identityHealthy: false,
+      runtimeHealthy: false,
+      repairable: false,
+      problemCode: null,
+      scope: "user",
+      command: afternoteCommand,
+      args: ["mcp", "--client", "claude"],
+    }),
+    readConfiguration,
+    status,
+    isOwnedLegacy: (server) =>
+      isOwnedLegacyClaudeCodeServer(server, afternoteCommand),
+    withRuntimeStatus: (value) =>
+      withRuntimeStatus(value, probeRuntime, probeIdentity),
+    existingConfigurationError: () =>
+      "Claude Code has the expected Afternote entry, but its MCP runtime validation failed",
+    installedConfigurationError: (value) =>
+      `Claude Code did not retain a healthy Afternote MCP configuration (config=${value.configHealthy}, runtime=${value.runtimeHealthy})`,
+    add: () => runTool([
+      "mcp",
+      "add",
+      "--scope",
+      "user",
+      CLAUDE_SERVER_NAME,
+      "--",
+      afternoteCommand,
+      "mcp",
+      "--client",
+      "claude",
+    ]),
+    remove: () => runTool([
+      "mcp",
+      "remove",
+      "--scope",
+      "user",
+      CLAUDE_SERVER_NAME,
+    ]),
+    restore: (previous) => restoreClaudeCodeEntry(
+      previous,
+      readServer,
+      afternoteCommand,
+      runTool,
+    ),
+    identityIsHealthy: () => Promise.resolve(probeIdentity()),
+  };
+}
+
 export function parseClaudeCodeIntegrationAction(
   action: string | undefined,
 ): ClaudeCodeIntegrationAction {
@@ -91,166 +184,14 @@ export async function manageClaudeCodeIntegration(
   removed?: boolean;
   backup?: string | null;
 }> {
-  if (!standalone) {
-    throw new Error(
-      "Claude Code integration must be configured from a standalone Afternote artifact",
-    );
-  }
   if (action === "rotate-identity") {
     throw new Error("Claude Code identity rotation must be routed separately");
   }
-  const afternoteCommand = dependencies.afternoteCommand ??
-    installedAfternoteCommand();
-  const claudeCommand = dependencies.toolCommand === undefined
-    ? resolveClaudeCodeCommand()
-    : dependencies.toolCommand;
-  if (!claudeCommand) {
-    if (action === "status") {
-      return {
-        format: "afternote-claude-code-integration",
-        schemaVersion: 3,
-        toolAvailable: false,
-        installed: false,
-        healthy: false,
-        configHealthy: false,
-        identityHealthy: false,
-        runtimeHealthy: false,
-        repairable: false,
-        problemCode: null,
-        scope: "user",
-        command: afternoteCommand,
-        args: ["mcp", "--client", "claude"],
-      };
-    }
-    throw new Error(
-      "Afternote requires the signed native Claude Code build; npm scripts and wrapper processes are not supported. Install Anthropic's native build, then try again.",
-    );
-  }
-  const readServer = dependencies.readServer ?? readClaudeCodeServer;
-  const probeRuntime = dependencies.probeRuntime ?? probeMcpRuntime;
-  const probeIdentity = dependencies.probeIdentity ?? (() => true);
-  const runTool = dependencies.runTool ?? ((args: readonly string[]) =>
-    runClaude(claudeCommand, [...args]));
-  const current = readServer();
-  const status = configurationStatus(current, afternoteCommand);
-  const legacyOwned = isOwnedLegacyClaudeCodeServer(current, afternoteCommand);
-  const classified = classifyConfiguration(status, current, legacyOwned);
-
-  if (action === "status") {
-    return await withRuntimeStatus(classified, probeRuntime, probeIdentity);
-  }
-
-  if (action === "install") {
-    if (current && !classified.configHealthy && !legacyOwned) {
-      throw new Error(
-        "Claude Code already has a different MCP server named afternote; remove or rename it before installing",
-      );
-    }
-    if (classified.configHealthy) {
-      const validated = await withRuntimeStatus(
-        classified,
-        probeRuntime,
-        probeIdentity,
-      );
-      if (!validated.healthy) {
-        throw new Error(
-          "Claude Code has the expected Afternote entry, but its MCP runtime validation failed",
-        );
-      }
-      return { ...validated, changed: false, backup: null };
-    }
-
-    if (!await integrationIdentityIsHealthy(probeIdentity)) {
-      throw new Error("Afternote client signing identity is unavailable");
-    }
-    try {
-      if (legacyOwned) {
-        runTool([
-          "mcp",
-          "remove",
-          "--scope",
-          "user",
-          CLAUDE_SERVER_NAME,
-        ]);
-      }
-      runTool([
-        "mcp",
-        "add",
-        "--scope",
-        "user",
-        CLAUDE_SERVER_NAME,
-        "--",
-        afternoteCommand,
-        "mcp",
-        "--client",
-        "claude",
-      ]);
-      const installedServer = readServer();
-      const installed = await withRuntimeStatus(
-        classifyConfiguration(
-          configurationStatus(installedServer, afternoteCommand),
-          installedServer,
-          false,
-        ),
-        probeRuntime,
-        probeIdentity,
-      );
-      if (!installed.healthy) {
-        throw new Error(
-          `Claude Code did not retain a healthy Afternote MCP configuration (config=${installed.configHealthy}, runtime=${installed.runtimeHealthy})`,
-        );
-      }
-      return { ...installed, changed: true, backup: null };
-    } catch (error) {
-      try {
-        restoreClaudeCodeEntry(current, readServer, afternoteCommand, runTool);
-      } catch (rollbackError) {
-        throw new AggregateError(
-          [error, rollbackError],
-          "Claude Code installation failed and its Afternote entry could not be rolled back safely",
-        );
-      }
-      throw error;
-    }
-  }
-
-  if (!current) return { ...classified, removed: false, backup: null };
-  if (!classified.configHealthy) {
-    throw new Error(
-      "Refusing to remove a Claude Code MCP server that is not owned by this Afternote installation",
-    );
-  }
-  try {
-    runTool([
-      "mcp",
-      "remove",
-      "--scope",
-      "user",
-      CLAUDE_SERVER_NAME,
-    ]);
-    const removedServer = readServer();
-    const removed = classifyConfiguration(
-      configurationStatus(removedServer, afternoteCommand),
-      removedServer,
-      false,
-    );
-    if (removed.installed) {
-      throw new Error(
-        "Claude Code still reports the Afternote MCP server after removal",
-      );
-    }
-    return { ...removed, removed: true, backup: null };
-  } catch (error) {
-    try {
-      restoreClaudeCodeEntry(current, readServer, afternoteCommand, runTool);
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [error, rollbackError],
-        "Claude Code removal failed and its Afternote entry could not be rolled back safely",
-      );
-    }
-    throw error;
-  }
+  return manageConnectorLifecycle(
+    action,
+    standalone,
+    createClaudeCodeConnectorAdapter(dependencies),
+  );
 }
 
 export function resolveClaudeCodeCommand(options: {

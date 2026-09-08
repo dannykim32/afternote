@@ -2,10 +2,10 @@ import { existsSync, lstatSync, readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
-  installedAfternoteCommand,
   manageCodexIntegration,
   parseCodexIntegrationAction,
 } from "./codex-integration";
+import { installedAfternoteCommand } from "./connector-runtime";
 import {
   manageClaudeCodeIntegration,
   parseClaudeCodeIntegrationAction,
