@@ -91,9 +91,6 @@ export async function runLocalCli(
         requiredPath(args[1], "diagnostic bundle destination"),
       );
       return;
-    case "telemetry":
-      await manageTelemetry(args[1]);
-      return;
     case "lock":
       await changeVaultLifecycle("lock");
       return;
@@ -401,22 +398,6 @@ async function localDiagnosticBundle(): Promise<
   return await runNativeAdminCommand(["--admin-diagnostics"]);
 }
 
-async function manageTelemetry(action: string | undefined): Promise<void> {
-  if (
-    action !== "status" &&
-    action !== "enable" &&
-    action !== "disable" &&
-    action !== "reset"
-  ) {
-    throw new Error("Telemetry action must be status, enable, disable, or reset");
-  }
-  console.log(JSON.stringify(
-    await runNativeAdminCommand(["--admin-telemetry", action]),
-    null,
-    2,
-  ));
-}
-
 async function changeVaultLifecycle(action: "lock" | "unlock"): Promise<void> {
   console.log(JSON.stringify(
     await runNativeAdminCommand([action === "lock" ? "--admin-lock" : "--admin-unlock"]),
@@ -475,7 +456,6 @@ export async function runNativeAdminCommand(
     ["--admin-export", "json" | "markdown", string] |
     ["--admin-migrate", RecoveryCliPolicy, RecoveryCliPolicy] |
     ["--admin-restore", string] |
-    ["--admin-telemetry", "status" | "enable" | "disable" | "reset"] |
     ["--admin-prepare-client-rotation", McpClientIdentityKind, string, string] |
     ["--admin-enroll-release-key"] |
     ["--admin-lock" | "--admin-unlock"],
@@ -662,8 +642,6 @@ Commands:
                        Encrypt schema-8 storage with explicit live/artifact handling
   doctor              Print share-safe local diagnostics
   diagnostics <file>  Write an owner-only share-safe diagnostic bundle
-  telemetry status|enable|disable|reset
-                       Inspect or change local telemetry consent
   lock                 Close the vault and invalidate live broker authority
   unlock               Reopen the vault under a fresh authorization epoch
 ${recallHelp}
@@ -674,7 +652,7 @@ ${recallHelp}
                        Configure and validate the Claude Code MCP integration
   version             Print the artifact version
 
-Exports contain plaintext note content and source metadata. Markdown is not a restore format. Diagnostics use coarse allowlisted fields. Telemetry transmission is not configured. Existing files and vaults are never overwritten.`);
+Exports contain plaintext note content and source metadata. Markdown is not a restore format. Diagnostics use coarse allowlisted fields. Existing files and vaults are never overwritten.`);
 }
 
 function vaultPath(): string {

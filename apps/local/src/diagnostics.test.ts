@@ -41,16 +41,12 @@ describe("share-safe diagnostics", () => {
           revisionCount: 0,
           databaseBytes: liveBytes,
         },
-        telemetry: {
-          enabled: false,
-          telemetrySchemaVersion: 1,
-          identifierCreatedAt: null,
-          identifierRotatesAt: null,
-          transmission: "not-configured",
-          nextPayload: null,
-        },
       });
       expect(bundle.vault.databaseBytesBucket).toBe("1-9-mib");
+      expect(bundle).not.toHaveProperty("telemetry");
+      expect(bundle.checks.map((check) => check.code)).not.toContain(
+        "telemetry.transport",
+      );
     } finally {
       database.close();
     }

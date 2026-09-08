@@ -1316,7 +1316,6 @@ describe("native owner-controlled vault lifecycle", () => {
       ["library.browse", { cursor: null, limit: 20, view: null }],
       ["owner.inspect_connections", {}],
       ["admin.diagnostics", {}],
-      ["admin.telemetry", { action: "status" }],
       ["admin.export", { destination: join(fixture.directory, "locked.json"), format: "json" }],
     ] as const) {
       expect(await rawOwnerRequest(fixture.worker, owner, method, params))

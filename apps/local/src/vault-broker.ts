@@ -1388,7 +1388,7 @@ export class VaultBrokerAuthorization {
 
   #beginNativeOwnerAdminAudit(operation: string): BrokerAuditAuthorization {
     this.#assertOpen();
-    if (!/^(admin\.(export|diagnostics|prepare_client_rotation|telemetry\.(status|enable|disable|reset))|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
+    if (!/^(admin\.(export|diagnostics|prepare_client_rotation)|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
       throw new Error("Native owner administration operation is invalid");
     }
     const authorization: BrokerAuditAuthorization = {

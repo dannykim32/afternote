@@ -10,7 +10,6 @@ vault, and Codex and Claude Code connectors only.
 | `~/.afternote/vault.db` | SQLCipher-encrypted notes, revisions, metadata, embeddings, grants, and audit records | Preserved so reinstall does not destroy notes |
 | `~/.afternote/clients/` | Connector installation identifiers; no note text or private signing-key bytes | Preserved for reconnect after reinstall |
 | `~/.afternote/models/` | Pinned local embedding model files downloaded only after explicit semantic installation | Preserved; may be deleted and downloaded again |
-| `~/.afternote/.vault.db.afternote-telemetry.json` | Owner-only telemetry consent and a rotating installation identifier; no notes or queries | Preserved with the vault; deleted when telemetry is disabled |
 | `~/.afternote/.vault.db.afternote.lock` | Transient lifecycle lock containing process coordination state, not note text | Removed when the broker exits normally; stale locks are recovered safely |
 | `~/.afternote/vault.db.*migration*` and `vault.db.*restore*` | Owner-only transactional markers, encrypted candidates, rollback vaults, and integrity seals used only while migration or restore is incomplete | Cleaned after successful completion; retained after interruption so recovery can resume without guessing |
 | `~/Library/Application Support/Afternote/` | Versioned runtime, native helpers, license inventory, and active-version link | Removed |
@@ -51,8 +50,8 @@ only while the device is unlocked.
 
 ## Network behavior
 
-The installed Afternote runtime has no telemetry transport and no Afternote account or sync
-endpoint. Exact and date-aware search make no outbound request.
+The installed Afternote runtime has no telemetry, Afternote account, or sync endpoint. Exact and
+date-aware search make no outbound request.
 
 The only direct application download is an explicit `afternote semantic install`, which
 fetches a fixed file set from `https://huggingface.co` at the pinned model revision. Every

@@ -452,13 +452,6 @@ describeMacos("launchd-owned vault broker gateway", () => {
       runtime: { networkBoundary: "broker-only" },
       vault: { integrity: "ok", noteCountBucket: "0" },
     });
-    const telemetry = Bun.spawnSync([
-      ownerControlPath,
-      "--admin-telemetry",
-      "enable",
-    ], { stdout: "pipe", stderr: "pipe" });
-    expect(telemetry.exitCode, telemetry.stderr.toString()).toBe(0);
-    expect(JSON.parse(telemetry.stdout.toString())).toMatchObject({ enabled: true });
     const exportPath = join(directory, "broker-export.json");
     const exported = Bun.spawnSync([
       ownerControlPath,

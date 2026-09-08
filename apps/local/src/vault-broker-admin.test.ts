@@ -350,7 +350,7 @@ describe("native owner administration broker protocol", () => {
     )).toMatchObject({ ok: false, error: { code: "denied" } });
   });
 
-  it("serves share-safe diagnostics and broker-owned telemetry only after fresh owner presence", async () => {
+  it("serves share-safe diagnostics only after fresh owner presence", async () => {
     const fixture = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 52201 };
     await rememberFixture(fixture.worker, connection);
@@ -371,60 +371,11 @@ describe("native owner administration broker protocol", () => {
       },
       runtime: { status: "running", networkBoundary: "broker-only" },
       vault: { integrity: "ok", noteCountBucket: "1-9" },
-      telemetry: { enabled: false, transmission: "not-configured" },
     });
+    expect(diagnostics).not.toHaveProperty("telemetry");
     const serializedDiagnostics = JSON.stringify(diagnostics);
     expect(serializedDiagnostics).not.toContain(fixture.path);
     expect(serializedDiagnostics).not.toContain("Broker-owned export canary");
-
-    const enabled = await ownerRequest(
-      fixture.worker,
-      connection,
-      "admin.telemetry",
-      { action: "enable" },
-      true,
-    );
-    expect(enabled.enabled).toBe(true);
-    expect(enabled.nextPayload.installationId).toMatch(/^[A-Za-z0-9_-]{43}$/);
-
-    const statusPending = await beginOwnerRequest(
-      fixture.worker,
-      connection,
-      "admin.telemetry",
-      { action: "status" },
-    );
-    expect(statusPending.ownerPresenceChallenge.reason).toContain("telemetry status");
-    expect(await completeOwnerPresence(
-      fixture.worker,
-      connection,
-      statusPending.ownerPresenceChallenge.challengeId,
-      "cancelled",
-    )).toMatchObject({ ok: false, error: { code: "owner_cancelled" } });
-
-    const status = await ownerRequest(
-      fixture.worker,
-      connection,
-      "admin.telemetry",
-      { action: "status" },
-      true,
-    );
-    expect(status.nextPayload.installationId).toBe(enabled.nextPayload.installationId);
-    const reset = await ownerRequest(
-      fixture.worker,
-      connection,
-      "admin.telemetry",
-      { action: "reset" },
-      true,
-    );
-    expect(reset.nextPayload.installationId).not.toBe(enabled.nextPayload.installationId);
-    const disabled = await ownerRequest(
-      fixture.worker,
-      connection,
-      "admin.telemetry",
-      { action: "disable" },
-      true,
-    );
-    expect(disabled).toMatchObject({ enabled: false, nextPayload: null });
 
     await ownerRequest(fixture.worker, connection, "owner.session.begin", {
       requestedScopes: ["owner.inspect_audit"],
@@ -444,75 +395,10 @@ describe("native owner administration broker protocol", () => {
         outcome: "success",
         noteRefs: [],
       }),
-      expect.objectContaining({
-        clientId: "owner",
-        operation: "admin.telemetry.enable",
-        outcome: "success",
-        noteRefs: [],
-      }),
-      expect.objectContaining({
-        clientId: "owner",
-        operation: "admin.telemetry.status",
-        outcome: "denied",
-        errorCode: "owner_cancelled",
-        noteRefs: [],
-      }),
-      expect.objectContaining({
-        clientId: "owner",
-        operation: "admin.telemetry.reset",
-        outcome: "success",
-        noteRefs: [],
-      }),
-      expect.objectContaining({
-        clientId: "owner",
-        operation: "admin.telemetry.disable",
-        outcome: "success",
-        noteRefs: [],
-      }),
     ]));
   });
 
-  it("derives the telemetry path from the production vault configuration", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "afternote-admin-default-path-"));
-    directories.push(directory);
-    const path = join(directory, "vault.db");
-    const key = randomBytes(32);
-    const previousVaultPath = process.env.AFTERNOTE_VAULT_PATH;
-    process.env.AFTERNOTE_VAULT_PATH = path;
-    try {
-      const worker = new VaultBrokerWorker({
-        applicationVersion: "2.0.0-admin-default-path-test",
-        standalone: true,
-        vaultKeyProvider: () => Uint8Array.from(key),
-        trustPath: "development-only",
-      });
-      workers.push(worker);
-      const connection = { connectionId: randomUUID(), peerPid: 52202 };
-
-      const diagnosticsResponse = await rawOwnerRequest(
-        worker,
-        connection,
-        "admin.diagnostics",
-        {},
-        true,
-      );
-      expect(diagnosticsResponse).toMatchObject({ ok: true });
-      const diagnostics = diagnosticsResponse.result;
-
-      expect(diagnostics).toMatchObject({
-        format: "afternote-diagnostics",
-        telemetry: { enabled: false, transmission: "not-configured" },
-      });
-    } finally {
-      if (previousVaultPath === undefined) {
-        delete process.env.AFTERNOTE_VAULT_PATH;
-      } else {
-        process.env.AFTERNOTE_VAULT_PATH = previousVaultPath;
-      }
-    }
-  });
-
-  it("rejects malformed admin requests without touching output or telemetry state", async () => {
+  it("rejects malformed admin requests without touching output", async () => {
     const fixture = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 52301 };
     const relative = "relative-export.json";
@@ -520,7 +406,6 @@ describe("native owner administration broker protocol", () => {
       ["admin.export", { destination: relative, format: "json" }],
       ["admin.export", { destination: fixture.path, format: "xml" }],
       ["admin.diagnostics", { extra: true }],
-      ["admin.telemetry", { action: "send" }],
       ["admin.prepare_client_rotation", {
         kind: "slack",
         installIdentity: "11111111-1111-4111-8111-111111111111",

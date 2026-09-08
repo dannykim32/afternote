@@ -16,14 +16,6 @@ export function localVaultContext(path: string): VaultContext {
   };
 }
 
-export function localTelemetryStatePath(path: string): string {
-  const canonicalPath = canonicalVaultPath(path);
-  return join(
-    dirname(canonicalPath),
-    `.${basename(canonicalPath)}.afternote-telemetry.json`,
-  );
-}
-
 export function localVaultLifecycleLockPath(path: string): string {
   const canonicalPath = canonicalVaultPath(path);
   return join(

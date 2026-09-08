@@ -26,18 +26,13 @@ import {
   type SourceContext,
   type VaultContext,
 } from "@afternote/memory";
-import {
-  localTelemetryStatePath,
-  localVaultContext,
-  localVaultLifecycleLockPath,
-} from "./local-vault";
+import { localVaultContext, localVaultLifecycleLockPath } from "./local-vault";
 import { SqliteMemory, type EffectiveSearchMode } from "./sqlite-memory";
 import type { DerivedIndexStatus, TextEmbeddingModel } from "./retrieval";
 import {
   buildDiagnosticBundle,
   LOCAL_DIAGNOSTICS_API_VERSION,
 } from "./diagnostics";
-import { LocalTelemetryStore } from "./telemetry-store";
 import {
   encryptionMigrationApprovalSnapshot,
   encryptionMigrationReadiness,
@@ -264,10 +259,6 @@ type PendingPresence =
             kind: "revoked-client-replacement";
             target: OwnerClientRotationTarget;
             replacementInstallIdentity: string;
-          }
-        | {
-            kind: "telemetry";
-            action: "status" | "enable" | "disable" | "reset";
           };
       challengeExpiresAt: number;
       binding: BrokerTransportBinding;
@@ -376,7 +367,6 @@ export class VaultBrokerWorker {
   #memory: SqliteMemory | undefined;
   #vault: VaultContext | undefined;
   #libraryCursors: LibraryCursorCodec | undefined;
-  #telemetryStore: LocalTelemetryStore | undefined;
   #lifecycleState: VaultLifecycleState = "unlocked";
   #lifecycleEpoch: string;
   #lifecycleLoaded = false;
@@ -788,7 +778,6 @@ export class VaultBrokerWorker {
     this.#authorization = undefined;
     this.#database = undefined;
     this.#libraryCursors = undefined;
-    this.#telemetryStore = undefined;
     if (firstFailure !== undefined) {
       this.#terminateAfterResponse = true;
       throw firstFailure;
@@ -927,7 +916,6 @@ export class VaultBrokerWorker {
         return await this.#executeLibrary(request, transportBinding);
       case "admin.export":
       case "admin.diagnostics":
-      case "admin.telemetry":
       case "admin.prepare_client_rotation":
         assertPeerRole(peerRole, "owner-control");
         return this.#beginAdmin(request, transportBinding);
@@ -1948,12 +1936,7 @@ export class VaultBrokerWorker {
       operation = { kind: "diagnostics" };
       reason = "Inspect share-safe Afternote diagnostics? Note text and local paths are excluded.";
     } else {
-      assertExactObject(request.params, ["action"]);
-      const action = adminTelemetryAction(request.params.action);
-      operation = { kind: "telemetry", action };
-      reason = action === "status"
-        ? "Inspect Afternote telemetry status?"
-        : `${capitalize(action)} Afternote telemetry consent? No telemetry transport is configured.`;
+      throw new BrokerProtocolError("method_not_found", "Unknown broker method");
     }
     const challengeId = randomUUID();
     const challengeExpiresAt = this.#currentTime() + OWNER_CHALLENGE_TTL_MS;
@@ -2842,42 +2825,17 @@ export class VaultBrokerWorker {
               : "afternote-markdown-v1",
           });
         }
-        if (operation.kind === "diagnostics") {
-          return success(pending.requestId, buildDiagnosticBundle({
-            applicationVersion: this.#applicationVersion,
-            standalone: this.#standalone,
-            ownerPresenceMode: this.#ownerPresenceMode,
-            apiVersion: LOCAL_DIAGNOSTICS_API_VERSION,
-            runtimeStatus: "running",
-            networkBoundary: "broker-only",
-            vault: this.#localMemory().diagnosticSnapshot(this.#vaultContext()),
-            telemetry: this.#localTelemetryStore().status(),
-          }));
-        }
-        const store = this.#localTelemetryStore();
-        const value = operation.action === "status"
-          ? store.status()
-          : operation.action === "enable"
-            ? store.enable()
-            : operation.action === "disable"
-              ? store.disable()
-              : store.reset();
-        return success(pending.requestId, value);
+        return success(pending.requestId, buildDiagnosticBundle({
+          applicationVersion: this.#applicationVersion,
+          standalone: this.#standalone,
+          ownerPresenceMode: this.#ownerPresenceMode,
+          apiVersion: LOCAL_DIAGNOSTICS_API_VERSION,
+          runtimeStatus: "running",
+          networkBoundary: "broker-only",
+          vault: this.#localMemory().diagnosticSnapshot(this.#vaultContext()),
+        }));
       }
     );
-  }
-
-  #localTelemetryStore(): LocalTelemetryStore {
-    this.#ensureVault();
-    if (!this.#telemetryStore) {
-      const { vaultPath } = this.#vaultConfiguration();
-      this.#telemetryStore = new LocalTelemetryStore(
-        localTelemetryStatePath(vaultPath),
-        this.#vaultContext(),
-        this.#applicationVersion,
-      );
-    }
-    return this.#telemetryStore;
   }
 
   #beginOwnerSession(
@@ -3869,37 +3827,15 @@ function adminExportFormat(value: unknown): "json" | "markdown" {
   return value;
 }
 
-function adminTelemetryAction(
-  value: unknown,
-): "status" | "enable" | "disable" | "reset" {
-  if (
-    value !== "status" &&
-    value !== "enable" &&
-    value !== "disable" &&
-    value !== "reset"
-  ) {
-    throw new BrokerProtocolError("invalid_request", "Admin telemetry action is invalid");
-  }
-  return value;
-}
-
 function adminOperationMethod(
   operation: Extract<PendingPresence, { kind: "admin" }>["operation"],
-): "admin.export" | "admin.diagnostics" | "admin.prepare_client_rotation" |
-  "admin.telemetry.status" | "admin.telemetry.enable" |
-  "admin.telemetry.disable" | "admin.telemetry.reset" {
+): "admin.export" | "admin.diagnostics" | "admin.prepare_client_rotation" {
   return operation.kind === "client-rotation" ||
       operation.kind === "revoked-client-replacement"
     ? "admin.prepare_client_rotation"
     : operation.kind === "export"
     ? "admin.export"
-    : operation.kind === "diagnostics"
-      ? "admin.diagnostics"
-      : `admin.telemetry.${operation.action}`;
-}
-
-function capitalize(value: string): string {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+    : "admin.diagnostics";
 }
 
 function boundedLibraryLimit(value: unknown, maximum: number, name: string): number {

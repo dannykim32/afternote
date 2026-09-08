@@ -8,7 +8,7 @@ describe("local CLI process", () => {
     const home = mkdtempSync(join(tmpdir(), "afternote-retired-runtime-cli-"));
     try {
       const mainPath = join(import.meta.dir, "main.ts");
-      for (const retiredCommand of ["runtime", "stop"] as const) {
+      for (const retiredCommand of ["runtime", "stop", "telemetry"] as const) {
         const result = Bun.spawnSync([
           process.execPath,
           "run",

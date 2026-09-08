@@ -63,7 +63,7 @@ authentic encrypted snapshot is the newest state.
 ## Network and AI-provider boundary
 
 Exact search, date-aware search, vault storage, and local inference have no Afternote cloud
-dependency. The installed runtime has no telemetry transport, account service, sync endpoint, or
+dependency. The installed runtime has no telemetry, account service, sync endpoint, or
 automatic update check.
 
 The optional `afternote semantic install` action downloads a fixed, size-limited, SHA-256-pinned
@@ -93,7 +93,7 @@ the final DMG, and publishes only local output files for a separate human releas
 The broker writes no note content to standard output or standard error. Its encrypted audit ledger
 records bounded, redacted authorization and lifecycle events. Share-safe diagnostics expose coarse
 status, schema, integrity, count, and size buckets after owner authentication; they omit notes and
-queries. Telemetry consent can be stored locally, but transmission is `not-configured`.
+queries.
 
 An incident responder can revoke connector grants, lock Afternote, remove the Codex and Claude Code
 connections, and uninstall the runtime. Screen lock, sleep, user-session resignation, manual lock,

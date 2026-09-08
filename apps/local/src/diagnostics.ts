@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { privateRegularFileInfo } from "./private-files";
 import { SqlcipherDatabase } from "./sqlcipher-database";
-import type { TelemetryStatus } from "./telemetry-store";
 
 export const LOCAL_DIAGNOSTICS_API_VERSION = 7;
 
@@ -29,7 +28,6 @@ export function buildDiagnosticBundle(input: {
   runtimeStatus?: "running" | "stopped" | "unavailable";
   networkBoundary?: "loopback-only" | "broker-only";
   vault: VaultDiagnosticSnapshot | null;
-  telemetry: TelemetryStatus;
   errors?: DiagnosticErrorCode[];
 }) {
   const runtimeStatus = input.runtimeStatus ?? "running";
@@ -63,11 +61,6 @@ export function buildDiagnosticBundle(input: {
         ? byteBucket(input.vault.databaseBytes)
         : "unknown",
     },
-    telemetry: {
-      enabled: input.telemetry.enabled,
-      telemetrySchemaVersion: input.telemetry.telemetrySchemaVersion,
-      transmission: input.telemetry.transmission,
-    },
     checks: [
       {
         code: `runtime.${runtimeStatus}`,
@@ -82,7 +75,6 @@ export function buildDiagnosticBundle(input: {
               ? "not-created"
               : "failed",
       },
-      { code: "telemetry.transport", status: "not-configured" },
     ],
     errors: errors.map((code) => ({ code })),
   } as const;

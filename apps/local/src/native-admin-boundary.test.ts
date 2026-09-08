@@ -22,7 +22,6 @@ describe("native owner administration production boundary", () => {
     expect(cliSource).toContain("runNativeAdminCommand");
     expect(cliSource).toContain('"--admin-export"');
     expect(cliSource).toContain('"--admin-diagnostics"');
-    expect(cliSource).toContain('"--admin-telemetry"');
     expect(cliSource).toContain('"--admin-lock"');
     expect(cliSource).toContain('"--admin-unlock"');
     expect(cliSource).toContain('"--admin-migrate"');
@@ -39,7 +38,6 @@ describe("native owner administration production boundary", () => {
       "connectLocalRuntime(options)",
       "inspectStoppedVault(options.vaultPath",
       "getOrCreateKeychainVaultKey(localVaultContext(options.vaultPath)",
-      "stoppedTelemetryStatus(options.vaultPath)",
       "migratePlaintextVault",
       "inventoryLegacyPlaintextArtifacts",
       "hasPlaintextSqliteHeader",
@@ -77,7 +75,7 @@ describe("native owner administration production boundary", () => {
     expect(nativeAppSource).toContain("RunAdminCommand");
     expect(nativeAppSource).toContain('admin.export');
     expect(nativeAppSource).toContain('admin.diagnostics');
-    expect(nativeAppSource).toContain('admin.telemetry');
+    expect(nativeAppSource).not.toContain('admin.telemetry');
     expect(nativeAppSource).toContain('admin.prepare_client_rotation');
     expect(nativeAppSource).toContain('"--admin-prepare-client-rotation"');
     expect(nativeAppSource).toContain('@"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity"');

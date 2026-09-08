@@ -477,10 +477,6 @@ BOOL IsAuditPrincipal(NSDictionary *event) {
         ([operation isEqualToString:@"audit.prune"] ||
          [operation isEqualToString:@"admin.export"] ||
          [operation isEqualToString:@"admin.diagnostics"] ||
-         [operation isEqualToString:@"admin.telemetry.status"] ||
-         [operation isEqualToString:@"admin.telemetry.enable"] ||
-         [operation isEqualToString:@"admin.telemetry.disable"] ||
-         [operation isEqualToString:@"admin.telemetry.reset"] ||
          [operation isEqualToString:@"admin.prepare_client_rotation"] ||
          [operation isEqualToString:@"lifecycle.authority_invalidate"] ||
          [operation isEqualToString:@"lifecycle.lock"] ||
@@ -850,39 +846,6 @@ BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params)
   return NO;
 }
 
-BOOL IsTelemetryStatus(id value) {
-  if (![value isKindOfClass:[NSDictionary class]]) return NO;
-  NSDictionary *status = value;
-  if (!ExactKeys(status, @[
-        @"enabled", @"telemetrySchemaVersion", @"identifierCreatedAt",
-        @"identifierRotatesAt", @"transmission", @"nextPayload"
-      ]) || !IsBoolean(status[@"enabled"]) || ![status[@"telemetrySchemaVersion"] isEqual:@1] ||
-      !IsNullableDate(status[@"identifierCreatedAt"]) ||
-      !IsNullableDate(status[@"identifierRotatesAt"]) ||
-      ![status[@"transmission"] isEqual:@"not-configured"]) return NO;
-  if (![status[@"enabled"] boolValue]) {
-    return status[@"identifierCreatedAt"] == NSNull.null &&
-        status[@"identifierRotatesAt"] == NSNull.null && status[@"nextPayload"] == NSNull.null;
-  }
-  if (!IsDate(status[@"identifierCreatedAt"]) ||
-      !IsDate(status[@"identifierRotatesAt"])) return NO;
-  NSDictionary *payload = status[@"nextPayload"];
-  NSString *installationId = [payload isKindOfClass:[NSDictionary class]]
-      ? payload[@"installationId"] : nil;
-  NSCharacterSet *invalidIdentifierCharacters = [[NSCharacterSet
-      characterSetWithCharactersInString:
-          @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"] invertedSet];
-  return [payload isKindOfClass:[NSDictionary class]] &&
-      ExactKeys(payload, @[
-        @"telemetrySchemaVersion", @"installationId", @"applicationVersion",
-        @"osFamily", @"architecture"
-      ]) && [payload[@"telemetrySchemaVersion"] isEqual:@1] &&
-      IsString(installationId, 43, NO) && installationId.length == 43 &&
-      [installationId rangeOfCharacterFromSet:invalidIdentifierCharacters].location == NSNotFound &&
-      IsString(payload[@"applicationVersion"], 120, NO) &&
-      IsString(payload[@"osFamily"], 40, NO) && IsString(payload[@"architecture"], 40, NO);
-}
-
 BOOL IsDiagnosticCheck(id value) {
   if (![value isKindOfClass:[NSDictionary class]]) return NO;
   NSDictionary *check = value;
@@ -898,21 +861,19 @@ BOOL IsDiagnosticCheck(id value) {
   if ([code isEqualToString:@"vault.integrity"]) {
     return IsOneOf(status, @[ @"ok", @"failed", @"not-created" ]);
   }
-  return [code isEqualToString:@"telemetry.transport"] &&
-      [status isEqualToString:@"not-configured"];
+  return NO;
 }
 
 BOOL IsDiagnosticResult(NSDictionary *result) {
   if (!ExactKeys(result, @[
         @"format", @"schemaVersion", @"generatedAt", @"application", @"system",
-        @"runtime", @"vault", @"telemetry", @"checks", @"errors"
+        @"runtime", @"vault", @"checks", @"errors"
       ]) || ![result[@"format"] isEqual:@"afternote-diagnostics"] ||
       ![result[@"schemaVersion"] isEqual:@1] || !IsDate(result[@"generatedAt"])) return NO;
   NSDictionary *application = result[@"application"];
   NSDictionary *system = result[@"system"];
   NSDictionary *runtime = result[@"runtime"];
   NSDictionary *vault = result[@"vault"];
-  NSDictionary *telemetry = result[@"telemetry"];
   if (![application isKindOfClass:[NSDictionary class]] ||
       !ExactKeys(application, @[ @"version", @"standalone", @"ownerPresenceMode" ]) ||
       !IsString(application[@"version"], 120, NO) ||
@@ -937,14 +898,10 @@ BOOL IsDiagnosticResult(NSDictionary *result) {
       !IsOneOf(vault[@"databaseBytesBucket"], @[
         @"under-1-mib", @"1-9-mib", @"10-99-mib", @"100-mib-plus", @"unknown"
       ])) return NO;
-  if (![telemetry isKindOfClass:[NSDictionary class]] ||
-      !ExactKeys(telemetry, @[ @"enabled", @"telemetrySchemaVersion", @"transmission" ]) ||
-      !IsBoolean(telemetry[@"enabled"]) || ![telemetry[@"telemetrySchemaVersion"] isEqual:@1] ||
-      ![telemetry[@"transmission"] isEqual:@"not-configured"]) return NO;
   NSArray *checks = result[@"checks"];
-  if (![checks isKindOfClass:[NSArray class]] || checks.count != 3 ||
-      !IsArrayOf(checks, 3, ^BOOL(id item) { return IsDiagnosticCheck(item); })) return NO;
-  NSMutableDictionary *checksByCode = [NSMutableDictionary dictionaryWithCapacity:3];
+  if (![checks isKindOfClass:[NSArray class]] || checks.count != 2 ||
+      !IsArrayOf(checks, 2, ^BOOL(id item) { return IsDiagnosticCheck(item); })) return NO;
+  NSMutableDictionary *checksByCode = [NSMutableDictionary dictionaryWithCapacity:2];
   for (NSDictionary *check in checks) {
     if (checksByCode[check[@"code"]] != nil) return NO;
     checksByCode[check[@"code"]] = check[@"status"];
@@ -956,10 +913,9 @@ BOOL IsDiagnosticResult(NSDictionary *result) {
       ? @"ok"
       : [vault[@"integrity"] isEqualToString:@"not-created"]
         ? @"not-created" : @"failed";
-  if (checksByCode.count != 3 ||
+  if (checksByCode.count != 2 ||
       ![checksByCode[runtimeCode] isEqual:runtimeCheckStatus] ||
-      ![checksByCode[@"vault.integrity"] isEqual:vaultCheckStatus] ||
-      ![checksByCode[@"telemetry.transport"] isEqual:@"not-configured"]) return NO;
+      ![checksByCode[@"vault.integrity"] isEqual:vaultCheckStatus]) return NO;
   NSArray *errors = result[@"errors"];
   if (!IsArrayOf(errors, 3, ^BOOL(id item) {
     return [item isKindOfClass:[NSDictionary class]] &&
@@ -983,7 +939,6 @@ BOOL IsAdminResult(NSString *method, NSDictionary *result, NSDictionary *params)
         [result[@"format"] isEqual:expectedFormat];
   }
   if ([method isEqualToString:@"admin.diagnostics"]) return IsDiagnosticResult(result);
-  if ([method isEqualToString:@"admin.telemetry"]) return IsTelemetryStatus(result);
   if ([method isEqualToString:@"admin.prepare_client_rotation"]) {
     return ExactKeys(result, @[
           @"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity",
@@ -1420,14 +1375,6 @@ int RunAdminCommand(int argc, const char *argv[]) {
   } else if (argc == 2 && strcmp(argv[1], "--admin-diagnostics") == 0) {
     method = @"admin.diagnostics";
     params = @{};
-  } else if (argc == 3 && strcmp(argv[1], "--admin-telemetry") == 0) {
-    NSString *action = [NSString stringWithUTF8String:argv[2]];
-    if (![@[ @"status", @"enable", @"disable", @"reset" ] containsObject:action]) {
-      fputs("invalid telemetry action\n", stderr);
-      return 64;
-    }
-    method = @"admin.telemetry";
-    params = @{ @"action" : action };
   } else if (argc == 5 && strcmp(argv[1], "--admin-prepare-client-rotation") == 0) {
     NSString *kind = [NSString stringWithUTF8String:argv[2]];
     NSString *installIdentity = [NSString stringWithUTF8String:argv[3]];
@@ -7175,7 +7122,7 @@ int RunLibraryCleanupSmoke() {
        @"response" : @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":false,\"error\":{\"code\":\"invented\",\"message\":\"hostile\"}}" },
     @{ @"method" : @"library.views", @"response" : @"not-json" },
     @{ @"method" : @"admin.diagnostics",
-       @"response" : @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":true,\"result\":{\"format\":\"afternote-diagnostics\",\"schemaVersion\":1,\"generatedAt\":\"2026-08-28T12:00:00.000Z\",\"application\":{\"version\":\"2.0.0-test\",\"standalone\":true},\"system\":{\"osFamily\":\"darwin\",\"architecture\":\"arm64\"},\"runtime\":{\"status\":\"running\",\"apiVersion\":7,\"networkBoundary\":\"broker-only\"},\"vault\":{\"schemaVersion\":8,\"integrity\":\"ok\",\"noteCountBucket\":\"1-9\",\"revisionCountBucket\":\"1-9\",\"databaseBytesBucket\":\"under-1-mib\"},\"telemetry\":{\"enabled\":false,\"telemetrySchemaVersion\":1,\"transmission\":\"not-configured\"},\"checks\":[{\"code\":\"runtime.running\",\"status\":\"ok\"},{\"code\":\"vault.integrity\",\"status\":\"ok\"},{\"code\":\"PLAINTEXT-CLEANUP-CANARY\",\"status\":\"not-configured\"}],\"errors\":[]}}" },
+       @"response" : @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":true,\"result\":{\"format\":\"afternote-diagnostics\",\"schemaVersion\":1,\"generatedAt\":\"2026-08-28T12:00:00.000Z\",\"application\":{\"version\":\"2.0.0-test\",\"standalone\":true},\"system\":{\"osFamily\":\"darwin\",\"architecture\":\"arm64\"},\"runtime\":{\"status\":\"running\",\"apiVersion\":7,\"networkBoundary\":\"broker-only\"},\"vault\":{\"schemaVersion\":8,\"integrity\":\"ok\",\"noteCountBucket\":\"1-9\",\"revisionCountBucket\":\"1-9\",\"databaseBytesBucket\":\"under-1-mib\"},\"checks\":[{\"code\":\"runtime.running\",\"status\":\"ok\"},{\"code\":\"PLAINTEXT-CLEANUP-CANARY\",\"status\":\"failed\"}],\"errors\":[]}}" },
     @{ @"method" : @"admin.export",
        @"params" : @{ @"format" : @"json", @"destination" : @"/tmp/requested.json" },
        @"response" : @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":true,\"result\":{\"exported\":true,\"destination\":\"/tmp/substituted.json\",\"format\":\"afternote-markdown-v1\"}}" },
@@ -7220,38 +7167,6 @@ int RunLibraryCleanupSmoke() {
       IsLifecycleTransitionConsistent(@"lifecycle.unlock", lockedSameEpoch,
                                       unlockedRotatedEpoch) &&
       !IsLifecycleTransitionConsistent(@"lifecycle.unlock", lockedSameEpoch, unlockedEpoch);
-  NSString *validIdentifier = [@"" stringByPaddingToLength:43 withString:@"A" startingAtIndex:0];
-  NSString *invalidIdentifier = [@"" stringByPaddingToLength:43 withString:@"!" startingAtIndex:0];
-  for (NSDictionary *telemetryStatus in @[
-    @{ @"enabled" : @YES, @"telemetrySchemaVersion" : @1,
-       @"identifierCreatedAt" : NSNull.null, @"identifierRotatesAt" : NSNull.null,
-       @"transmission" : @"not-configured",
-       @"nextPayload" : @{ @"telemetrySchemaVersion" : @1,
-                            @"installationId" : validIdentifier,
-                            @"applicationVersion" : @"2.0.0-test",
-                            @"osFamily" : @"darwin", @"architecture" : @"arm64" } },
-    @{ @"enabled" : @YES, @"telemetrySchemaVersion" : @1,
-       @"identifierCreatedAt" : @"2026-08-28T12:00:00.000Z",
-       @"identifierRotatesAt" : @"2026-11-26T12:00:00.000Z",
-       @"transmission" : @"not-configured",
-       @"nextPayload" : @{ @"telemetrySchemaVersion" : @1,
-                            @"installationId" : invalidIdentifier,
-                            @"applicationVersion" : @"2.0.0-test",
-                            @"osFamily" : @"darwin", @"architecture" : @"arm64" } },
-  ]) {
-    NSDictionary *envelope = @{
-      @"protocolVersion" : @1,
-      @"requestId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      @"ok" : @YES,
-      @"result" : telemetryStatus,
-    };
-    NSData *fixtureData = [NSJSONSerialization dataWithJSONObject:envelope options:0 error:nil];
-    NSString *fixtureResponse = [[NSString alloc] initWithData:fixtureData encoding:NSUTF8StringEncoding];
-    malformedResponseRejected = malformedResponseRejected &&
-        [responseBroker testRejectsSerializedResponse:fixtureResponse
-                                                method:@"admin.telemetry"
-                                                params:@{ @"action" : @"status" }];
-  }
   NSDictionary *validAuditEnvelope = @{
     @"protocolVersion" : @1,
     @"requestId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
