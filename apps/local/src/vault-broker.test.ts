@@ -120,6 +120,39 @@ describe("VaultBrokerAuthorization", () => {
     restarted.close();
   });
 
+  it("prunes replay records after their signed-request validity window", () => {
+    const fixture = brokerFixture();
+    const client = p256();
+    const session = p256();
+    const paired = pair(fixture.broker, fixture.owner.privateKey, client.privateKey, {
+      publicKey: client.publicKey,
+      requestedCapabilities: ["memory.remember"],
+      forgetPolicy: "never",
+    });
+    const activated = activate(
+      fixture.broker,
+      fixture.owner.privateKey,
+      client.privateKey,
+      session.privateKey,
+      session.publicKey,
+      paired,
+    );
+    const body = Buffer.from(JSON.stringify({ content: "allowed" }));
+    fixture.broker.authorize(
+      envelope(fixture.broker, activated, "memory.remember", body, session.privateKey),
+      body,
+    );
+    expect(fixture.replayCount()).toBe(1);
+
+    fixture.advanceTime(5 * 60 * 1_000 + 1);
+    fixture.broker.authorize(
+      envelope(fixture.broker, activated, "memory.remember", body, session.privateKey),
+      body,
+    );
+
+    expect(fixture.replayCount()).toBe(1);
+  });
+
   it("keeps a remember-only MCP grant from reading or deleting and binds it to one vault", () => {
     const fixture = brokerFixture();
     const client = p256();
@@ -175,7 +208,7 @@ describe("VaultBrokerAuthorization", () => {
       displayName: "Codex",
       installIdentity: randomUUID(),
       publicKey: replacement.publicKey,
-      codeRequirement: "identifier dev.afternote.local and anchor apple generic",
+      signingMode: "development-exact-build",
       requestedCapabilities: ["memory.recall"],
       forgetPolicy: "never",
     })).toThrow("Codex requires explicit reconnect preparation");
@@ -1108,6 +1141,14 @@ function brokerFixture(options: { expirySweepIntervalMs?: number } = {}) {
       database.close();
       return revision;
     },
+    replayCount(): number {
+      const database = new SqlcipherDatabase(path, { key, readonly: true });
+      const count = database.query<{ count: number }, []>(
+        "select count(*) as count from broker_request_replays",
+      ).get()?.count ?? 0;
+      database.close();
+      return count;
+    },
     path,
     key,
     seedAuditEvents(count: number, occurredAt: string, prefix = "seed") {
@@ -1171,7 +1212,7 @@ function pair(
     kind: "codex",
     displayName: "Codex",
     installIdentity: randomUUID(),
-    codeRequirement: "anchor apple generic and identifier dev.afternote.codex",
+    signingMode: "development-exact-build",
     ...overrides,
   });
   broker.approvePairing(

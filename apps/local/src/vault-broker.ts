@@ -31,6 +31,7 @@ export const ROUTINE_AUTHENTICATION_TTLS_MS = [
   TRUSTED_MCP_WORK_SESSION_TTL_MS,
 ] as const;
 const MAX_CLOCK_SKEW_MS = 60 * 1_000;
+const REPLAY_RETENTION_MS = 5 * MAX_CLOCK_SKEW_MS;
 const AUDIT_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 const AUDIT_FLOOR = 10_000;
 const MAX_NOTE_REFS = 20;
@@ -299,7 +300,7 @@ export class VaultBrokerAuthorization {
     displayName: string;
     installIdentity: string;
     publicKey: string;
-    codeRequirement: string;
+    signingMode: string;
     requestedCapabilities: BrokerCapability[];
     forgetPolicy: ForgetPolicy;
   }): {
@@ -320,7 +321,7 @@ export class VaultBrokerAuthorization {
     assertClientKind(input.kind);
     assertBounded("display name", input.displayName, 120);
     assertBounded("install identity", input.installIdentity, 128);
-    assertBounded("code requirement", input.codeRequirement, 2_048);
+    assertBounded("signing mode", input.signingMode, 2_048);
     validatePublicKey(input.publicKey);
     this.#assertConnectorPairingAllowed(input.kind, input.installIdentity);
     const priorKey = this.#database.query<{
@@ -355,7 +356,7 @@ export class VaultBrokerAuthorization {
       input.displayName,
       input.installIdentity,
       input.publicKey,
-      input.codeRequirement,
+      input.signingMode,
       JSON.stringify(capabilities),
       input.forgetPolicy,
       nonce,
@@ -1123,6 +1124,9 @@ export class VaultBrokerAuthorization {
         session.session_public_key,
         "session",
       );
+      this.#database.query(
+        "delete from broker_request_replays where consumed_at < ?",
+      ).run(new Date(this.#now() - REPLAY_RETENTION_MS).toISOString());
       try {
         this.#database.query(`
           insert into broker_request_replays (request_id, session_id, consumed_at)
@@ -2712,7 +2716,7 @@ function pairingOwnerTranscript(row: PairingRow): string {
     displayName: row.display_name,
     installIdentity: row.install_identity,
     publicKeySha256: createHash("sha256").update(row.public_key).digest("hex"),
-    codeRequirement: row.code_requirement,
+    signingMode: row.code_requirement,
     requestedCapabilities: parseCapabilities(row.requested_capabilities),
     forgetPolicy: row.forget_policy,
     nonce: row.nonce,
@@ -3062,6 +3066,8 @@ const BROKER_SCHEMA = `
     session_id text not null references broker_sessions(id),
     consumed_at text not null
   );
+  create index if not exists broker_request_replays_consumed_at
+  on broker_request_replays(consumed_at);
   create table if not exists broker_forget_decisions (
     id text primary key,
     event_id text not null,

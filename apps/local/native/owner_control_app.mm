@@ -2655,22 +2655,36 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                                     message:errorMessage ?: @"Afternote did not remove any files."];
           return;
         }
-        NSURL *application = NSBundle.mainBundle.bundleURL;
-        [NSWorkspace.sharedWorkspace recycleURLs:@[ application ]
-                               completionHandler:^(NSDictionary<NSURL *, NSURL *> *mappings,
-                                                   NSError *error) {
-          (void)mappings;
-          dispatch_async(dispatch_get_main_queue(), ^{
-            if (error != nil) {
-              NSAlert *manual = [[NSAlert alloc] init];
-              manual.messageText = @"Background components removed";
-              manual.informativeText = @"Move Afternote from Applications to the Trash to finish uninstalling.";
-              [manual addButtonWithTitle:@"Quit"];
-              [manual runModal];
-            }
-            [NSApp terminate:nil];
-          });
-        }];
+        void (^finishUninstall)(void) = ^{
+          NSURL *application = NSBundle.mainBundle.bundleURL;
+          [NSWorkspace.sharedWorkspace recycleURLs:@[ application ]
+                                 completionHandler:^(NSDictionary<NSURL *, NSURL *> *mappings,
+                                                     NSError *error) {
+            (void)mappings;
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (error != nil) {
+                NSAlert *manual = [[NSAlert alloc] init];
+                manual.messageText = @"Background components removed";
+                manual.informativeText = @"Move Afternote from Applications to the Trash to finish uninstalling.";
+                [manual addButtonWithTitle:@"Quit"];
+                [manual runModal];
+              }
+              [NSApp terminate:nil];
+            });
+          }];
+        };
+        if (errorMessage.length > 0) {
+          NSAlert *warning = [[NSAlert alloc] init];
+          warning.messageText = @"Background components removed with a warning";
+          warning.informativeText = errorMessage;
+          [warning addButtonWithTitle:@"Continue"];
+          [warning beginSheetModalForWindow:self.window
+                          completionHandler:^(__unused NSModalResponse response) {
+            finishUninstall();
+          }];
+          return;
+        }
+        finishUninstall();
       });
     });
   }];

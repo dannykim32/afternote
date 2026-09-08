@@ -407,7 +407,7 @@ describe("native owner administration broker protocol", () => {
       ["admin.export", { destination: fixture.path, format: "xml" }],
       ["admin.diagnostics", { extra: true }],
       ["admin.prepare_client_rotation", {
-        kind: "slack",
+        kind: "unknown",
         installIdentity: "11111111-1111-4111-8111-111111111111",
       }],
       ["admin.prepare_client_rotation", { kind: "codex", installIdentity: "not-a-uuid" }],
@@ -464,7 +464,7 @@ async function pairMcpClient(
     displayName: kind === "codex" ? "Codex" : "Claude Code",
     installIdentity,
     publicKey: durable.publicKey,
-    codeRequirement: "development-exact-build",
+    signingMode: "development-exact-build",
     requestedCapabilities: ["memory.remember", "memory.recall", "memory.get_note"],
     forgetPolicy: "never",
   });

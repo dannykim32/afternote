@@ -16,8 +16,6 @@
     <string>__AFTERNOTE_BROKER_IDENTIFIER__</string>
     <key>AFTERNOTE_OWNER_CONTROL_MACH_SERVICE</key>
     <string>__AFTERNOTE_OWNER_CONTROL_SERVICE__</string>
-    <key>AFTERNOTE_BROKER_WORKER_PATH</key>
-    <string>__AFTERNOTE_BROKER_WORKER_PATH__</string>
     <key>AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE</key>
     <string>__AFTERNOTE_WORKER_GATEWAY_SERVICE__</string>
   </dict>

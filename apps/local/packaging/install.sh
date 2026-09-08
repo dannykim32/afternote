@@ -244,12 +244,10 @@ fi
 verify_release_version "$version_stage" "$installed_application_path"
 
 broker_path_xml=$(xml_escape "$install_root/current/afternote-vault-broker" | sed_replacement)
-broker_worker_path_xml=$(xml_escape "$install_root/current/AfternoteVaultWorker.app/Contents/MacOS/afternote-vault-worker" | sed_replacement)
 home_xml=$(xml_escape "$HOME" | sed_replacement)
 launch_agent_temp=$(mktemp "$launch_agent.tmp.XXXXXX")
 sed \
   -e "s|__AFTERNOTE_BROKER_PATH__|$broker_path_xml|g" \
-  -e "s|__AFTERNOTE_BROKER_WORKER_PATH__|$broker_worker_path_xml|g" \
   -e "s|__AFTERNOTE_HOME__|$home_xml|g" \
   "$script_dir/launch-agent.plist" > "$launch_agent_temp"
 chmod 600 "$launch_agent_temp"

@@ -123,7 +123,7 @@ export async function manageClaudeCodeIntegration(
       };
     }
     throw new Error(
-      "Claude Code CLI was not found. Install or open Claude Code, then try again.",
+      "Afternote requires the signed native Claude Code build; npm scripts and wrapper processes are not supported. Install Anthropic's native build, then try again.",
     );
   }
   const readServer = dependencies.readServer ?? readClaudeCodeServer;

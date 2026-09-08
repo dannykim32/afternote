@@ -1,14 +1,14 @@
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
+import {
+  INTEGRATION_HOST_CODE_REQUIREMENTS,
+  type IntegrationHostName,
+} from "./integration-host-policy";
+export { INTEGRATION_HOST_CODE_REQUIREMENTS } from "./integration-host-policy";
 
 const DEFAULT_INTEGRATION_HOST_TIMEOUT_MS = 15_000;
 
-const HOST_REQUIREMENTS = {
-  Codex: 'anchor apple generic and identifier "codex" and certificate leaf[subject.OU] = "2DC432GLL2"',
-  "Claude Code": 'anchor apple generic and identifier "com.anthropic.claude-code" and certificate leaf[subject.OU] = "Q6L2SF6YDW"',
-} as const;
-
 export function verifyIntegrationHostCommand(
-  hostName: "Codex" | "Claude Code",
+  hostName: IntegrationHostName,
   command: string,
 ): string {
   let resolved: string;
@@ -23,7 +23,7 @@ export function verifyIntegrationHostCommand(
     "/usr/bin/codesign",
     "--verify",
     "--strict",
-    `-R=${HOST_REQUIREMENTS[hostName]}`,
+    `-R=${INTEGRATION_HOST_CODE_REQUIREMENTS[hostName]}`,
     resolved,
   ], { stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) {
@@ -33,11 +33,11 @@ export function verifyIntegrationHostCommand(
 }
 
 export function runIntegrationHostCommand(
-  hostName: "Codex" | "Claude Code",
+  hostName: IntegrationHostName,
   command: string,
   args: readonly string[],
   timeoutMs = DEFAULT_INTEGRATION_HOST_TIMEOUT_MS,
-  verifyHost: (hostName: "Codex" | "Claude Code", command: string) => string =
+  verifyHost: (hostName: IntegrationHostName, command: string) => string =
     verifyIntegrationHostCommand,
 ): string {
   const verifiedCommand = verifyHost(hostName, command);

@@ -67,6 +67,9 @@ fi
 codex_available=0
 if [ "$codex_entry_present" -eq 1 ] &&
   (command -v codex >/dev/null 2>&1 ||
+    [ -x "$HOME/.local/bin/codex" ] ||
+    [ -x /opt/homebrew/bin/codex ] ||
+    [ -x /usr/local/bin/codex ] ||
     [ -x /Applications/ChatGPT.app/Contents/Resources/codex ] ||
     [ -x /Applications/Codex.app/Contents/Resources/codex ] ||
     [ -x "$HOME/Applications/ChatGPT.app/Contents/Resources/codex" ] ||

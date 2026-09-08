@@ -27,6 +27,7 @@ import {
   type McpClientRotationApproval,
 } from "./mcp-client-identity";
 import { assertLegacyRuntimeRetired } from "./legacy-runtime-retirement";
+import localPackage from "../package.json";
 
 declare const AFTERNOTE_BUILD_VERSION: string | undefined;
 declare const AFTERNOTE_STANDALONE: boolean | undefined;
@@ -35,7 +36,7 @@ declare const AFTERNOTE_RELEASE_BUILD: boolean | undefined;
 export const LOCAL_VERSION =
   typeof AFTERNOTE_BUILD_VERSION === "string"
     ? AFTERNOTE_BUILD_VERSION
-    : "2.0.0-alpha.8-dev";
+    : `${localPackage.version}-dev`;
 
 const isStandaloneArtifact =
   typeof AFTERNOTE_STANDALONE === "boolean" ? AFTERNOTE_STANDALONE : false;

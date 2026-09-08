@@ -86,6 +86,13 @@ describe("Claude Code integration actions", () => {
     });
   });
 
+  it("explains that connector setup requires the signed native Claude Code build", async () => {
+    await expect(manageClaudeCodeIntegration("install", true, {
+      afternoteCommand: "/Applications/Afternote.app/Contents/MacOS/afternote",
+      toolCommand: null,
+    })).rejects.toThrow("signed native Claude Code build");
+  });
+
   it("classifies conflicting, legacy, unhealthy, and healthy connectors", async () => {
     const afternote = "/Applications/Afternote.app/Contents/MacOS/afternote";
     const tool = "/usr/local/bin/claude";

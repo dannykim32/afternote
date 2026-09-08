@@ -93,13 +93,12 @@ describe("client signer helper boundary", () => {
     };
     expect(() => invokeClientSignerHelper("sign", "bad/tag", "proof", dependencies))
       .toThrow("tag is invalid");
-    for (const retiredTag of [
-      "dev.afternote.connector.slack.123",
-      "dev.afternote.connector.browser-capture.123",
-    ]) {
-      expect(() => invokeClientSignerHelper("sign", retiredTag, "proof", dependencies))
-        .toThrow("tag is invalid");
-    }
+    expect(() => invokeClientSignerHelper(
+      "sign",
+      "dev.afternote.mcp-client.unknown.123",
+      "proof",
+      dependencies,
+    )).toThrow("tag is invalid");
     expect(() => invokeClientSignerHelper("sign", "dev.afternote.mcp-client.codex.123", "", dependencies))
       .toThrow("message is invalid");
     expect(() => invokeClientSignerHelper(

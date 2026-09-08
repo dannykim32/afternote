@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://afternote.app/schemas/afternote-vault-v1.schema.json",
+  "$id": "https://afternote.dev/schemas/afternote-vault-v1.schema.json",
   "title": "Afternote Vault Interchange v1",
   "type": "object",
   "additionalProperties": false,

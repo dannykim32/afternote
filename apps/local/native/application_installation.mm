@@ -141,6 +141,9 @@ BOOL RunLifecycleScript(NSString *script,
     if (errorMessage != nil) *errorMessage = SingleLineMessage(stderrData, fallback);
     return NO;
   }
+  if (errorMessage != nil && stderrData.length > 0) {
+    *errorMessage = SingleLineMessage(stderrData, fallback);
+  }
   return YES;
 }
 

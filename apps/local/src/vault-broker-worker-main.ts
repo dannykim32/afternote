@@ -11,6 +11,7 @@ import {
   getOrCreateDevelopmentVaultKey,
 } from "./development-vault-key";
 import { discoverLocalEmbeddingModel } from "./local-embedding";
+import localPackage from "../package.json";
 
 declare const AFTERNOTE_BUILD_VERSION: string | undefined;
 declare const AFTERNOTE_BROKER_TESTING: boolean | undefined;
@@ -26,7 +27,7 @@ declare const AFTERNOTE_OWNER_PRESENCE_MODE:
 const applicationVersion =
   typeof AFTERNOTE_BUILD_VERSION === "string"
     ? AFTERNOTE_BUILD_VERSION
-    : "2.0.0-alpha.3-dev";
+    : `${localPackage.version}-dev`;
 const gatewayCodeRequirement =
   typeof AFTERNOTE_GATEWAY_CODE_REQUIREMENT === "string"
     ? AFTERNOTE_GATEWAY_CODE_REQUIREMENT

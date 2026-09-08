@@ -946,13 +946,13 @@ export class VaultBrokerWorker {
     peerRole: GatewayPeerRole,
   ): string {
     assertExactObject(request.params, [
-      "codeRequirement",
       "displayName",
       "forgetPolicy",
       "installIdentity",
       "kind",
       "publicKey",
       "requestedCapabilities",
+      "signingMode",
     ]);
     const kind = clientKind(request.params.kind);
     assertClientKindForRole(kind, peerRole);
@@ -974,10 +974,10 @@ export class VaultBrokerWorker {
       "install identity",
     );
     const publicKey = boundedString(request.params.publicKey, 4_096, "public key");
-    const codeRequirement = boundedString(
-      request.params.codeRequirement,
+    const signingMode = boundedString(
+      request.params.signingMode,
       2_048,
-      "code requirement",
+      "signing mode",
     );
     const requestedCapabilities = capabilities(request.params.requestedCapabilities);
     const forgetPolicy = forgetPolicyValue(request.params.forgetPolicy);
@@ -1000,7 +1000,7 @@ export class VaultBrokerWorker {
       displayName,
       installIdentity,
       publicKey,
-      codeRequirement,
+      signingMode,
       requestedCapabilities,
       forgetPolicy,
     });

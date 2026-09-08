@@ -31,6 +31,8 @@ import {
   requireParentCodeSigningRequirement,
   type DurableClientSigner,
 } from "./sqlcipher-database";
+import { MCP_HOST_CODE_REQUIREMENTS } from "./integration-host-policy";
+export { MCP_HOST_CODE_REQUIREMENTS } from "./integration-host-policy";
 
 declare const AFTERNOTE_ACCEPTANCE_TRACE: boolean | undefined;
 
@@ -42,13 +44,6 @@ const MCP_CAPABILITIES: MemoryCapability[] = [
   "memory.recall",
   "memory.get_note",
 ];
-
-export const MCP_HOST_CODE_REQUIREMENTS: Record<McpBrokerClientKind, string> = {
-  codex:
-    'identifier "codex" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "2DC432GLL2"',
-  claude:
-    'identifier "com.anthropic.claude-code" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "Q6L2SF6YDW"',
-};
 
 type ActivatedBrokerMemory = Memory & { readonly vault: VaultContext };
 type BrokerOperation = "remember" | "recall" | "get_note";

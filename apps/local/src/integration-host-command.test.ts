@@ -2,7 +2,11 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
-import { runIntegrationHostCommand } from "./integration-host-command";
+import {
+  INTEGRATION_HOST_CODE_REQUIREMENTS,
+  runIntegrationHostCommand,
+} from "./integration-host-command";
+import { MCP_HOST_CODE_REQUIREMENTS } from "./mcp-broker-adapter";
 
 const temporaryDirectories: string[] = [];
 
@@ -13,6 +17,17 @@ afterEach(() => {
 });
 
 describe("integration host command deadline", () => {
+  it("uses the exact runtime publisher requirements during connector setup", () => {
+    expect(INTEGRATION_HOST_CODE_REQUIREMENTS.Codex)
+      .toBe(MCP_HOST_CODE_REQUIREMENTS.codex);
+    expect(INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Code"])
+      .toBe(MCP_HOST_CODE_REQUIREMENTS.claude);
+    for (const requirement of Object.values(INTEGRATION_HOST_CODE_REQUIREMENTS)) {
+      expect(requirement).toContain("1.2.840.113635.100.6.1.13");
+      expect(requirement).toContain("1.2.840.113635.100.6.2.6");
+    }
+  });
+
   it("returns successful host output without treating an absent signal as a timeout", () => {
     expect(runIntegrationHostCommand(
       "Claude Code",

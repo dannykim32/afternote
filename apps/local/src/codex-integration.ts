@@ -127,7 +127,7 @@ export async function manageCodexIntegration(
       };
     }
     throw new Error(
-      "Codex CLI was not found on PATH or in the Codex desktop app. Install or open Codex, then try again.",
+      "Afternote requires the signed native Codex build; npm scripts and wrapper processes are not supported. Install the official Codex or ChatGPT app, then try again.",
     );
   }
   const readServer = dependencies.readServer ?? readCodexServer;
@@ -276,12 +276,7 @@ export function resolveCodexCommand(options: {
       // Continue to publisher-verified desktop candidates.
     }
   }
-  const candidates = options.desktopCandidates ?? [
-    "/Applications/ChatGPT.app/Contents/Resources/codex",
-    "/Applications/Codex.app/Contents/Resources/codex",
-    join(homedir(), "Applications/ChatGPT.app/Contents/Resources/codex"),
-    join(homedir(), "Applications/Codex.app/Contents/Resources/codex"),
-  ];
+  const candidates = options.desktopCandidates ?? codexCommandCandidates();
   for (const candidate of candidates) {
     if (!isExecutableFile(candidate)) continue;
     try {
@@ -291,6 +286,18 @@ export function resolveCodexCommand(options: {
     }
   }
   return null;
+}
+
+export function codexCommandCandidates(homeDirectory = homedir()): string[] {
+  return [
+    join(homeDirectory, ".local/bin/codex"),
+    "/opt/homebrew/bin/codex",
+    "/usr/local/bin/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "/Applications/Codex.app/Contents/Resources/codex",
+    join(homeDirectory, "Applications/ChatGPT.app/Contents/Resources/codex"),
+    join(homeDirectory, "Applications/Codex.app/Contents/Resources/codex"),
+  ];
 }
 
 function isExecutableFile(path: string): boolean {

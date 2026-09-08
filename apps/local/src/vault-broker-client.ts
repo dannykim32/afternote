@@ -228,7 +228,7 @@ export class VaultBrokerMemoryClient implements Memory {
       displayName: profile.displayName,
       installIdentity,
       publicKey: signer.publicKey,
-      codeRequirement: signer.signingMode,
+      signingMode: signer.signingMode,
       requestedCapabilities,
       forgetPolicy: "never",
     }, { service, codeRequirement: options?.codeRequirement }) as {

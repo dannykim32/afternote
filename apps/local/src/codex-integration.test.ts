@@ -3,12 +3,22 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import {
+  codexCommandCandidates,
   manageCodexIntegration,
   parseCodexIntegrationAction,
   resolveCodexCommand,
 } from "./codex-integration";
 
 describe("Codex integration discovery", () => {
+  it("searches user, Homebrew, and system CLI locations as well as app bundles", () => {
+    expect(codexCommandCandidates("/Users/example")).toEqual(expect.arrayContaining([
+      "/Users/example/.local/bin/codex",
+      "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
+      "/Applications/ChatGPT.app/Contents/Resources/codex",
+    ]));
+  });
+
   it("accepts the explicit identity rotation action", () => {
     expect(parseCodexIntegrationAction("rotate-identity")).toBe("rotate-identity");
   });
@@ -63,6 +73,13 @@ describe("Codex integration discovery", () => {
       repairable: true,
       problemCode: "connector_missing",
     });
+  });
+
+  it("explains that connector setup requires the signed native Codex build", async () => {
+    await expect(manageCodexIntegration("install", true, {
+      afternoteCommand: "/Applications/Afternote.app/Contents/MacOS/afternote",
+      toolCommand: null,
+    })).rejects.toThrow("signed native Codex build");
   });
 
   it("classifies conflicting, legacy, unhealthy, and healthy connectors", async () => {

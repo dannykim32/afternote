@@ -191,6 +191,51 @@ exit 0
       .toBe("versions/2.0.0-alpha.0");
   }, 30_000);
 
+  it("removes a managed Codex entry when the host CLI is outside the sanitized PATH", async () => {
+    const home = join(directory, "codex-uninstall-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const actions = join(home, "connector-actions");
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    mkdirSync(binRoot, { recursive: true });
+    writeFileSync(
+      join(home, ".codex/config.toml"),
+      "[mcp_servers.afternote]\ncommand = \"afternote\"\n",
+    );
+    writeExecutable(join(binRoot, "codex"), "#!/bin/sh\nexit 0\n");
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+      AFTERNOTE_TEST_ACTIONS: actions,
+    };
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+    writeExecutable(
+      join(installRoot, "versions/2.0.0-alpha.0/afternote"),
+      `#!/bin/sh
+if [ "\${1:-}" = codex ] && [ "\${2:-}" = status ]; then
+  printf '{"configHealthy": true}\n'
+  exit 0
+fi
+if [ "\${1:-}" = codex ] && [ "\${2:-}" = remove ]; then
+  printf 'codex-remove\n' >> "$AFTERNOTE_TEST_ACTIONS"
+  exit 0
+fi
+exit 1
+`,
+    );
+
+    run([join(alphaZero.portableDirectory, "uninstall.sh")], environment);
+
+    expect(await Bun.file(actions).text()).toContain("codex-remove");
+    expect(existsSync(installRoot)).toBe(false);
+  }, 30_000);
+
   it("rejects unsafe lifecycle roots and leaves unrelated files untouched", () => {
     const home = join(directory, "unsafe-home");
     mkdirSync(home, { recursive: true });

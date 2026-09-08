@@ -23,6 +23,10 @@ if (process.versions.bun !== "1.3.14") {
   throw new Error(`Afternote native builds require Bun 1.3.14; found ${process.versions.bun ?? "unknown"}`);
 }
 const releaseBuild = process.env.AFTERNOTE_RELEASE_BUILD === "1";
+const REQUIRED_DEVELOPMENT_FORMULAS = {
+  sqlcipher: "4.18.0",
+  "openssl@4": "4.0.2",
+} as const;
 const outputRoot = join(repositoryRoot, "apps/local/native/build");
 const addonPath = join(outputRoot, "afternote_sqlcipher.node");
 const gatewayPath = join(outputRoot, "afternote-vault-broker-gateway");
@@ -92,7 +96,11 @@ const ownerControlRequirement = resolvedPeerRequirement({
 if (process.platform !== "darwin" || process.arch !== "arm64") {
   throw new Error("The SQLCipher addon build currently requires macOS arm64");
 }
-if (releaseBuild) assertPinnedNativeReleaseInputs();
+if (releaseBuild) {
+  assertPinnedNativeReleaseInputs();
+} else {
+  assertDevelopmentFormulaVersions();
+}
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(outputRoot, { recursive: true, mode: 0o700 });
@@ -387,5 +395,24 @@ function run(command: string[]): void {
   });
   if (result.exitCode !== 0) {
     throw new Error(`Command failed (${resolvedCommand.join(" ")}): ${result.stderr.toString()}`);
+  }
+}
+
+function assertDevelopmentFormulaVersions(): void {
+  for (const [formula, expectedVersion] of Object.entries(
+    REQUIRED_DEVELOPMENT_FORMULAS,
+  )) {
+    const result = Bun.spawnSync([
+      "/opt/homebrew/bin/brew",
+      "list",
+      "--versions",
+      formula,
+    ], { stdout: "pipe", stderr: "pipe" });
+    const installedVersion = result.stdout.toString().trim().split(/\s+/)[1];
+    if (result.exitCode !== 0 || installedVersion !== expectedVersion) {
+      throw new Error(
+        `Afternote native builds require Homebrew ${formula} ${expectedVersion}; found ${installedVersion ?? "unavailable"}`,
+      );
+    }
   }
 }
