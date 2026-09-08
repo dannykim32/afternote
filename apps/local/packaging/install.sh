@@ -70,12 +70,39 @@ sed_replacement() {
   sed -e 's/[&|\\]/\\&/g'
 }
 
-if [ -e "$version_root" ] || [ -L "$version_root" ]; then
-  printf 'Afternote Local %s is already installed; version directories are immutable.\n' "$version" >&2
-  exit 1
-fi
 if [ -L "$versions_root" ]; then
   printf 'Refusing a symlinked Afternote versions root.\n' >&2
+  exit 1
+fi
+
+if [ -d "$version_root" ] && [ ! -L "$version_root" ] &&
+  [ -L "$install_root/current" ] &&
+  [ "$(readlink "$install_root/current")" = "versions/$version" ]; then
+  if [ ! -f "$marker" ] || [ "$(sed -n '1p' "$marker")" != "dev.afternote.local" ]; then
+    printf 'Refusing an install root not owned by Afternote: %s\n' "$install_root" >&2
+    exit 1
+  fi
+  if [ -L "$bin_root" ] || { [ -e "$bin_root" ] && [ ! -d "$bin_root" ]; }; then
+    printf 'Refusing an invalid Afternote command directory.\n' >&2
+    exit 1
+  fi
+  if [ -e "$bin_root/afternote" ] && [ ! -L "$bin_root/afternote" ]; then
+    printf 'Refusing to replace a non-symlinked afternote command.\n' >&2
+    exit 1
+  fi
+  verify_release_version "$version_root" "$application_path"
+  mkdir -p "$bin_root"
+  if [ -L "$bin_root" ] || [ ! -d "$bin_root" ]; then
+    printf 'Refusing an invalid Afternote command directory.\n' >&2
+    exit 1
+  fi
+  ln -sfn "$install_root/current/afternote" "$bin_root/afternote"
+  printf 'Repaired Afternote Local %s command link at %s\n' "$version" "$bin_root/afternote"
+  exit 0
+fi
+
+if [ -e "$version_root" ] || [ -L "$version_root" ]; then
+  printf 'Afternote Local %s is already installed; version directories are immutable.\n' "$version" >&2
   exit 1
 fi
 

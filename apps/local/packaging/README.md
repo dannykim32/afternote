@@ -5,11 +5,16 @@ client signer app, owner-control app, native libraries, lifecycle scripts, licen
 SBOM, and third-party notices. It contains no signing credentials or provisioning profiles.
 
 `install.sh` publishes a versioned directory under the user's Application Support directory
-and refuses to overwrite an existing version. It switches the `current` link, installs a
-user LaunchAgent, and verifies broker health. A failed switch restores the prior links and
-LaunchAgent. `rollback.sh` selects an already installed version. `uninstall.sh` removes
-Afternote-owned runtime files after stopping the broker; user vaults and explicit exports are
-handled separately and are never silently deleted.
+and refuses to overwrite an existing version. It publishes the active command at
+`~/.local/bin/afternote`, switches the `current` link, installs a user LaunchAgent, and verifies
+broker health. Reopening the app repairs that command link when the active private runtime is
+still valid. A failed switch restores the prior links and LaunchAgent. `rollback.sh` selects an
+already installed version. `uninstall.sh` removes Afternote-owned runtime files after stopping
+the broker; user vaults and explicit exports are handled separately and are never silently
+deleted.
+
+Afternote does not edit shell profiles. When `~/.local/bin` is not already on `PATH`, use the full
+command path or add `export PATH="$HOME/.local/bin:$PATH"` to the shell configuration.
 
 All lifecycle scripts use a per-user lock outside the install tree. They reject unsafe,
 symlinked, or unowned paths. A stale lock is reclaimed only when its recorded process no

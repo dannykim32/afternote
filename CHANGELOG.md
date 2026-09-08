@@ -21,7 +21,9 @@ binary releases. Until the first public tag, changes remain under Unreleased.
 - Settings tracks the real vault state and can unlock a locked vault.
 - Routine authentication for Notes, Connections, Codex, and Claude Code defaults to once a
   day, with 15-minute and four-hour options. Sensitive actions still ask for fresh approval.
-- The Mac installer opens in a compact Finder window with properly sized install icons.
+- The Mac installer opens in a compact Finder window with properly sized, centered install icons.
+- App startup repairs a missing `~/.local/bin/afternote` command link when the private runtime is
+  already installed and valid.
 - Removed the teal rule beside search results.
 
 ### Security

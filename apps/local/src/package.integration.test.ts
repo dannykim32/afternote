@@ -164,6 +164,33 @@ exit 0
     expect(existsSync(installRoot)).toBe(false);
   }, 30_000);
 
+  it("repairs a missing public command link for the active installed version", () => {
+    const home = join(directory, "repair-link-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const commandLink = join(binRoot, "afternote");
+    mkdirSync(home, { recursive: true });
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+    };
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+    rmSync(commandLink);
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+
+    expect(readlinkSync(commandLink))
+      .toBe(join(installRoot, "current/afternote"));
+    expect(readlinkSync(join(installRoot, "current")))
+      .toBe("versions/2.0.0-alpha.0");
+  }, 30_000);
+
   it("rejects unsafe lifecycle roots and leaves unrelated files untouched", () => {
     const home = join(directory, "unsafe-home");
     mkdirSync(home, { recursive: true });

@@ -12,7 +12,9 @@ gate below, finalizes the DMG, and copies only the DMG, checksum, and final repo
    `--frozen-lockfile --ignore-scripts --no-cache`, then records and rechecks their tree digest.
 3. Run type checking, the complete test suite, dependency audit, and package integration
    suite.
-4. Run exact, temporal, semantic, and 10,000-note quality gates on the candidate artifact.
+4. Run exact, temporal, semantic, and 10,000-note quality gates on the candidate artifact. The
+   10,000-note performance gate runs in a fresh process, takes three samples, and requires the
+   median p95 to remain under the release limit.
 5. Run `bun run prepare:native-release` to compile the checksum-pinned SQLCipher and
    OpenSSL sources for macOS 13.3. Build only after their reproducible output digests,
    Bun, Node headers, and ONNX Runtime match `scripts/native-release-inputs.json`.

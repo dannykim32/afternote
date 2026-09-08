@@ -83,10 +83,7 @@ describe("Recall evaluation noise scaling", () => {
   }, 30_000);
 
   it("can run the semantic contract against exactly 10,000 notes", async () => {
-    const report = await runRecallEvaluation("2.0.0-test", {
-      targetNoteCount: 10_000,
-      embeddingModel: new FrozenSemanticEmbeddingModel(),
-    });
+    const report = await runSemanticScaleEvaluation();
     expect(report.corpus).toMatchObject({
       noteCount: 10_000,
       targetNoteCount: 10_000,
@@ -108,8 +105,31 @@ describe("Recall evaluation noise scaling", () => {
     expect(report.cases.every((evaluationCase) =>
       evaluationCase.expectedRanks.every((rank) => rank === null || rank >= 1)))
       .toBe(true);
-    expect(report.passed).toBe(true);
+    expect(report.derivedIndex.state).toBe("ready");
+    expect(report.latency.limitMs).toBe(100);
   }, 30_000);
+
+  const releaseQualityIt = process.env.AFTERNOTE_RELEASE_QUALITY_GATE === "1"
+    ? it
+    : it.skip;
+  releaseQualityIt(
+    "meets the isolated 10,000-note release performance gate",
+    async () => {
+      const reports = [];
+      for (let sample = 0; sample < 3; sample += 1) {
+        reports.push(await runSemanticScaleEvaluation());
+      }
+      const p95Samples = reports
+        .map((report) => report.latency.p95Ms)
+        .sort((left, right) => left - right);
+      const medianP95 = p95Samples[1]!;
+      expect(reports.every((report) => report.derivedIndex.state === "ready"))
+        .toBe(true);
+      expect(medianP95, `p95 samples: ${p95Samples.join(", ")}`)
+        .toBeLessThan(reports[0]!.latency.limitMs);
+    },
+    60_000,
+  );
 
 });
 
@@ -263,6 +283,13 @@ class FrozenSemanticEmbeddingModel implements TextEmbeddingModel {
   async embed(texts: readonly string[]): Promise<Float32Array[]> {
     return texts.map((text) => semanticFixtureVector(text));
   }
+}
+
+function runSemanticScaleEvaluation() {
+  return runRecallEvaluation("2.0.0-test", {
+    targetNoteCount: 10_000,
+    embeddingModel: new FrozenSemanticEmbeddingModel(),
+  });
 }
 
 function semanticFixtureVector(text: string): Float32Array {

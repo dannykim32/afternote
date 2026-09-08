@@ -516,8 +516,8 @@ export function desktopDmgFinderLayout(): {
     windowBounds: [100, 100, 620, 440],
     iconSize: 112,
     textSize: 14,
-    appPosition: [150, 190],
-    applicationsPosition: [370, 190],
+    appPosition: [150, 160],
+    applicationsPosition: [370, 160],
   };
 }
 

@@ -15,6 +15,10 @@ NSString *InstallRoot(void) {
       @"Library/Application Support/Afternote"];
 }
 
+NSString *CommandLinkPath(void) {
+  return [NSHomeDirectory() stringByAppendingPathComponent:@".local/bin/afternote"];
+}
+
 BOOL IsRegularExecutable(NSString *path) {
   NSDictionary *attributes = [NSFileManager.defaultManager
       attributesOfItemAtPath:path error:nil];
@@ -65,6 +69,23 @@ BOOL MainBundleIsAuthentic(void) {
       NSBundle.mainBundle.bundleURL,
       [NSString stringWithUTF8String:AFTERNOTE_APPLICATION_CODE_REQUIREMENT]);
 #endif
+}
+
+BOOL CommandLinkTargetsInstalledCommand(void) {
+  NSString *linkPath = CommandLinkPath();
+  NSDictionary *attributes = [NSFileManager.defaultManager
+      attributesOfItemAtPath:linkPath error:nil];
+  if (![attributes[NSFileType] isEqualToString:NSFileTypeSymbolicLink]) return NO;
+  NSString *destination = [NSFileManager.defaultManager
+      destinationOfSymbolicLinkAtPath:linkPath error:nil];
+  if (destination.length == 0) return NO;
+  if (![destination isAbsolutePath]) {
+    destination = [[linkPath stringByDeletingLastPathComponent]
+        stringByAppendingPathComponent:destination];
+  }
+  return [destination.stringByStandardizingPath
+      isEqualToString:AfternoteInstalledCommandPath().stringByStandardizingPath] &&
+      AfternoteIsAuthenticInstalledCommand(linkPath);
 }
 
 BOOL RunLifecycleScript(NSString *script,
@@ -164,7 +185,8 @@ BOOL AfternoteEnsureRuntimeInstalled(NSString **errorMessage) {
       [NSString stringWithFormat:@"versions/%@/afternote", version]];
   NSString *currentCommand = AfternoteInstalledCommandPath();
   if (AfternoteIsAuthenticInstalledCommand(installedVersion) &&
-      AfternoteIsAuthenticInstalledCommand(currentCommand)) return YES;
+      AfternoteIsAuthenticInstalledCommand(currentCommand) &&
+      CommandLinkTargetsInstalledCommand()) return YES;
 
   if (!RunLifecycleScript(
           installScript,

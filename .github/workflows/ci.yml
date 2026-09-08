@@ -40,6 +40,9 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Isolated 10,000-note performance gate
+        run: bun run test:quality
+
       - name: Dependency audit
         run: bun run audit
 

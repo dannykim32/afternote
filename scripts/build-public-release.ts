@@ -21,6 +21,7 @@ const BUN_VERSION = "1.3.14";
 export const PUBLIC_RELEASE_COMMANDS = [
   ["run", "typecheck"],
   ["run", "test"],
+  ["run", "test:quality"],
   ["run", "audit"],
   ["run", "test:package"],
 ] as const;
