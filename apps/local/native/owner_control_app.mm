@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
@@ -1767,7 +1768,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     @{ @"noteId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @2, @"excerpt" : @"The spare key is behind the planter…", @"createdAt" : @"2026-08-28T15:10:00.000Z" },
   ];
   self.libraryExpiresAt = @"2026-08-28T17:00:00.000Z";
-  self.libraryStatusLabel.stringValue = @"Preview: Notes open until Aug 28, 5:00 PM";
+  self.libraryStatusLabel.stringValue = @"Notes open until 5:00 PM";
   self.libraryProgress.hidden = YES;
   [self.libraryProgress stopAnimation:nil];
   self.activeQuery = @"Where did I put the spare key for my bike?";
@@ -1780,7 +1781,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self.noteTable reloadData];
   [self renderActiveNote];
   [self renderRevisionMenu];
-  [self setLibraryBusy:NO status:@"Preview: Notes open until Aug 28, 5:00 PM"];
+  [self setLibraryBusy:NO status:@"Notes open until 5:00 PM"];
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   if ([arguments containsObject:@"--preview-connector-setup"]) {
     self.connections = @{ @"clients" : @[], @"grants" : @[], @"sessions" : @[] };
@@ -2440,7 +2441,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSSavePanel *panel = [NSSavePanel savePanel];
   panel.title = @"Export Afternote notes";
   panel.nameFieldStringValue = @"Afternote Export.json";
-  panel.allowedFileTypes = @[ @"json" ];
+  panel.allowedContentTypes = @[ UTTypeJSON ];
   panel.canCreateDirectories = YES;
   panel.delegate = self;
   [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
@@ -2468,7 +2469,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSSavePanel *panel = [NSSavePanel savePanel];
   panel.title = @"Save Afternote diagnostics";
   panel.nameFieldStringValue = @"Afternote Diagnostics.json";
-  panel.allowedFileTypes = @[ @"json" ];
+  panel.allowedContentTypes = @[ UTTypeJSON ];
   panel.canCreateDirectories = YES;
   panel.delegate = self;
   [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {

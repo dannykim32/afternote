@@ -13,7 +13,7 @@ body:
     attributes:
       label: Afternote version
       description: Run `afternote version` if the app will not open.
-      placeholder: 2.0.0-alpha.5
+      placeholder: 2.0.0-alpha.9
     validations:
       required: true
   - type: dropdown

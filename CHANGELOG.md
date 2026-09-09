@@ -12,6 +12,16 @@ binary releases. Until the first public tag, changes remain under Unreleased.
 - Exact, temporal, and optional local semantic retrieval with cited source evidence.
 - Signed lifecycle tooling for install, upgrade, rollback, uninstall, and reinstall.
 - Generated SPDX SBOM, license inventory, and third-party notices.
+- Public quick start, synthetic product screenshot, architecture overview, and an explicit
+  alpha.8-to-alpha.9 compatibility test.
+
+### Changed
+
+- Connector installation and health checks now share one lifecycle module with Codex and
+  Claude Code adapters.
+- Owner-presence challenge claims, derived-index lifecycle, release policy, native XPC
+  transport, and product-surface routing now have explicit interfaces and focused tests.
+- Removed dormant telemetry consent plumbing and other stale pre-publication surfaces.
 
 ### Fixed
 
@@ -25,6 +35,11 @@ binary releases. Until the first public tag, changes remain under Unreleased.
 - App startup repairs a missing `~/.local/bin/afternote` command link when the private runtime is
   already installed and valid.
 - Removed the teal rule beside search results.
+- Codex discovery and uninstall now cover standard user, Homebrew, and application-bundle
+  installations; successful uninstall warnings are shown to the user.
+- Configuration-time and runtime connector checks now enforce the same full Developer ID
+  requirement.
+- Broker replay records are pruned after their useful validation window.
 
 ### Security
 
@@ -40,5 +55,3 @@ binary releases. Until the first public tag, changes remain under Unreleased.
 - Release builds pin the dependency graph and native inputs, verify host and internal code
   identities, redact internal errors, and bind packaged payloads to a signed manifest.
 - Browser and Slack connector experiments are intentionally excluded from this candidate.
-
-No public binary or source release has been made from this candidate.

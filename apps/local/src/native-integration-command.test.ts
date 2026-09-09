@@ -29,6 +29,8 @@ describeMacos("native integration command runner", () => {
       "Foundation",
       "-framework",
       "Security",
+      "-framework",
+      "UniformTypeIdentifiers",
       join(import.meta.dir, "../native/broker_recovery_state.mm"),
       join(import.meta.dir, "../native/connector_presentation.mm"),
       join(import.meta.dir, "../native/note_editor_state.mm"),

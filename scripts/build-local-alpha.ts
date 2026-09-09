@@ -363,6 +363,8 @@ export async function buildLocalAlpha(options?: {
     "Foundation",
     "-framework",
     "Security",
+    "-framework",
+    "UniformTypeIdentifiers",
     join(repositoryRoot, "apps/local/native/connector_presentation.mm"),
     join(repositoryRoot, "apps/local/native/broker_recovery_state.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_state.mm"),

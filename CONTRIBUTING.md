@@ -13,6 +13,14 @@ identity, installation, and recovery.
 5. Run `bun run typecheck` and `bun run test`.
 6. Explain the privacy and security impact in the pull request.
 
+The GitHub workflow runs the same macOS test suite, including compiled native smoke tests.
+Launchd, Keychain, notarization, and clean-user acceptance still belong to the release-host
+checklist; a green hosted workflow does not replace those gates.
+
+Use the terms in [CONTEXT.md](CONTEXT.md) when naming public interfaces and modules. Keep
+canonical note mutations and their synchronous derived projections in one database transaction.
+Keep platform and connector behavior behind adapters rather than branching inside domain code.
+
 Do not commit credentials, provisioning profiles, private notes, vault files, exported
 archives, signing material, `.env` files, or screenshots containing user data.
 

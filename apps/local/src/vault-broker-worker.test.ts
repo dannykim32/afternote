@@ -1653,6 +1653,108 @@ describe("vault broker worker protocol", () => {
     expect(restartPending.ownerPresenceChallenge).toBeDefined();
   });
 
+  it("upgrades an alpha.8 vault to alpha.9 without losing revisions, identities, or grants", async () => {
+    const fixture = workerFixture({ applicationVersion: "2.0.0-alpha.8" });
+    const connector = { connectionId: randomUUID(), peerPid: 44480 };
+    const owner = { connectionId: randomUUID(), peerPid: 44481 };
+    const durable = p256();
+    const session = p256();
+    const activated = await pairAndActivate(
+      fixture,
+      connector,
+      durable,
+      session,
+      ["memory.remember", "memory.recall", "memory.get_note"],
+    );
+    await ownerRequest(fixture.worker, owner, "library.session.begin", {
+      requestedScopes: [
+        "library.get_note",
+        "library.list_revisions",
+        "library.inspect_source",
+        "library.remember",
+        "library.update_note",
+      ],
+      ttlMs: 15 * 60 * 1_000,
+    }, true);
+    const created = (await ownerRequest(fixture.worker, owner, "library.remember", {
+      content: "Alpha.8 compatibility revision one",
+      source: null,
+    })).note;
+    await ownerRequest(fixture.worker, owner, "library.update_note", {
+      id: created.id,
+      content: "Alpha.9 compatibility revision two",
+      expectedRevision: 1,
+      source: null,
+    });
+    fixture.worker.close();
+
+    const restarted = new VaultBrokerWorker({
+      applicationVersion: "2.0.0-alpha.9",
+      vaultPath: fixture.path,
+      vaultKey: fixture.key,
+      vault: fixture.vault,
+      bootId: randomUUID(),
+    });
+    workers.push(restarted);
+    await ownerRequest(restarted, owner, "library.session.begin", {
+      requestedScopes: [
+        "library.get_note",
+        "library.list_revisions",
+        "library.inspect_source",
+      ],
+      ttlMs: 15 * 60 * 1_000,
+    }, true);
+    expect(await ownerRequest(restarted, owner, "library.get_note", {
+      id: created.id,
+      revision: null,
+    })).toMatchObject({
+      note: {
+        id: created.id,
+        revision: 2,
+        content: "Alpha.9 compatibility revision two",
+      },
+    });
+    expect((await ownerRequest(restarted, owner, "library.list_revisions", {
+      id: created.id,
+      cursor: null,
+      limit: 10,
+    })).revisions.map((revision: { revision: number }) => revision.revision))
+      .toEqual([2, 1]);
+
+    await ownerRequest(restarted, owner, "owner.session.begin", {
+      requestedScopes: [
+        "owner.inspect_clients",
+        "owner.inspect_grants",
+        "owner.inspect_sessions",
+      ],
+      ttlMs: 5 * 60 * 1_000,
+    }, true);
+    const connections = await ownerRequest(
+      restarted,
+      owner,
+      "owner.inspect_connections",
+      {},
+    );
+    expect(connections.clients[0]).toMatchObject({
+      clientId: activated.clientId,
+      status: "paired",
+    });
+    expect(connections.grants[0]).toMatchObject({
+      grantId: activated.grantId,
+      status: "active",
+    });
+
+    const nextSession = p256();
+    const activation = await request(restarted, connector, "session.begin", {
+      clientId: activated.clientId,
+      grantId: activated.grantId,
+      sessionPublicKey: nextSession.publicKey,
+      requestedCapabilities: activated.capabilities,
+      ttlMs: 15 * 60 * 1_000,
+    });
+    expect(activation.activationId).toEqual(expect.any(String));
+  });
+
   it("preserves durable grants across lock but requires a fresh current-epoch activation", async () => {
     const fixture = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 44501 };
@@ -1728,6 +1830,7 @@ describe("vault broker worker protocol", () => {
 function workerFixture(options: {
   now?: () => number;
   trustPath?: "development-only" | "production-signed";
+  applicationVersion?: string;
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "afternote-worker-"));
   directories.push(directory);
@@ -1735,7 +1838,7 @@ function workerFixture(options: {
   const key = randomBytes(32);
   const vault: VaultContext = { vaultId: "7".repeat(64), deployment: "local" };
   const worker = new VaultBrokerWorker({
-    applicationVersion: "test-worker",
+    applicationVersion: options.applicationVersion ?? "test-worker",
     vaultPath: path,
     vaultKeyProvider: () => Uint8Array.from(key),
     vault,
