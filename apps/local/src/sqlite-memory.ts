@@ -96,6 +96,7 @@ import {
   temporalEmbeddingContext,
   type TemporalAnnotation,
 } from "./temporal";
+import { DerivedIndexCoordinator } from "./derived-index-coordinator";
 
 const QUERY_STOP_WORDS = new Set([
   "a",
@@ -527,9 +528,7 @@ export class SqliteMemory implements Memory {
   readonly #retrievalMode: RetrievalMode;
   readonly #now: () => Date;
   readonly #timeZone: () => string;
-  #indexQueue: Promise<void> = Promise.resolve();
-  #indexing = 0;
-  #lastIndexError: string | null = null;
+  readonly #derivedIndexes: DerivedIndexCoordinator<Note>;
   #semanticIndexCache: SemanticIndexCache | null = null;
   #closed = false;
 
@@ -568,6 +567,27 @@ export class SqliteMemory implements Memory {
     this.#database = options.database
       ? options.database as unknown as Database
       : openDatabase(databasePath, this.#encryptionKey, { create: true });
+    this.#derivedIndexes = new DerivedIndexCoordinator<Note>({
+      model: this.#embeddingModel?.descriptor ?? null,
+      rebuildSynchronous: () => {
+        this.#ensureTemporalIndexes();
+        this.#rebuildSmartViews();
+        this.#rebuildOrganization();
+      },
+      replaceSynchronous: (note) => {
+        this.#replaceSmartViewAssignments(note);
+        this.#replaceOrganizationAssignments(note);
+        this.#replaceTemporalIndex(note);
+      },
+      missingSemanticNotes: () => this.#missingEmbeddingNotes(),
+      indexSemanticNotes: (notes, reportError) =>
+        this.#indexEmbeddingBatch(notes, reportError),
+      totalNotes: () => this.#noteCount(),
+      indexedNotes: () => this.#indexedEmbeddingCount(),
+      invalidateSemanticCache: () => {
+        this.#semanticIndexCache = null;
+      },
+    });
     try {
       if (databasePath !== ":memory:") {
         chmodSync(databasePath, 0o600);
@@ -577,10 +597,7 @@ export class SqliteMemory implements Memory {
         this.#encryptionKey ? "PRAGMA journal_mode = DELETE;" : "PRAGMA journal_mode = WAL;",
       );
       this.#migrate(databasePath);
-      this.#ensureTemporalIndexes();
-      this.#rebuildSmartViews();
-      this.#rebuildOrganization();
-      this.#scheduleMissingEmbeddings();
+      this.#derivedIndexes.initialize();
     } catch (error) {
       try {
         if (this.#ownsDatabase) this.#database.close();
@@ -635,25 +652,8 @@ export class SqliteMemory implements Memory {
          ) values (?, 1, ?, ?, ?)`,
       )
       .run(id, content, sourceJson, now);
-    this.#replaceSmartViewAssignments({
-      id,
-      content,
-      revision: 1,
-      source,
-      createdAt: now,
-      updatedAt: now,
-    });
-    this.#replaceOrganizationAssignments({
-      id,
-      content,
-      revision: 1,
-      source,
-      createdAt: now,
-      updatedAt: now,
-    });
     const note = { id, content, revision: 1, source, createdAt: now, updatedAt: now };
-    this.#replaceTemporalIndex(note);
-    this.#scheduleEmbedding(note);
+    this.#derivedIndexes.replace(note);
     return note;
   }
 
@@ -1294,10 +1294,7 @@ export class SqliteMemory implements Memory {
       createdAt: current.created_at,
       updatedAt,
     };
-    this.#replaceSmartViewAssignments(note);
-    this.#replaceOrganizationAssignments(note);
-    this.#replaceTemporalIndex(note);
-    this.#scheduleEmbedding(note);
+    this.#derivedIndexes.replace(note);
     return note;
   }
 
@@ -1400,41 +1397,17 @@ export class SqliteMemory implements Memory {
       : this.#database
           .query("delete from notes where id = ? and current_revision = ?")
           .run(id, expectedRevision);
-    if (result.changes > 0) this.#semanticIndexCache = null;
+    if (result.changes > 0) this.#derivedIndexes.remove();
     return result.changes > 0;
   }
 
   async waitForDerivedIndex(): Promise<void> {
-    await this.#indexQueue;
+    await this.#derivedIndexes.wait();
   }
 
   derivedIndexStatus(vault: VaultContext): DerivedIndexStatus {
     this.#assertVault(vault);
-    const totalNotes = this.#noteCount();
-    if (!this.#embeddingModel) {
-      return {
-        state: "disabled",
-        model: null,
-        totalNotes,
-        indexedNotes: 0,
-        staleNotes: totalNotes,
-        lastError: null,
-      };
-    }
-    const descriptor = this.#embeddingModel.descriptor;
-    const indexedNotes = this.#indexedEmbeddingCount();
-    return {
-      state: this.#lastIndexError
-        ? "degraded"
-        : this.#indexing > 0 || indexedNotes < totalNotes
-          ? "indexing"
-          : "ready",
-      model: { ...descriptor },
-      totalNotes,
-      indexedNotes,
-      staleNotes: Math.max(0, totalNotes - indexedNotes),
-      lastError: this.#lastIndexError,
-    };
+    return this.#derivedIndexes.status();
   }
 
   diagnosticSnapshot(vault: VaultContext): {
@@ -1469,6 +1442,7 @@ export class SqliteMemory implements Memory {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.#derivedIndexes.close();
     this.#semanticIndexCache = null;
     try {
       if (this.#ownsDatabase) this.#database.close();
@@ -2061,10 +2035,10 @@ export class SqliteMemory implements Memory {
       }));
   }
 
-  #scheduleMissingEmbeddings(): void {
-    if (!this.#embeddingModel) return;
+  #missingEmbeddingNotes(): readonly Note[] {
+    if (!this.#embeddingModel) return [];
     const descriptor = this.#embeddingModel.descriptor;
-    const notes = this.#database
+    return this.#database
       .query<NoteRow, [string, string, number]>(
         `select id, content, current_revision, source_json, created_at, updated_at
          from notes
@@ -2084,7 +2058,6 @@ export class SqliteMemory implements Memory {
       )
       .all(descriptor.id, descriptor.revision, descriptor.dimensions)
       .map(rowToNote);
-    this.#scheduleEmbeddingBatch(notes);
   }
 
   #noteCount(): number {
@@ -2231,115 +2204,97 @@ export class SqliteMemory implements Memory {
     }
   }
 
-  #scheduleEmbedding(note: Note): void {
-    this.#scheduleEmbeddingBatch([note]);
-  }
-
-  #scheduleEmbeddingBatch(notes: readonly Note[]): void {
+  async #indexEmbeddingBatch(
+    notes: readonly Note[],
+    reportError: (error: unknown) => void,
+  ): Promise<void> {
     const model = this.#embeddingModel;
     if (!model || this.#closed || notes.length === 0) return;
-    this.#semanticIndexCache = null;
-    this.#indexing += notes.length;
-    this.#indexQueue = this.#indexQueue
-      .then(async () => {
-        if (this.#closed) return;
-        const slicesByNote = notes.map((note) => {
-          const annotations = this.#noteTemporalAnnotations(note.id);
-          return embeddingSlices(note.content, annotations).map((slice) => ({
-            ...slice,
-            embeddingContent:
-              slice.content +
-              temporalEmbeddingContext(
-                annotations.filter((annotation) =>
-                  annotation.start >= slice.start && annotation.end <= slice.end),
-              ) +
-              sourceEmbeddingContext(note.source),
-          }));
-        });
-        const slices = slicesByNote.flat();
-        const vectors = await embedWithRetries(
-          model,
-          slices.map((slice) => slice.embeddingContent),
-          () => this.#closed,
-          (error) => {
-            this.#lastIndexError = errorMessage(error);
-          },
+    const slicesByNote = notes.map((note) => {
+      const annotations = this.#noteTemporalAnnotations(note.id);
+      return embeddingSlices(note.content, annotations).map((slice) => ({
+        ...slice,
+        embeddingContent:
+          slice.content +
+          temporalEmbeddingContext(
+            annotations.filter((annotation) =>
+              annotation.start >= slice.start && annotation.end <= slice.end),
+          ) +
+          sourceEmbeddingContext(note.source),
+      }));
+    });
+    const slices = slicesByNote.flat();
+    const vectors = await embedWithRetries(
+      model,
+      slices.map((slice) => slice.embeddingContent),
+      () => this.#closed,
+      reportError,
+    );
+    if (vectors.length !== slices.length) {
+      throw new Error(
+        `Embedding model ${model.descriptor.id} returned ${vectors.length} vectors for ${slices.length} chunks`,
+      );
+    }
+    vectors.forEach((vector) => validateEmbedding(vector, model.descriptor));
+    if (this.#closed) return;
+    const descriptor = model.descriptor;
+    const currentRevisionStatement = this.#database.query<
+      { current_revision: number },
+      [string]
+    >("select current_revision from notes where id = ?");
+    const upsert = this.#database.query(
+      `insert into note_embeddings (
+         note_id, note_revision, model_id, model_revision,
+         dimensions, chunk_count, indexed_at
+       ) values (?, ?, ?, ?, ?, ?, ?)
+       on conflict(note_id) do update set
+         note_revision = excluded.note_revision,
+         model_id = excluded.model_id,
+         model_revision = excluded.model_revision,
+         dimensions = excluded.dimensions,
+         chunk_count = excluded.chunk_count,
+         indexed_at = excluded.indexed_at`,
+    );
+    const deleteChunks = this.#database.query(
+      "delete from note_embedding_chunks where note_id = ?",
+    );
+    const insertChunk = this.#database.query(
+      `insert into note_embedding_chunks (
+         note_id, chunk_index, content_start, content_end, vector
+       ) values (?, ?, ?, ?, ?)`,
+    );
+    const indexedAt = new Date().toISOString();
+    let vectorOffset = 0;
+    this.#database.transaction(() => {
+      notes.forEach((note, index) => {
+        const noteSlices = slicesByNote[index]!;
+        const currentRevision = currentRevisionStatement.get(note.id)?.current_revision;
+        if (currentRevision !== note.revision) {
+          vectorOffset += noteSlices.length;
+          return;
+        }
+        upsert.run(
+          note.id,
+          note.revision,
+          descriptor.id,
+          descriptor.revision,
+          descriptor.dimensions,
+          noteSlices.length,
+          indexedAt,
         );
-        if (vectors.length !== slices.length) {
-          throw new Error(
-            `Embedding model ${model.descriptor.id} returned ${vectors.length} vectors for ${slices.length} chunks`,
+        deleteChunks.run(note.id);
+        noteSlices.forEach((slice, chunkIndex) => {
+          insertChunk.run(
+            note.id,
+            chunkIndex,
+            slice.start,
+            slice.end,
+            embeddingBytes(vectors[vectorOffset + chunkIndex]!),
           );
-        }
-        vectors.forEach((vector) => validateEmbedding(vector, model.descriptor));
-        if (this.#closed) return;
-        const descriptor = model.descriptor;
-        const currentRevisionStatement = this.#database.query<
-          { current_revision: number },
-          [string]
-        >("select current_revision from notes where id = ?");
-        const upsert = this.#database.query(
-          `insert into note_embeddings (
-             note_id, note_revision, model_id, model_revision,
-             dimensions, chunk_count, indexed_at
-           ) values (?, ?, ?, ?, ?, ?, ?)
-           on conflict(note_id) do update set
-             note_revision = excluded.note_revision,
-             model_id = excluded.model_id,
-             model_revision = excluded.model_revision,
-             dimensions = excluded.dimensions,
-             chunk_count = excluded.chunk_count,
-             indexed_at = excluded.indexed_at`,
-        );
-        const deleteChunks = this.#database.query(
-          "delete from note_embedding_chunks where note_id = ?",
-        );
-        const insertChunk = this.#database.query(
-          `insert into note_embedding_chunks (
-             note_id, chunk_index, content_start, content_end, vector
-           ) values (?, ?, ?, ?, ?)`,
-        );
-        const indexedAt = new Date().toISOString();
-        let vectorOffset = 0;
-        this.#database.transaction(() => {
-          notes.forEach((note, index) => {
-            const noteSlices = slicesByNote[index]!;
-            const currentRevision = currentRevisionStatement.get(note.id)?.current_revision;
-            if (currentRevision !== note.revision) {
-              vectorOffset += noteSlices.length;
-              return;
-            }
-            upsert.run(
-              note.id,
-              note.revision,
-              descriptor.id,
-              descriptor.revision,
-              descriptor.dimensions,
-              noteSlices.length,
-              indexedAt,
-            );
-            deleteChunks.run(note.id);
-            noteSlices.forEach((slice, chunkIndex) => {
-              insertChunk.run(
-                note.id,
-                chunkIndex,
-                slice.start,
-                slice.end,
-                embeddingBytes(vectors[vectorOffset + chunkIndex]!),
-              );
-            });
-            vectorOffset += noteSlices.length;
-          });
-        })();
-        if (this.#indexedEmbeddingCount() === this.#noteCount()) {
-          this.#lastIndexError = null;
-        }
-      })
-      .catch((error) => {
-        this.#lastIndexError = errorMessage(error);
-      })
-      .finally(() => {
-        this.#indexing = Math.max(0, this.#indexing - notes.length);
+        });
+        vectorOffset += noteSlices.length;
       });
+    })();
   }
 
   #assertVault(vault: VaultContext): void {
@@ -2960,10 +2915,6 @@ async function embedWithRetries(
 
 function reciprocalRank(index: number): number {
   return 1 / (60 + index + 1);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function withTimeout<Result>(

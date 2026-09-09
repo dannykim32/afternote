@@ -2066,6 +2066,37 @@ describe("SqliteMemory smart views", () => {
   });
 });
 
+describe("SqliteMemory derived-index consistency", () => {
+  it("rolls back the canonical note and every synchronous projection together", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-derived-index-rollback-"));
+    tempDirectories.push(directory);
+    const databasePath = join(directory, "vault.db");
+    const memory = new SqliteMemory(databasePath, localVault);
+    const fault = new Database(databasePath);
+    fault.exec(`
+      create trigger fail_organization_projection
+      before insert on note_organization
+      begin
+        select raise(abort, 'projection failed');
+      end;
+    `);
+    fault.close();
+
+    try {
+      await expect(memory.remember(localVault, {
+        content: "This note must not survive a derived-index failure.",
+      })).rejects.toThrow("projection failed");
+      expect(await memory.browseNotes(localVault)).toEqual({
+        notes: [],
+        nextCursor: null,
+      });
+      expect(memory.smartViews(localVault).every((view) => view.noteCount === 0)).toBe(true);
+    } finally {
+      memory.close();
+    }
+  });
+});
+
 describe("SqliteMemory automatic organization", () => {
   it("derives labels, people, sources, topics, and date groups and refiles edits", async () => {
     const memory = new SqliteMemory(":memory:", localVault);
