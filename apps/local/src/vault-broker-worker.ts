@@ -98,6 +98,10 @@ import {
   librarySearchResult,
   type LibraryScope,
 } from "./vault-broker-library";
+import {
+  OwnerPresenceCoordinator,
+  OwnerPresenceCoordinatorError,
+} from "./owner-presence-coordinator";
 
 declare const AFTERNOTE_ACCEPTANCE_TRACE: boolean | undefined;
 
@@ -310,6 +314,12 @@ function isRecoveryPresence(
     pending?.kind === "recovery-restore";
 }
 
+function expectedOwnerPresenceRole(pending: PendingPresence): GatewayPeerRole {
+  return pending.kind === "pairing" || pending.kind === "activation"
+    ? pending.peerRole
+    : "owner-control";
+}
+
 type OwnerInspectionSession = {
   scopes: OwnerInspectionScope[];
   expiresAt: number;
@@ -356,7 +366,7 @@ export class VaultBrokerWorker {
   readonly #onRecoveryApprovalRevalidatedForTest:
     | ((operation: "migration" | "restore") => void)
     | undefined;
-  readonly #pendingPresence = new Map<string, PendingPresence>();
+  readonly #pendingPresence = new OwnerPresenceCoordinator<PendingPresence>();
   readonly #ownerSessions = new Map<string, OwnerInspectionSession>();
   readonly #librarySessions = new Map<string, LibrarySession>();
   readonly #ownerRequestIds = new Map<string, number>();
@@ -3000,25 +3010,25 @@ export class VaultBrokerWorker {
         "Owner-presence result is inconsistent",
       );
     }
-    const pending = this.#pendingPresence.get(challengeId);
-    if (!pending) {
-      throw new BrokerProtocolError("replayed", "Owner-presence challenge is unavailable");
+    let pending: PendingPresence;
+    let claimIssue: "role_mismatch" | "binding_mismatch" | "expired" | null;
+    try {
+      ({ pending, issue: claimIssue } = this.#pendingPresence.claim({
+        challengeId,
+        peerRole: gateway.peerRole,
+        binding: binding(gateway),
+        now: this.#currentTime(),
+        expectedRole: expectedOwnerPresenceRole,
+      }));
+    } catch (error) {
+      if (error instanceof OwnerPresenceCoordinatorError) {
+        throw new BrokerProtocolError(error.code, error.message);
+      }
+      throw error;
     }
-    this.#pendingPresence.delete(challengeId);
     if (pending.kind === "lifecycle") this.#pendingLifecycleChallengeId = undefined;
     if (isRecoveryPresence(pending)) this.#pendingRecoveryChallengeId = undefined;
-    const currentBinding = binding(gateway);
-    const expectedRole = pending.kind === "owner-session" ||
-        pending.kind === "revocation" ||
-        pending.kind === "connector-revocation" ||
-        pending.kind === "library-session" ||
-        pending.kind === "library-delete" ||
-        pending.kind === "admin" ||
-        pending.kind === "lifecycle" ||
-        isRecoveryPresence(pending)
-      ? "owner-control"
-      : pending.peerRole;
-    if (gateway.peerRole !== expectedRole) {
+    if (claimIssue === "role_mismatch" || claimIssue === "binding_mismatch") {
       if (pending.kind === "library-session" || pending.kind === "library-delete") {
         this.#librarySessions.delete(ownerSessionKey(pending.binding));
       }
@@ -3043,51 +3053,12 @@ export class VaultBrokerWorker {
       }
       throw new BrokerProtocolError(
         "identity_mismatch",
-        "Owner presence came from the wrong trusted client role",
+        claimIssue === "role_mismatch"
+          ? "Owner presence came from the wrong trusted client role"
+          : "Owner presence belongs to another connection",
       );
     }
-    if (
-      pending.binding.connectionId !== currentBinding.connectionId ||
-      pending.binding.peerPid !== currentBinding.peerPid
-    ) {
-      if (pending.kind === "library-session" || pending.kind === "library-delete") {
-        this.#librarySessions.delete(ownerSessionKey(pending.binding));
-      }
-      if (pending.kind === "library-delete") {
-        this.#authority().recordNativeLibraryOutcome(
-          pending.sessionId,
-          "library.delete",
-          "error",
-          "identity_mismatch",
-          [{ noteId: pending.noteId, revision: pending.noteRevision }],
-        );
-      }
-      if (pending.kind === "admin") {
-        this.#authority().recordNativeOwnerAdminOutcome(
-          adminOperationMethod(pending.operation),
-          "error",
-          "identity_mismatch",
-        );
-      }
-      if (pending.kind === "lifecycle") {
-        this.#recordLifecycleOutcome(pending.operation, "error", "identity_mismatch");
-      }
-      throw new BrokerProtocolError(
-        "identity_mismatch",
-        "Owner presence belongs to another connection",
-      );
-    }
-    if (
-      (pending.kind === "owner-session" ||
-        pending.kind === "revocation" ||
-        pending.kind === "connector-revocation" ||
-        pending.kind === "library-session" ||
-        pending.kind === "library-delete" ||
-        pending.kind === "admin" ||
-        pending.kind === "lifecycle" ||
-        isRecoveryPresence(pending)) &&
-      pending.challengeExpiresAt <= this.#currentTime()
-    ) {
+    if (claimIssue === "expired") {
       if (pending.kind === "library-delete") {
         this.#librarySessions.delete(ownerSessionKey(pending.binding));
         this.#authority().recordNativeLibraryOutcome(
