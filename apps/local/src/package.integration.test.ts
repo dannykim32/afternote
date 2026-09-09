@@ -156,6 +156,11 @@ exit 0
     expect(names).not.toMatch(/afternote-browser|slack/i);
     expect(existsSync(alphaZero.sbomPath)).toBe(true);
     expect(existsSync(alphaZero.noticesPath)).toBe(true);
+    for (const path of [alphaZero.sqlcipherLibraryPath, alphaZero.cryptoLibraryPath]) {
+      const metadata = Bun.spawnSync(["/usr/bin/vtool", "-show-build", path]);
+      expect(metadata.exitCode, metadata.stderr.toString()).toBe(0);
+      expect(metadata.stdout.toString()).toContain("minos 13.3");
+    }
   });
 
   it("installs, upgrades, rolls back, uninstalls, and reinstalls transactionally", () => {

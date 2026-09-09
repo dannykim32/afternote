@@ -491,15 +491,11 @@ const SCHEMA_MIGRATIONS = [
         note_id text primary key,
         note_revision integer not null,
         reference_timestamp text not null,
-        source_timestamp text,
         timezone text not null,
         resolver_version integer not null,
         indexed_at text not null,
         foreign key (note_id) references notes(id) on delete cascade
       );
-
-      create index if not exists note_temporal_index_source_timestamp
-      on note_temporal_index (source_timestamp, note_revision, note_id);
 
       create table if not exists note_temporal_annotations (
         note_id text not null,
@@ -517,6 +513,22 @@ const SCHEMA_MIGRATIONS = [
 
       create index if not exists note_temporal_annotations_range
       on note_temporal_annotations (range_start, range_end, note_revision, note_id);
+    `,
+  },
+  {
+    version: 10,
+    sql: `
+      alter table note_temporal_index add column source_timestamp text;
+
+      update note_temporal_index
+      set source_timestamp = (
+        select json_extract(notes.source_json, '$.timestamp')
+        from notes
+        where notes.id = note_temporal_index.note_id
+      );
+
+      create index note_temporal_index_source_timestamp
+      on note_temporal_index (source_timestamp, note_revision, note_id);
     `,
   },
 ] as const;

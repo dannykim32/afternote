@@ -421,10 +421,14 @@ export class VaultBrokerAuthorization {
   }
 
   denyPairing(requestId: string, errorCode = "owner_denied"): void {
-    const row = this.#activePairing(requestId, "pending");
-    this.#database.query(
-      "update broker_pairing_requests set status = 'denied', nonce = '' where id = ? and status = 'pending'",
-    ).run(requestId);
+    const row = this.#pairing(requestId);
+    if (row.vault_id !== this.#vaultId || row.boot_id !== this.#bootId) {
+      throw new Error("Pairing request is not active for this broker boot and vault");
+    }
+    const changed = this.#database.query(
+      "update broker_pairing_requests set status = 'denied', nonce = '' where id = ? and status in ('pending', 'expired')",
+    ).run(requestId).changes;
+    if (changed !== 1) return;
     this.#appendAudit({
       eventId: randomUUID(),
       occurredAt: new Date(this.#now()).toISOString(),
@@ -838,10 +842,14 @@ export class VaultBrokerAuthorization {
   }
 
   denyActivation(activationId: string, errorCode = "owner_denied"): void {
-    const row = this.#activeActivation(activationId);
-    this.#database.query(
-      "update broker_sessions set status = 'revoked', nonce = '' where id = ? and status = 'pending'",
-    ).run(activationId);
+    const row = this.#activation(activationId);
+    if (row.vault_id !== this.#vaultId || row.broker_boot_id !== this.#bootId) {
+      throw new Error("Activation request is no longer available");
+    }
+    const changed = this.#database.query(
+      "update broker_sessions set status = 'revoked', nonce = '' where id = ? and status in ('pending', 'expired')",
+    ).run(activationId).changes;
+    if (changed !== 1) return;
     this.#appendAudit({
       eventId: randomUUID(),
       occurredAt: new Date(this.#now()).toISOString(),

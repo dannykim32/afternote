@@ -299,9 +299,9 @@ function migratePlaintextVaultUnlocked(options: MigrationOptions): MigrationResu
     let before: VaultSnapshot;
     try {
       before = snapshot(source);
-      if (before.schemaVersion < 8 || before.schemaVersion > 9) {
+      if (before.schemaVersion < 8 || before.schemaVersion > 10) {
         throw new Error(
-          `Encryption migration requires schema 8 or 9, found ${before.schemaVersion}`,
+          `Encryption migration requires schema 8 through 10, found ${before.schemaVersion}`,
         );
       }
       if (before.integrity !== "ok") throw new Error("Plaintext vault failed integrity_check");
@@ -723,7 +723,7 @@ function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
 
 function assertEqualSnapshot(expected: VaultSnapshot, actual: VaultSnapshot): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error("Encrypted vault failed exact schema-9 canonical equality");
+    throw new Error("Encrypted vault failed exact canonical equality");
   }
 }
 
@@ -736,7 +736,7 @@ function assertEncryptedCandidate(path: string, key: Uint8Array): void {
   try {
     const state = snapshot(database);
     if (
-      (state.schemaVersion !== 8 && state.schemaVersion !== 9) ||
+      (state.schemaVersion < 8 || state.schemaVersion > 10) ||
       state.integrity !== "ok"
     ) {
       throw new Error("Encrypted migration candidate failed validation");

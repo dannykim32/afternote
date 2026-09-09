@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("plaintext-to-SQLCipher migration", () => {
-  it("atomically publishes exact schema-9 data and keeps only explicitly selected plaintext", async () => {
+  it("atomically publishes exact current-schema data and keeps only explicitly selected plaintext", async () => {
     const { path, noteId, directory } = await plaintextVault();
     const key = randomBytes(32);
     const result = migratePlaintextVault({
@@ -83,7 +83,7 @@ describe("plaintext-to-SQLCipher migration", () => {
         revision: 2,
         content: "current",
       });
-      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(9);
+      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(10);
     } finally {
       reopened.close();
     }

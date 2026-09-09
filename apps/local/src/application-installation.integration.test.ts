@@ -33,7 +33,9 @@ describeMacos("native application installation", () => {
 <key>CFBundleExecutable</key><string>Afternote</string>
 <key>CFBundleIdentifier</key><string>dev.afternote.installation-test</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>2.0.0-alpha.8</string>
+<key>AfternotePackageVersion</key><string>2.0.0-alpha.9</string>
+<key>CFBundleShortVersionString</key><string>2.0.0</string>
+<key>CFBundleVersion</key><string>9</string>
 </dict></plist>
 `);
     writeFileSync(join(directory, "main.mm"), `#import <Foundation/Foundation.h>
@@ -76,11 +78,11 @@ ln -sfn "$HOME/Library/Application Support/Afternote/current/afternote" "$HOME/.
 
   it("restores the public command link when the private runtime is already valid", () => {
     const installRoot = join(home, "Library/Application Support/Afternote");
-    const versionRoot = join(installRoot, "versions/2.0.0-alpha.8");
+    const versionRoot = join(installRoot, "versions/2.0.0-alpha.9");
     mkdirSync(versionRoot, { recursive: true });
     writeFileSync(join(versionRoot, "afternote"), "#!/bin/sh\nexit 0\n");
     chmodSync(join(versionRoot, "afternote"), 0o755);
-    symlinkSync("versions/2.0.0-alpha.8", join(installRoot, "current"));
+    symlinkSync("versions/2.0.0-alpha.9", join(installRoot, "current"));
 
     const result = Bun.spawnSync([executable], {
       env: {

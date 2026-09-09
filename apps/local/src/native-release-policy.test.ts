@@ -62,6 +62,10 @@ describe("native release input policy", () => {
     expect(nativeBuild).toContain('join(repositoryRoot, "apps/local/native/release-deps")');
     expect(nativeBuild).toContain('requiredDigest(manifest.onnxRuntimeLibrarySha256');
     expect(nativeBuild).toContain('"-mcpu=apple-m1"');
+    expect(nativeBuild).toContain("assertPreparedNativeDependencies()");
+    expect(nativeBuild).toContain("assertDeploymentTarget(sqlcipherPath)");
+    expect(nativeBuild).not.toContain("/opt/homebrew/opt/sqlcipher/lib");
+    expect(nativeBuild).not.toContain("/opt/homebrew/opt/openssl@4/lib");
     expect(packageBuild).toContain('const minimumMacosVersion = "13.3"');
     expect(packageBuild).toContain('"-mmacosx-version-min=13.3"');
     expect(packageBuild).toContain('["/usr/bin/xcode-select", "-p"]');

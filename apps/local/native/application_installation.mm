@@ -179,7 +179,7 @@ BOOL AfternoteEnsureRuntimeInstalled(NSString **errorMessage) {
     return NO;
   }
 
-  NSString *version = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"];
+  NSString *version = NSBundle.mainBundle.infoDictionary[@"AfternotePackageVersion"];
   if (version.length == 0) {
     if (errorMessage != nil) *errorMessage = @"This copy of Afternote has no valid version.";
     return NO;

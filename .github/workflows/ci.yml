@@ -27,13 +27,16 @@ jobs:
           bun-version: 1.3.14
 
       - name: Install native toolchain
-        run: brew install node sqlcipher openssl@4 gitleaks
+        run: brew install node gitleaks
 
       - name: Install
         run: bun install --frozen-lockfile
 
       - name: Verify lockfile is unchanged
         run: git diff --exit-code -- bun.lock
+
+      - name: Build pinned macOS 13.3 native dependencies
+        run: bun run prepare:native-release
 
       - name: Typecheck
         run: bun run typecheck

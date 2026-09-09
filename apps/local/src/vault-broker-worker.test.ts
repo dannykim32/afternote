@@ -1385,6 +1385,7 @@ describe("vault broker worker protocol", () => {
       requestedCapabilities: ["memory.recall"],
       forgetPolicy: "never",
     });
+    now = Date.parse(pairing.expiresAt) - 1;
     const pendingPairing = await beginMemoryClientRequest(
       fixture.worker,
       connection,
@@ -1394,6 +1395,7 @@ describe("vault broker worker protocol", () => {
         clientSignature: signature(pairing.clientProofTranscript, durable.privateKey),
       },
     );
+    expect(pendingPairing.ownerPresenceChallenge.expiresAt).toBe(pairing.expiresAt);
     now = Date.parse(pendingPairing.ownerPresenceChallenge.expiresAt) + 1;
     expect(await completeMemoryOwnerPresence(
       fixture.worker,
@@ -1422,12 +1424,18 @@ describe("vault broker worker protocol", () => {
       session,
       ["memory.recall"],
     );
+    const activationDecisionExpiresAt = (JSON.parse(
+      activation.ownerDecisionTranscript,
+    ) as { decisionExpiresAt: string }).decisionExpiresAt;
+    now = Date.parse(activationDecisionExpiresAt) - 1;
     const pendingActivation = await beginMemoryClientRequest(
       fixture.worker,
       connection,
       "session.complete",
       activationProofs(activation, durable, session),
     );
+    expect(pendingActivation.ownerPresenceChallenge.expiresAt)
+      .toBe(activationDecisionExpiresAt);
     now = Date.parse(pendingActivation.ownerPresenceChallenge.expiresAt) + 1;
     expect(await completeMemoryOwnerPresence(
       fixture.worker,
@@ -1440,6 +1448,56 @@ describe("vault broker worker protocol", () => {
       outcome: "denied",
       errorCode: "owner_timeout",
     }));
+  });
+
+  it("keeps pairing approval one-shot and prunes its timeout idempotently", async () => {
+    let now = Date.now();
+    const fixture = workerFixture({ now: () => now });
+    const connection = { connectionId: randomUUID(), peerPid: 42003 };
+    const durable = p256();
+    const pairing = await request(fixture.worker, connection, "client.begin", {
+      kind: "codex",
+      displayName: "Codex",
+      installIdentity: randomUUID(),
+      publicKey: durable.publicKey,
+      signingMode: "development-exact-build",
+      requestedCapabilities: ["memory.recall"],
+      forgetPolicy: "never",
+    });
+    const completion = {
+      requestId: pairing.requestId,
+      clientSignature: signature(pairing.clientProofTranscript, durable.privateKey),
+    };
+    const first = await beginMemoryClientRequest(
+      fixture.worker,
+      connection,
+      "client.complete_pairing",
+      completion,
+    );
+    expect(await beginMemoryClientRequest(
+      fixture.worker,
+      connection,
+      "client.complete_pairing",
+      completion,
+    )).toMatchObject({
+      ok: false,
+      error: { code: "replayed", message: "Pairing approval is already pending" },
+    });
+
+    now = Date.parse(first.ownerPresenceChallenge.expiresAt) + 1;
+    const other = p256();
+    expect(await request(fixture.worker, connection, "client.begin", {
+      kind: "codex",
+      displayName: "Codex",
+      installIdentity: randomUUID(),
+      publicKey: other.publicKey,
+      signingMode: "development-exact-build",
+      requestedCapabilities: ["memory.recall"],
+      forgetPolicy: "never",
+    })).toMatchObject({ state: "proof_required" });
+    expect(fixture.worker.readAuditForTest().filter((event) =>
+      event.operation === "client.pair" && event.errorCode === "owner_timeout"
+    )).toHaveLength(1);
   });
 
   it("distinguishes owner denial, cancellation, timeout, and unavailable authentication", async () => {
@@ -1758,6 +1816,7 @@ describe("vault broker worker protocol", () => {
         "library.get_note",
         "library.list_revisions",
         "library.inspect_source",
+        "library.search",
       ],
       ttlMs: 15 * 60 * 1_000,
     }, true);
@@ -1777,6 +1836,11 @@ describe("vault broker worker protocol", () => {
       limit: 10,
     })).revisions.map((revision: { revision: number }) => revision.revision))
       .toEqual([2, 1]);
+    expect(await ownerRequest(restarted, owner, "library.search", {
+      cursor: null,
+      limit: 5,
+      query: "What happened on August 28?",
+    })).toMatchObject({ results: expect.any(Array) });
 
     await ownerRequest(restarted, owner, "owner.session.begin", {
       requestedScopes: [

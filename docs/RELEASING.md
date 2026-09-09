@@ -12,14 +12,14 @@ gate below, finalizes the DMG, and copies only the DMG, checksum, and final repo
    release from a normal interactive login that is running unrelated software.
 2. Use Bun 1.3.14. The release command installs dependencies in its detached worktree with
    `--frozen-lockfile --ignore-scripts --no-cache`, then records and rechecks their tree digest.
-3. Run type checking, the complete test suite, dependency audit, and package integration
-   suite.
-4. Run exact, temporal, semantic, and 10,000-note quality gates on the candidate artifact. The
-   10,000-note performance gate runs in a fresh process, takes three samples, and requires the
-   median p95 to remain under the release limit.
-5. Run `bun run prepare:native-release` to compile the checksum-pinned SQLCipher and
+3. Run `bun run prepare:native-release` to compile the checksum-pinned SQLCipher and
    OpenSSL sources for macOS 13.3. Build only after their reproducible output digests,
    Bun, Node headers, and ONNX Runtime match `scripts/native-release-inputs.json`.
+4. Run type checking, the complete test suite, dependency audit, and package integration
+   suite.
+5. Run exact, temporal, semantic, and 10,000-note quality gates on the candidate artifact. The
+   10,000-note performance gate runs in a fresh process, takes three samples, and requires the
+   median p95 to remain under the release limit.
 6. Confirm the SPDX SBOM, license inventory, and third-party notices cover every compiled
    component.
 7. Sign with the existing Developer ID identity and the separate worker and client-signer

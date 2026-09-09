@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build:native": "\"$npm_execpath\" run scripts/build-local-sqlcipher-addon.ts",
-    "prepare:native-release": "\"$npm_execpath\" run scripts/prepare-native-release-dependencies.ts",
+    "prepare:native-release": "/usr/bin/env -u BUN_INSTALL \"$npm_execpath\" run scripts/prepare-native-release-dependencies.ts",
     "package:local": "\"$npm_execpath\" run scripts/build-local-alpha.ts",
     "finalize:release": "\"$npm_execpath\" run scripts/finalize-local-release.ts",
     "release:public": "\"$npm_execpath\" run scripts/build-public-release.ts",

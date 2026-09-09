@@ -10,8 +10,10 @@ identity, installation, and recovery.
 2. Create a branch from `main`.
 3. Add a failing test for the behavior being changed.
 4. Implement the smallest coherent fix.
-5. Run `bun run typecheck` and `bun run test`.
-6. Explain the privacy and security impact in the pull request.
+5. Run `bun run prepare:native-release` once to build the checksum-pinned SQLCipher and
+   OpenSSL dependencies for macOS 13.3.
+6. Run `bun run typecheck` and `bun run test`.
+7. Explain the privacy and security impact in the pull request.
 
 The GitHub workflow runs the same macOS test suite, including compiled native smoke tests.
 Launchd, Keychain, notarization, and clean-user acceptance still belong to the release-host

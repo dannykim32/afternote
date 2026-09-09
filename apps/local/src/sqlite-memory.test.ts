@@ -910,7 +910,7 @@ describe("SqliteMemory storage and schema migrations", () => {
     tempDirectories.push(directory);
     const databasePath = join(directory, "vault.db");
     const futureDatabase = new Database(databasePath, { create: true });
-    futureDatabase.exec("PRAGMA user_version = 10;");
+    futureDatabase.exec("PRAGMA user_version = 11;");
     futureDatabase.close();
 
     try {
@@ -919,7 +919,7 @@ describe("SqliteMemory storage and schema migrations", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MemoryError);
       expect((error as MemoryError).code).toBe("incompatible_schema");
-      expect((error as Error).message).toContain("newer schema version 10");
+      expect((error as Error).message).toContain("newer schema version 11");
     }
 
     const inspected = new Database(databasePath);
@@ -927,7 +927,7 @@ describe("SqliteMemory storage and schema migrations", () => {
       .query<{ user_version: number }, []>("PRAGMA user_version;")
       .get();
     inspected.close();
-    expect(version?.user_version).toBe(10);
+    expect(version?.user_version).toBe(11);
   });
 
   it("reuses one content-bound backup when an unchanged migration keeps failing", () => {
@@ -1106,6 +1106,8 @@ describe("SqliteMemory storage and schema migrations", () => {
       drop table note_smart_views;
       drop table note_organization_facets;
       drop table note_organization;
+      drop table note_temporal_annotations;
+      drop table note_temporal_index;
       alter table notes drop column source_search;
       create virtual table notes_fts using fts5(
         content,

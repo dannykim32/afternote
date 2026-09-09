@@ -18,11 +18,12 @@ Afternote is an early alpha for Apple Silicon Macs running macOS 13.3 or newer.
 You can build the current candidate from source with Bun 1.3.14:
 
 ```bash
-brew install bun node sqlcipher openssl@4
+brew install bun node
 bun --version # must print 1.3.14
 git clone https://github.com/dannykim32/afternote.git
 cd afternote
 bun install --frozen-lockfile
+bun run prepare:native-release
 bun run typecheck
 bun run test
 bun run package:local

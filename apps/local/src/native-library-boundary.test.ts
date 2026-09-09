@@ -472,6 +472,18 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('liveAction" : @"keep"');
     expect(nativeAppSource).toContain('artifactAction" : @"keep"');
     expect(nativeAppSource).toContain("[self refreshRecoveryStatusAndContinue:YES]");
+    const setupConnections = nativeAppSource.slice(
+      nativeAppSource.indexOf("- (void)openConnectionsFromSetup:"),
+      nativeAppSource.indexOf("- (void)openSetupGuide:"),
+    );
+    expect(setupConnections).toContain(
+      "[self.recoveryState isEqualToString:@\"ready\"]",
+    );
+    expect(setupConnections).toContain("recoveryReady:recoveryReady");
+    expect(setupConnections).toContain(
+      "if (resolved == AfternoteProductSurfaceRecovery)",
+    );
+    expect(setupConnections).toContain("[self refreshRecovery:nil]");
   });
 
   it("recovers bounded broker interruptions without replaying note operations", () => {

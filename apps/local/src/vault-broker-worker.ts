@@ -1026,6 +1026,7 @@ export class VaultBrokerWorker {
     for (const [challengeId, pending] of this.#pendingPresence) {
       if (pending.challengeExpiresAt > now) continue;
       this.#pendingPresence.delete(challengeId);
+      this.#removeSiblingAuthorityChallenges(pending);
       if (pending.kind === "pairing") {
         this.#authority().denyPairing(pending.pairingRequestId, "owner_timeout");
       } else if (pending.kind === "activation") {
@@ -1037,6 +1038,18 @@ export class VaultBrokerWorker {
       } else if (isRecoveryPresence(pending)) {
         this.#pendingRecoveryChallengeId = undefined;
       }
+    }
+  }
+
+  #removeSiblingAuthorityChallenges(pending: PendingPresence): void {
+    if (pending.kind !== "pairing" && pending.kind !== "activation") return;
+    for (const [challengeId, candidate] of this.#pendingPresence) {
+      const sameAuthorityRequest = pending.kind === "pairing"
+        ? candidate.kind === "pairing" &&
+          candidate.pairingRequestId === pending.pairingRequestId
+        : candidate.kind === "activation" &&
+          candidate.activationId === pending.activationId;
+      if (sameAuthorityRequest) this.#pendingPresence.delete(challengeId);
     }
   }
 
@@ -1068,15 +1081,36 @@ export class VaultBrokerWorker {
     );
     const parsed = JSON.parse(ownerTranscript) as {
       displayName?: unknown;
+      expiresAt?: unknown;
       requestedCapabilities?: unknown;
     };
     const displayName = typeof parsed.displayName === "string"
       ? parsed.displayName
       : "this client";
     const requestedCapabilities = capabilities(parsed.requestedCapabilities);
+    for (const [, pending] of this.#pendingPresence) {
+      if (pending.kind === "pairing" &&
+        pending.pairingRequestId === pairingRequestId) {
+        throw new BrokerProtocolError(
+          "replayed",
+          "Pairing approval is already pending",
+        );
+      }
+    }
     this.#assertOwnerChallengeCapacity();
     const challengeId = randomUUID();
-    const challengeExpiresAt = this.#currentTime() + OWNER_CHALLENGE_TTL_MS;
+    const pairingExpiresAt = Date.parse(boundedString(
+      parsed.expiresAt,
+      64,
+      "pairing expiration",
+    ));
+    if (!Number.isFinite(pairingExpiresAt)) {
+      throw new BrokerProtocolError("invalid_request", "Pairing expiration is invalid");
+    }
+    const challengeExpiresAt = Math.min(
+      this.#currentTime() + OWNER_CHALLENGE_TTL_MS,
+      pairingExpiresAt,
+    );
     this.#pendingPresence.set(challengeId, {
       kind: "pairing",
       requestId: request.requestId,
@@ -1166,6 +1200,9 @@ export class VaultBrokerWorker {
     if (this.#authority().activationOwnerTranscriptForPending(activationId) !== ownerTranscript) {
       throw new BrokerProtocolError("signature_invalid", "Activation transcript changed");
     }
+    const activationTranscript = JSON.parse(ownerTranscript) as {
+      decisionExpiresAt?: unknown;
+    };
     const ttlMs = this.#activationTtls.get(activationId);
     if (ttlMs === undefined) {
       throw new BrokerProtocolError(
@@ -1194,7 +1231,21 @@ export class VaultBrokerWorker {
     const workSessionTtlMs = this.#authority().routineAuthenticationTtlMilliseconds();
     this.#assertOwnerChallengeCapacity();
     const challengeId = randomUUID();
-    const challengeExpiresAt = this.#currentTime() + OWNER_CHALLENGE_TTL_MS;
+    const activationDecisionExpiresAt = Date.parse(boundedString(
+      activationTranscript.decisionExpiresAt,
+      64,
+      "activation decision expiration",
+    ));
+    if (!Number.isFinite(activationDecisionExpiresAt)) {
+      throw new BrokerProtocolError(
+        "invalid_request",
+        "Activation decision expiration is invalid",
+      );
+    }
+    const challengeExpiresAt = Math.min(
+      this.#currentTime() + OWNER_CHALLENGE_TTL_MS,
+      activationDecisionExpiresAt,
+    );
     this.#pendingPresence.set(challengeId, {
       kind: "activation",
       requestId: request.requestId,
@@ -3031,6 +3082,7 @@ export class VaultBrokerWorker {
     }
     if (pending.kind === "lifecycle") this.#pendingLifecycleChallengeId = undefined;
     if (isRecoveryPresence(pending)) this.#pendingRecoveryChallengeId = undefined;
+    this.#removeSiblingAuthorityChallenges(pending);
     if (claimIssue === "role_mismatch" || claimIssue === "binding_mismatch") {
       if (pending.kind === "library-session" || pending.kind === "library-delete") {
         this.#librarySessions.delete(ownerSessionKey(pending.binding));

@@ -5464,7 +5464,15 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)openConnectionsFromSetup:(id)sender {
   (void)sender;
-  [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
+  BOOL recoveryReady = self.recoveryState.length == 0 ||
+      [self.recoveryState isEqualToString:@"ready"];
+  AfternoteProductSurface resolved =
+      [self displaySurface:AfternoteProductSurfaceConnections
+             recoveryReady:recoveryReady];
+  if (resolved == AfternoteProductSurfaceRecovery) {
+    [self refreshRecovery:nil];
+    return;
+  }
   if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];
   else [self authenticate:nil];
 }

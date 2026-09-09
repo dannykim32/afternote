@@ -25,10 +25,6 @@ if (process.versions.bun !== "1.3.14") {
   throw new Error(`Afternote native builds require Bun 1.3.14; found ${process.versions.bun ?? "unknown"}`);
 }
 const releaseBuild = process.env.AFTERNOTE_RELEASE_BUILD === "1";
-const REQUIRED_DEVELOPMENT_FORMULAS = {
-  sqlcipher: "4.18.0",
-  "openssl@4": "4.0.2",
-} as const;
 const outputRoot = join(repositoryRoot, "apps/local/native/build");
 const addonPath = join(outputRoot, "afternote_sqlcipher.node");
 const gatewayPath = join(outputRoot, "afternote-vault-broker-gateway");
@@ -36,15 +32,9 @@ const testGatewayPath = join(outputRoot, "afternote-vault-broker-gateway-test");
 const sqlcipherPath = join(outputRoot, "libsqlcipher.3.dylib");
 const cryptoPath = join(outputRoot, "libcrypto.4.dylib");
 const releaseDependenciesRoot = join(repositoryRoot, "apps/local/native/release-deps");
-const sqlcipherSource = releaseBuild
-  ? join(releaseDependenciesRoot, "libsqlcipher.3.dylib")
-  : "/opt/homebrew/opt/sqlcipher/lib/libsqlcipher.dylib";
-const cryptoSource = releaseBuild
-  ? join(releaseDependenciesRoot, "libcrypto.4.dylib")
-  : "/opt/homebrew/opt/openssl@4/lib/libcrypto.4.dylib";
-const sqlcipherInclude = releaseBuild
-  ? join(releaseDependenciesRoot, "include")
-  : "/opt/homebrew/opt/sqlcipher/include/sqlcipher";
+const sqlcipherSource = join(releaseDependenciesRoot, "libsqlcipher.3.dylib");
+const cryptoSource = join(releaseDependenciesRoot, "libcrypto.4.dylib");
+const sqlcipherInclude = join(releaseDependenciesRoot, "include");
 const acceptanceBuild = process.env.AFTERNOTE_ACCEPTANCE_BUILD === "1";
 const developmentOwnerPresenceBypass = resolveDevelopmentOwnerPresenceBypass({
   configured: process.env.AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS,
@@ -89,11 +79,8 @@ const ownerControlRequirement = resolvedPeerRequirement({
 if (process.platform !== "darwin" || process.arch !== "arm64") {
   throw new Error("The SQLCipher addon build currently requires macOS arm64");
 }
-if (releaseBuild) {
-  assertPinnedNativeReleaseInputs();
-} else {
-  assertDevelopmentFormulaVersions();
-}
+assertPreparedNativeDependencies();
+if (releaseBuild) assertPinnedReleaseToolchainInputs();
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(outputRoot, { recursive: true, mode: 0o700 });
@@ -111,9 +98,7 @@ run([
   "dynamic_lookup",
   "-I/opt/homebrew/opt/node/include/node",
   `-I${sqlcipherInclude}`,
-  ...(releaseBuild
-    ? [sqlcipherSource]
-    : ["-L/opt/homebrew/opt/sqlcipher/lib", "-lsqlcipher"]),
+  sqlcipherSource,
   "-framework",
   "Security",
   "-framework",
@@ -171,26 +156,9 @@ for (const path of [
 ]) chmodSync(path, 0o755);
 
 run(["install_name_tool", "-id", "@loader_path/libcrypto.4.dylib", cryptoPath]);
-if (releaseBuild) {
-  run(["install_name_tool", "-id", "@loader_path/libsqlcipher.3.dylib", sqlcipherPath]);
-} else {
-  run([
-    "install_name_tool",
-    "-id",
-    "@loader_path/libsqlcipher.3.dylib",
-    "-change",
-    cryptoSource,
-    "@loader_path/libcrypto.4.dylib",
-    sqlcipherPath,
-  ]);
-  run([
-    "install_name_tool",
-    "-change",
-    "/opt/homebrew/opt/sqlcipher/lib/libsqlcipher.dylib",
-    "@loader_path/libsqlcipher.3.dylib",
-    addonPath,
-  ]);
-}
+run(["install_name_tool", "-id", "@loader_path/libsqlcipher.3.dylib", sqlcipherPath]);
+assertDeploymentTarget(cryptoPath);
+assertDeploymentTarget(sqlcipherPath);
 for (const [identifier, path] of [
   ["dev.afternote.sqlcipher.crypto", cryptoPath],
   ["dev.afternote.sqlcipher.library", sqlcipherPath],
@@ -232,46 +200,22 @@ function requiredTeamId(): string {
   return value;
 }
 
-function assertPinnedNativeReleaseInputs(): void {
+function assertPreparedNativeDependencies(): void {
   const manifest = JSON.parse(readFileSync(
     join(repositoryRoot, "scripts/native-release-inputs.json"),
     "utf8",
   )) as Record<string, unknown>;
   const expectations: Array<[string, string]> = [
-    [process.execPath, requiredDigest(manifest.bunExecutableSha256, "Bun executable")],
     [sqlcipherSource, requiredDigest(manifest.sqlcipherLibrarySha256, "SQLCipher library")],
     [cryptoSource, requiredDigest(manifest.opensslLibrarySha256, "OpenSSL library")],
     [
       join(releaseDependenciesRoot, "include/sqlite3.h"),
       requiredDigest(manifest.sqlcipherHeaderSha256, "SQLCipher header"),
     ],
-    [
-      join(
-        repositoryRoot,
-        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64/libonnxruntime.1.21.0.dylib",
-      ),
-      requiredDigest(manifest.onnxRuntimeLibrarySha256, "ONNX Runtime library"),
-    ],
-    [
-      join(
-        repositoryRoot,
-        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64/onnxruntime_binding.node",
-      ),
-      requiredDigest(manifest.onnxRuntimeBindingSha256, "ONNX Runtime binding"),
-    ],
   ];
   for (const [path, expected] of expectations) {
     if (sha256File(path) !== expected) {
       throw new Error(`Native release input changed without review: ${path}`);
-    }
-  }
-  const headerExpectations: Array<[string, string]> = [[
-    "/opt/homebrew/opt/node/include/node",
-    requiredDigest(manifest.nodeHeadersSha256, "Node headers"),
-  ]];
-  for (const [path, expected] of headerExpectations) {
-    if (sha256Directory(path) !== expected) {
-      throw new Error(`Native release headers changed without review: ${path}`);
     }
   }
   const buildManifest = JSON.parse(readFileSync(
@@ -293,6 +237,49 @@ function assertPinnedNativeReleaseInputs(): void {
     buildManifest.sqlcipherSourceSha256 !== (manifest.sqlcipherSource as Record<string, unknown>)?.sha256
   ) {
     throw new Error("Prepared native dependency sources disagree with reviewed inputs");
+  }
+}
+
+function assertPinnedReleaseToolchainInputs(): void {
+  const manifest = JSON.parse(readFileSync(
+    join(repositoryRoot, "scripts/native-release-inputs.json"),
+    "utf8",
+  )) as Record<string, unknown>;
+  const expectations: Array<[string, string]> = [
+    [process.execPath, requiredDigest(manifest.bunExecutableSha256, "Bun executable")],
+    [
+      join(
+        repositoryRoot,
+        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64/libonnxruntime.1.21.0.dylib",
+      ),
+      requiredDigest(manifest.onnxRuntimeLibrarySha256, "ONNX Runtime library"),
+    ],
+    [
+      join(
+        repositoryRoot,
+        "node_modules/.bun/onnxruntime-node@1.21.0/node_modules/onnxruntime-node/bin/napi-v3/darwin/arm64/onnxruntime_binding.node",
+      ),
+      requiredDigest(manifest.onnxRuntimeBindingSha256, "ONNX Runtime binding"),
+    ],
+  ];
+  for (const [path, expected] of expectations) {
+    if (sha256File(path) !== expected) {
+      throw new Error(`Native release input changed without review: ${path}`);
+    }
+  }
+  const nodeHeaders = "/opt/homebrew/opt/node/include/node";
+  if (sha256Directory(nodeHeaders) !==
+    requiredDigest(manifest.nodeHeadersSha256, "Node headers")) {
+    throw new Error(`Native release headers changed without review: ${nodeHeaders}`);
+  }
+}
+
+function assertDeploymentTarget(path: string): void {
+  const output = run(["vtool", "-show-build", path]);
+  const versions = [...output.matchAll(/\bminos\s+(\d+\.\d+)/g)]
+    .map((match) => match[1]);
+  if (versions.length === 0 || versions.some((version) => version !== "13.3")) {
+    throw new Error(`Native dependency has an unexpected macOS deployment target: ${path}`);
   }
 }
 
@@ -368,13 +355,14 @@ console.log(
   ),
 );
 
-function run(command: string[]): void {
+function run(command: string[]): string {
   const [tool, ...args] = command;
   if (!tool) throw new Error("Native build command is empty");
   const tools: Readonly<Record<string, string>> = {
     "clang++": "/usr/bin/clang++",
     codesign: "/usr/bin/codesign",
     install_name_tool: "/usr/bin/install_name_tool",
+    vtool: "/usr/bin/vtool",
   };
   const resolvedTool = tool.startsWith("/") ? tool : tools[tool];
   if (!resolvedTool) throw new Error(`Native build tool is not pinned: ${tool}`);
@@ -390,23 +378,5 @@ function run(command: string[]): void {
   if (result.exitCode !== 0) {
     throw new Error(`Command failed (${resolvedCommand.join(" ")}): ${result.stderr.toString()}`);
   }
-}
-
-function assertDevelopmentFormulaVersions(): void {
-  for (const [formula, expectedVersion] of Object.entries(
-    REQUIRED_DEVELOPMENT_FORMULAS,
-  )) {
-    const result = Bun.spawnSync([
-      "/opt/homebrew/bin/brew",
-      "list",
-      "--versions",
-      formula,
-    ], { stdout: "pipe", stderr: "pipe" });
-    const installedVersion = result.stdout.toString().trim().split(/\s+/)[1];
-    if (result.exitCode !== 0 || installedVersion !== expectedVersion) {
-      throw new Error(
-        `Afternote native builds require Homebrew ${formula} ${expectedVersion}; found ${installedVersion ?? "unavailable"}`,
-      );
-    }
-  }
+  return result.stdout.toString();
 }
