@@ -6,6 +6,15 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.10 - 2026-09-09
+
+### Fixed
+
+- Development archives now refuse to replace an existing Developer ID installation, preventing
+  an ad-hoc broker from being selected for a vault protected by the release Keychain identity.
+- Source-built apps identify themselves to macOS as Afternote Development with a separate bundle
+  identifier, so Finder and the Dock do not present them as the signed Afternote app.
+
 ## 2.0.0-alpha.9 - 2026-09-08
 
 ### Added

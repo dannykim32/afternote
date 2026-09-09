@@ -28,7 +28,9 @@ bun run package:local
 
 This verifies the expected local toolchain, compiles the native boundary, generates supply
 chain material, and builds an unsigned archive for testing. It is not suitable for public
-distribution.
+distribution. A development archive deliberately refuses to replace an existing Developer ID
+installation because the two builds cannot share the release Keychain trust domain. Test it in
+a separate macOS account, or use the signed and notarized DMG when validating an upgrade.
 
 Exact search remains the release default. A user can explicitly run
 `afternote semantic install` to fetch the pinned, digest-verified local model after reviewing

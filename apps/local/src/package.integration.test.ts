@@ -163,6 +163,25 @@ exit 0
     }
   });
 
+  it("labels the source-built application as a distinct development app", () => {
+    const plist = join(alphaZero.ownerControlAppPath, "Contents/Info.plist");
+    const displayName = run([
+      "/usr/libexec/PlistBuddy",
+      "-c",
+      "Print :CFBundleDisplayName",
+      plist,
+    ], baseEnvironment()).stdout.trim();
+    const identifier = run([
+      "/usr/libexec/PlistBuddy",
+      "-c",
+      "Print :CFBundleIdentifier",
+      plist,
+    ], baseEnvironment()).stdout.trim();
+
+    expect(displayName).toBe("Afternote Development");
+    expect(identifier).toBe("dev.afternote.owner-control.development");
+  });
+
   it("installs, upgrades, rolls back, uninstalls, and reinstalls transactionally", () => {
     const home = join(directory, "lifecycle-home");
     const installRoot = join(home, "Library/Application Support/Afternote");
@@ -199,6 +218,52 @@ exit 0
     expect(readlinkSync(join(installRoot, "current"))).toBe("versions/2.0.0-alpha.1");
     run([join(alphaOne.portableDirectory, "uninstall.sh")], environment);
     expect(existsSync(installRoot)).toBe(false);
+  }, 30_000);
+
+  it("refuses to cross from a signed installation into an ad-hoc development build", () => {
+    const home = join(directory, "trust-domain-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const codesign = join(directory, "trust-domain-codesign");
+    const signedApplication = join(directory, "SignedAfternote.app");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(signedApplication, { recursive: true });
+    writeExecutable(codesign, `#!/bin/sh
+case "\${!#}" in
+  "${signedApplication}") printf 'Identifier=dev.afternote.owner-control\\nTeamIdentifier=486B2A8N8A\\n' >&2 ;;
+  *) printf 'Identifier=dev.afternote.owner-control.development\\nTeamIdentifier=not set\\n' >&2 ;;
+esac
+exit 0
+`);
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+      AFTERNOTE_CODESIGN: codesign,
+    };
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+    writeFileSync(
+      join(installRoot, "versions/2.0.0-alpha.0/application-path"),
+      `${signedApplication}\n`,
+    );
+    const result = Bun.spawnSync([join(alphaOne.portableDirectory, "install.sh")], {
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "cannot replace an installation from a different signing trust domain",
+    );
+    expect(readlinkSync(join(installRoot, "current")))
+      .toBe("versions/2.0.0-alpha.0");
+    expect(existsSync(join(installRoot, "versions/2.0.0-alpha.1"))).toBe(false);
   }, 30_000);
 
   it("repairs a missing public command link for the active installed version", () => {

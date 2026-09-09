@@ -62,6 +62,54 @@ if [ -L "$application_path" ] || [ ! -d "$application_path" ] ||
   exit 1
 fi
 
+verify_upgrade_trust_domain() {
+  if [ ! -L "$install_root/current" ]; then
+    return 0
+  fi
+  active_version=$(readlink "$install_root/current")
+  case "$active_version" in
+    versions/*) active_version_name=${active_version#versions/} ;;
+    *)
+      printf 'Afternote cannot verify the active installation trust domain.\n' >&2
+      return 1
+      ;;
+  esac
+  case "$active_version_name" in
+    ""|*/*|*..*|*[!0-9A-Za-z.+-]*)
+      printf 'Afternote cannot verify the active installation trust domain.\n' >&2
+      return 1
+      ;;
+  esac
+  active_root="$install_root/$active_version"
+  active_application_record="$active_root/application-path"
+  if [ -L "$active_application_record" ] || [ ! -f "$active_application_record" ]; then
+    printf 'Afternote cannot verify the active installation trust domain.\n' >&2
+    return 1
+  fi
+  active_application=$(sed -n '1p' "$active_application_record")
+  case "$active_application" in
+    /*) ;;
+    *)
+      printf 'Afternote cannot verify the active installation trust domain.\n' >&2
+      return 1
+      ;;
+  esac
+  active_trust=$(afternote_code_trust_domain "$active_application") || {
+    printf 'Afternote cannot verify the active installation trust domain.\n' >&2
+    return 1
+  }
+  incoming_trust=$(afternote_code_trust_domain "$application_path") || {
+    printf 'Afternote cannot verify the incoming application trust domain.\n' >&2
+    return 1
+  }
+  if [ "$active_trust" != "$incoming_trust" ]; then
+    printf 'Afternote cannot replace an installation from a different signing trust domain. Use a signed Afternote update, or test the source build in a separate macOS account.\n' >&2
+    return 1
+  fi
+}
+
+verify_upgrade_trust_domain
+
 xml_escape() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
 }

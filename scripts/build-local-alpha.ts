@@ -112,6 +112,12 @@ export async function buildLocalAlpha(options?: {
     throw new Error("Afternote Local packaging currently supports macOS arm64 only");
   }
   const signing = signingConfiguration();
+  const ownerControlIdentifier = signing.release
+    ? OWNER_CONTROL_IDENTIFIER
+    : `${OWNER_CONTROL_IDENTIFIER}.development`;
+  const ownerControlDisplayName = signing.release
+    ? "Afternote"
+    : "Afternote Development";
   const minimumMacosVersion = "13.3";
   const dependencyLockPath = join(repositoryRoot, "bun.lock");
   if (!existsSync(dependencyLockPath) || !lstatSync(dependencyLockPath).isFile() ||
@@ -267,12 +273,12 @@ export async function buildLocalAlpha(options?: {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
-<key>CFBundleDisplayName</key><string>Afternote</string>
+<key>CFBundleDisplayName</key><string>${ownerControlDisplayName}</string>
 <key>CFBundleExecutable</key><string>Afternote</string>
-<key>CFBundleIdentifier</key><string>${OWNER_CONTROL_IDENTIFIER}</string>
+<key>CFBundleIdentifier</key><string>${ownerControlIdentifier}</string>
 <key>CFBundleIconFile</key><string>Afternote</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleName</key><string>Afternote</string>
+<key>CFBundleName</key><string>${ownerControlDisplayName}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>AfternotePackageVersion</key><string>${version}</string>
 <key>CFBundleShortVersionString</key><string>${versionMetadata.marketingVersion}</string>
@@ -402,11 +408,11 @@ export async function buildLocalAlpha(options?: {
     signing.identity,
     ...(signing.release ? ["--options", "runtime", "--timestamp"] : []),
     "--identifier",
-    OWNER_CONTROL_IDENTIFIER,
+    ownerControlIdentifier,
     ownerControlAppPath,
   ]);
   const ownerControlRequirement = signing.release
-    ? signedRequirement(OWNER_CONTROL_IDENTIFIER, signing.teamId!)
+    ? signedRequirement(ownerControlIdentifier, signing.teamId!)
     : exactCodeRequirement(ownerControlAppPath);
   runPackagingCommand([
     process.execPath,
@@ -784,7 +790,7 @@ export async function buildLocalAlpha(options?: {
       "runtime",
       "--timestamp",
       "--identifier",
-      OWNER_CONTROL_IDENTIFIER,
+      ownerControlIdentifier,
       ownerControlAppPath,
     ]);
     runPackagingCommand([

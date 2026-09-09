@@ -6,6 +6,11 @@ export PATH
 broker_label="__AFTERNOTE_BROKER_IDENTIFIER__"
 release_artifact="__AFTERNOTE_RELEASE_ARTIFACT__"
 release_team_id="__AFTERNOTE_TEAM_ID__"
+if [ "$release_artifact" = "1" ]; then
+  codesign_bin=/usr/bin/codesign
+else
+  codesign_bin=${AFTERNOTE_CODESIGN:-/usr/bin/codesign}
+fi
 launchctl_bin=${AFTERNOTE_LAUNCHCTL:-/bin/launchctl}
 broker_healthcheck=${AFTERNOTE_BROKER_HEALTHCHECK:-"$install_root/current/afternote"}
 broker_health_attempts=${AFTERNOTE_BROKER_HEALTH_ATTEMPTS:-50}
@@ -71,6 +76,17 @@ afternote_release_lifecycle_lock() {
 }
 
 broker_validate_lifecycle() {
+  case "$codesign_bin" in
+    /*) ;;
+    *)
+      printf 'AFTERNOTE_CODESIGN must be an absolute path.\n' >&2
+      return 1
+      ;;
+  esac
+  if [ ! -x "$codesign_bin" ]; then
+    printf 'Afternote could not execute codesign at %s.\n' "$codesign_bin" >&2
+    return 1
+  fi
   case "$launchctl_bin" in
     /*) ;;
     *)
@@ -107,6 +123,22 @@ broker_validate_lifecycle() {
     printf 'Afternote LaunchAgent path must be a regular file.\n' >&2
     return 1
   fi
+}
+
+afternote_code_trust_domain() {
+  code_path=$1
+  if [ -L "$code_path" ] || { [ ! -f "$code_path" ] && [ ! -d "$code_path" ]; }; then
+    return 1
+  fi
+  code_details=$("$codesign_bin" -d --verbose=4 "$code_path" 2>&1) || return 1
+  code_identifier=$(printf '%s\n' "$code_details" | sed -n 's/^Identifier=//p')
+  team_id=$(printf '%s\n' "$code_details" | sed -n 's/^TeamIdentifier=//p')
+  if [ -z "$code_identifier" ] || [ -z "$team_id" ] ||
+    [ "$(printf '%s\n' "$code_identifier" | wc -l | tr -d ' ')" -ne 1 ] ||
+    [ "$(printf '%s\n' "$team_id" | wc -l | tr -d ' ')" -ne 1 ]; then
+    return 1
+  fi
+  printf '%s|%s\n' "$code_identifier" "$team_id"
 }
 
 release_code_requirement() {

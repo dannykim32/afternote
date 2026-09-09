@@ -32,7 +32,7 @@ Confirm the release identity recorded in the bundle:
   /Volumes/Afternote/Afternote.app/Contents/Info.plist
 ```
 
-For alpha.9 these values are, in order, `2.0.0-alpha.9`, `2.0.0`, `9`, and `13.3`.
+For alpha.10 these values are, in order, `2.0.0-alpha.10`, `2.0.0`, `10`, and `13.3`.
 The first value is Afternote's full package version. The next two are Apple's required numeric
 marketing and build versions.
 
