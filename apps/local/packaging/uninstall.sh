@@ -64,19 +64,7 @@ codex_entry_present=0
 if [ -f "$codex_config" ] && grep -q '^\[mcp_servers\.afternote\]$' "$codex_config"; then
   codex_entry_present=1
 fi
-codex_available=0
-if [ "$codex_entry_present" -eq 1 ] &&
-  (command -v codex >/dev/null 2>&1 ||
-    [ -x "$HOME/.local/bin/codex" ] ||
-    [ -x /opt/homebrew/bin/codex ] ||
-    [ -x /usr/local/bin/codex ] ||
-    [ -x /Applications/ChatGPT.app/Contents/Resources/codex ] ||
-    [ -x /Applications/Codex.app/Contents/Resources/codex ] ||
-    [ -x "$HOME/Applications/ChatGPT.app/Contents/Resources/codex" ] ||
-    [ -x "$HOME/Applications/Codex.app/Contents/Resources/codex" ]); then
-  codex_available=1
-fi
-if [ "$codex_entry_present" -eq 1 ] && [ "$codex_available" -eq 1 ]; then
+if [ "$codex_entry_present" -eq 1 ]; then
   if [ -L "$management_binary" ] || [ ! -f "$management_binary" ] ||
     [ ! -x "$management_binary" ]; then
     printf 'Afternote cannot safely inspect connector ownership. No files were removed.\n' >&2
@@ -88,13 +76,17 @@ if [ "$codex_entry_present" -eq 1 ] && [ "$codex_available" -eq 1 ]; then
     "$management_binary" codex status 2>/dev/null); then
     case "$codex_status" in
       *'"configHealthy": true'*) codex_was_managed=1 ;;
+      *'"toolAvailable": false'*)
+        printf 'Codex is unavailable or unverified; review its MCP settings for a stale Afternote entry.\n' >&2
+        ;;
+      *)
+        printf 'Codex MCP settings contain an Afternote entry that this installation does not own.\n' >&2
+        ;;
     esac
   else
     printf 'Codex connector status could not be inspected. No Afternote files were removed.\n' >&2
     exit 1
   fi
-elif [ "$codex_entry_present" -eq 1 ]; then
-  printf 'Codex is unavailable; review its MCP settings for a stale Afternote entry.\n' >&2
 fi
 
 claude_was_managed=0
@@ -103,15 +95,7 @@ claude_entry_present=0
 if [ -f "$claude_config" ] && grep -Eq '"afternote"[[:space:]]*:' "$claude_config"; then
   claude_entry_present=1
 fi
-claude_available=0
-if [ "$claude_entry_present" -eq 1 ] &&
-  (command -v claude >/dev/null 2>&1 ||
-    [ -x "$HOME/.local/bin/claude" ] ||
-    [ -x /opt/homebrew/bin/claude ] ||
-    [ -x /usr/local/bin/claude ]); then
-  claude_available=1
-fi
-if [ "$claude_entry_present" -eq 1 ] && [ "$claude_available" -eq 1 ]; then
+if [ "$claude_entry_present" -eq 1 ]; then
   if [ -L "$management_binary" ] || [ ! -f "$management_binary" ] ||
     [ ! -x "$management_binary" ]; then
     printf 'Afternote cannot safely inspect connector ownership. No files were removed.\n' >&2
@@ -123,13 +107,17 @@ if [ "$claude_entry_present" -eq 1 ] && [ "$claude_available" -eq 1 ]; then
     "$management_binary" claude-code status 2>/dev/null); then
     case "$claude_status" in
       *'"configHealthy": true'*) claude_was_managed=1 ;;
+      *'"toolAvailable": false'*)
+        printf 'Claude Code is unavailable or unverified; review its MCP settings for a stale Afternote entry.\n' >&2
+        ;;
+      *)
+        printf 'Claude Code MCP settings contain an Afternote entry that this installation does not own.\n' >&2
+        ;;
     esac
   else
     printf 'Claude Code connector status could not be inspected. No Afternote files were removed.\n' >&2
     exit 1
   fi
-elif [ "$claude_entry_present" -eq 1 ]; then
-  printf 'Claude Code is unavailable; review its MCP settings for a stale Afternote entry.\n' >&2
 fi
 
 previous_bin_link=""
@@ -202,6 +190,7 @@ fi
 rm "$install_root/current"
 stop_legacy_runtime "$legacy_runtime_binary"
 verify_legacy_runtime_retired
+afternote_remove_legacy_telemetry_state
 
 if [ -f "$launch_agent" ]; then
   rm "$launch_agent"

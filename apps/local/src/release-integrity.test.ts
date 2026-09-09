@@ -31,6 +31,8 @@ describe("public release input controls", () => {
       .toThrow("CPATH");
     expect(() => assertSafeReleaseEnvironment({ BUN_CONFIG_REGISTRY: "https://example.invalid" }))
       .toThrow("BUN_CONFIG_REGISTRY");
+    expect(() => assertSafeReleaseEnvironment({ AFTERNOTE_PACKAGE_VERSION: "2.0.0-alpha.8" }))
+      .toThrow("AFTERNOTE_PACKAGE_VERSION");
   });
 
   it("passes only the reviewed release environment", () => {

@@ -187,6 +187,11 @@ export async function manageClaudeCodeIntegration(
   if (action === "rotate-identity") {
     throw new Error("Claude Code identity rotation must be routed separately");
   }
+  if (!standalone) {
+    throw new Error(
+      "Claude Code integration must be configured from a standalone Afternote artifact",
+    );
+  }
   return manageConnectorLifecycle(
     action,
     standalone,

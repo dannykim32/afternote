@@ -1,9 +1,12 @@
 # Changelog
 
 This project follows [Semantic Versioning](https://semver.org/) for public source and
-binary releases. Until the first public tag, changes remain under Unreleased.
+binary releases. Changes intended for the next public tag may be staged under their version
+during release review.
 
 ## Unreleased
+
+## 2.0.0-alpha.9 - 2026-09-08
 
 ### Added
 

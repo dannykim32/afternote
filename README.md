@@ -15,15 +15,11 @@ hosted service, customer data, deployment configuration, or release credentials.
 
 Afternote is an early alpha for Apple Silicon Macs running macOS 13.3 or newer.
 
-The easiest path is the signed and notarized DMG on the
-[latest release](https://github.com/dannykim32/afternote/releases/latest). Download the DMG
-and `SHA256SUMS` together, then follow [the verification steps](docs/VERIFY_RELEASE.md)
-before installing it.
-
-You can also build a development package from source:
+You can build the current candidate from source with Bun 1.3.14:
 
 ```bash
 brew install bun node sqlcipher openssl@4
+bun --version # must print 1.3.14
 git clone https://github.com/dannykim32/afternote.git
 cd afternote
 bun install --frozen-lockfile
@@ -37,6 +33,11 @@ the checksum there, extract the archive, and run the enclosed `install.sh`. The 
 signed for local development; it does not carry the maintainer's Developer ID, notarization
 ticket, or release Keychain entitlements. Public binaries are produced only by the guarded
 release flow in [RELEASING.md](docs/RELEASING.md).
+
+After work-laptop acceptance, the signed and notarized DMG will be published on the
+[GitHub Releases page](https://github.com/dannykim32/afternote/releases). Download the DMG
+and `SHA256SUMS` together, then follow [the verification steps](docs/VERIFY_RELEASE.md)
+before installing it.
 
 ## Remember and Recall
 

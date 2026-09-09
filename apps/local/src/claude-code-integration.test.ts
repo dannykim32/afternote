@@ -22,6 +22,12 @@ describe("Claude Code integration actions", () => {
     ).rejects.toThrow("Claude Code identity rotation must be routed separately");
   });
 
+  it("rejects non-standalone use before resolving any installation paths", async () => {
+    await expect(manageClaudeCodeIntegration("status", false)).rejects.toThrow(
+      "Claude Code integration must be configured from a standalone Afternote artifact",
+    );
+  });
+
   it("recognizes only the exact Afternote-owned legacy entry for migration", () => {
     const command = "/Users/test/.local/bin/afternote";
     expect(isOwnedLegacyClaudeCodeServer({

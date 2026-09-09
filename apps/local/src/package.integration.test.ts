@@ -18,6 +18,7 @@ import {
   acceptanceBrokerMachService,
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
+  releaseVersionMetadata,
   releaseWorkerEntrypoint,
   renderPackagingText,
   signedRequirement,
@@ -82,6 +83,31 @@ public exact
     expect(requirement).toContain('certificate leaf[subject.OU] = "486B2A8N8A"');
     expect(requirement).toContain("1.2.840.113635.100.6.1.13");
     expect(requirement).toContain("1.2.840.113635.100.6.2.6");
+  });
+
+  it("keeps package, marketing, and numeric Apple build versions distinct", () => {
+    expect(releaseVersionMetadata({
+      rootVersion: "2.0.0-alpha.9",
+      workspaceVersions: ["2.0.0-alpha.9", "2.0.0-alpha.9"],
+      bundleVersion: "9",
+      release: true,
+    })).toEqual({
+      packageVersion: "2.0.0-alpha.9",
+      marketingVersion: "2.0.0",
+      bundleVersion: "9",
+    });
+    expect(() => releaseVersionMetadata({
+      rootVersion: "2.0.0-alpha.9",
+      workspaceVersions: ["2.0.0-alpha.8"],
+      bundleVersion: "9",
+      release: true,
+    })).toThrow("Workspace package versions");
+    expect(() => releaseVersionMetadata({
+      rootVersion: "2.0.0-alpha.9",
+      workspaceVersions: ["2.0.0-alpha.9"],
+      bundleVersion: "alpha.9",
+      release: true,
+    })).toThrow("Apple bundle version");
   });
 });
 
@@ -149,8 +175,12 @@ exit 0
 
     run([join(alphaZero.portableDirectory, "install.sh")], environment);
     expect(readlinkSync(join(installRoot, "current"))).toBe("versions/2.0.0-alpha.0");
+    const legacyTelemetry = join(home, ".afternote/.vault.db.afternote-telemetry.json");
+    mkdirSync(join(home, ".afternote"), { recursive: true });
+    writeFileSync(legacyTelemetry, '{"enabled":true,"installationId":"retired"}\n');
     run([join(alphaOne.portableDirectory, "install.sh")], environment);
     expect(readlinkSync(join(installRoot, "current"))).toBe("versions/2.0.0-alpha.1");
+    expect(existsSync(legacyTelemetry)).toBe(false);
     run([
       join(alphaOne.portableDirectory, "rollback.sh"),
       "2.0.0-alpha.0",
@@ -235,6 +265,46 @@ exit 1
     run([join(alphaZero.portableDirectory, "uninstall.sh")], environment);
 
     expect(await Bun.file(actions).text()).toContain("codex-remove");
+    expect(existsSync(installRoot)).toBe(false);
+  }, 30_000);
+
+  it("warns about a stale Codex entry when every discovered host fails verification", () => {
+    const home = join(directory, "codex-stale-uninstall-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(
+      join(home, ".codex/config.toml"),
+      "[mcp_servers.afternote]\ncommand = \"afternote\"\n",
+    );
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+    };
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+    writeExecutable(
+      join(installRoot, "versions/2.0.0-alpha.0/afternote"),
+      `#!/bin/sh
+if [ "\${1:-}" = codex ] && [ "\${2:-}" = status ]; then
+  printf '{"toolAvailable": false}\n'
+  exit 0
+fi
+exit 1
+`,
+    );
+    const result = Bun.spawnSync([join(alphaZero.portableDirectory, "uninstall.sh")], {
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toContain("Codex is unavailable or unverified");
     expect(existsSync(installRoot)).toBe(false);
   }, 30_000);
 

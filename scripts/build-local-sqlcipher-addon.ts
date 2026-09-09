@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import {
+  acceptanceBrokerMachService,
+  developmentOwnerPresenceBypass as resolveDevelopmentOwnerPresenceBypass,
   resolvedPeerRequirement,
   signedRequirement,
 } from "./release-policy";
@@ -44,24 +46,15 @@ const sqlcipherInclude = releaseBuild
   ? join(releaseDependenciesRoot, "include")
   : "/opt/homebrew/opt/sqlcipher/include/sqlcipher";
 const acceptanceBuild = process.env.AFTERNOTE_ACCEPTANCE_BUILD === "1";
-const developmentOwnerPresenceBypass =
-  process.env.AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS === "1";
-if (developmentOwnerPresenceBypass && releaseBuild) {
-  throw new Error("Release native build cannot bypass owner presence");
-}
-if (acceptanceBuild && releaseBuild) {
-  throw new Error("Release native build cannot enable acceptance tracing");
-}
-if (
-  acceptanceBuild &&
-  !/^dev\.afternote\.vault-broker\.acceptance\.[A-Za-z0-9][A-Za-z0-9.-]*$/.test(
-    process.env.AFTERNOTE_ACCEPTANCE_BROKER_MACH_SERVICE ?? "",
-  )
-) {
-  throw new Error(
-    "Acceptance native build requires a namespaced AFTERNOTE_ACCEPTANCE_BROKER_MACH_SERVICE",
-  );
-}
+const developmentOwnerPresenceBypass = resolveDevelopmentOwnerPresenceBypass({
+  configured: process.env.AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS,
+  releaseBuild: process.env.AFTERNOTE_RELEASE_BUILD,
+});
+acceptanceBrokerMachService({
+  acceptanceBuild: process.env.AFTERNOTE_ACCEPTANCE_BUILD,
+  configuredService: process.env.AFTERNOTE_ACCEPTANCE_BROKER_MACH_SERVICE,
+  releaseBuild: process.env.AFTERNOTE_RELEASE_BUILD,
+});
 const signingIdentity = releaseBuild
   ? requiredEnvironment("AFTERNOTE_SIGNING_IDENTITY")
   : "-";
@@ -108,9 +101,10 @@ run([
   "clang++",
   "-std=c++17",
   "-O2",
+  "-mcpu=apple-m1",
   "-fPIC",
   "-fblocks",
-  ...(releaseBuild ? ["-mmacosx-version-min=13.3"] : []),
+  "-mmacosx-version-min=13.3",
   ...(releaseBuild ? ["-DAFTERNOTE_RELEASE_BUILD=1"] : []),
   "-bundle",
   "-undefined",
@@ -135,7 +129,7 @@ for (const [path, testing] of [[gatewayPath, false], [testGatewayPath, true]] as
     "-O2",
     "-fobjc-arc",
     "-fblocks",
-    ...(releaseBuild ? ["-mmacosx-version-min=13.3"] : []),
+    "-mmacosx-version-min=13.3",
     ...(testing ? ["-DAFTERNOTE_GATEWAY_TESTING=1"] : []),
     ...(!testing && acceptanceBuild ? ["-DAFTERNOTE_ACCEPTANCE_TRACE=1"] : []),
     ...(!testing && !releaseBuild ? ["-DAFTERNOTE_DEVELOPMENT_BUILD=1"] : []),

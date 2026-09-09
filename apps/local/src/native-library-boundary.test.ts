@@ -189,7 +189,8 @@ describe("native Library production boundary", () => {
     );
     expect(nativeAppSource).toContain("buildSetupView");
     expect(nativeAppSource).toContain("buildSettingsView");
-    expect(nativeAppSource).toContain("kRecoveryTabIndex");
+    expect(nativeAppSource).toContain("AfternoteTabIndexForSurface(resolved)");
+    expect(nativeAppSource).not.toMatch(/k(?:Memory|Connections|Recovery|Setup|Settings)TabIndex/);
   });
 
   it("refreshes Notes after connector writes and exposes history from a search citation", () => {
@@ -462,7 +463,9 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('requestMethod:@"recovery.status"');
     expect(nativeAppSource).toContain("IsRecoveryStatusResult");
     expect(nativeAppSource).toContain('segmentedControlWithLabels:@[ @"Notes", @"Connections" ]');
-    expect(nativeAppSource).toContain("self.surfaceSelector.selectedSegment = -1");
+    expect(nativeAppSource).toContain(
+      "[self displaySurface:AfternoteProductSurfaceRecovery recoveryReady:YES]",
+    );
     expect(nativeAppSource).toContain('requestMethod:@"recovery.migrate"');
     expect(nativeAppSource).toContain('requestMethod:@"recovery.restore"');
     expect(nativeAppSource).toContain("NSOpenPanel");

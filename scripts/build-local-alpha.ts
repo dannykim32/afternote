@@ -36,6 +36,7 @@ import {
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseEntitlements,
+  releaseVersionMetadata,
   releaseWorkerEntrypoint,
   renderPackagingText,
   resolvedPeerRequirement,
@@ -46,6 +47,7 @@ export {
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseEntitlements,
+  releaseVersionMetadata,
   releaseWorkerEntrypoint,
   renderPackagingText,
   resolvedPeerRequirement,
@@ -58,6 +60,8 @@ assertPinnedBun();
 
 export type LocalAlphaArtifacts = {
   version: string;
+  marketingVersion: string;
+  bundleVersion: string;
   platform: "darwin-arm64";
   binaryPath: string;
   brokerBinaryPath: string;
@@ -108,7 +112,7 @@ export async function buildLocalAlpha(options?: {
     throw new Error("Afternote Local packaging currently supports macOS arm64 only");
   }
   const signing = signingConfiguration();
-  const minimumMacosVersion = signing.release ? "13.3" : "26.0";
+  const minimumMacosVersion = "13.3";
   const dependencyLockPath = join(repositoryRoot, "bun.lock");
   if (!existsSync(dependencyLockPath) || !lstatSync(dependencyLockPath).isFile() ||
     lstatSync(dependencyLockPath).isSymbolicLink()) {
@@ -168,12 +172,22 @@ export async function buildLocalAlpha(options?: {
 
   const rootPackage = JSON.parse(
     readFileSync(join(repositoryRoot, "package.json"), "utf8"),
-  ) as { version: string };
-  const version = options?.version ??
-    process.env.AFTERNOTE_PACKAGE_VERSION ?? rootPackage.version;
-  if (!isPackageVersion(version)) {
-    throw new Error(`Invalid Afternote package version: ${version}`);
-  }
+  ) as { version: string; afternote?: { bundleVersion?: string } };
+  const workspaceVersions = [
+    "apps/local/package.json",
+    "packages/mcp/package.json",
+    "packages/memory/package.json",
+  ].map((path) => (JSON.parse(readFileSync(join(repositoryRoot, path), "utf8")) as {
+    version: string;
+  }).version);
+  const versionMetadata = releaseVersionMetadata({
+    rootVersion: rootPackage.version,
+    workspaceVersions,
+    bundleVersion: rootPackage.afternote?.bundleVersion ?? "",
+    requestedVersion: options?.version,
+    release: signing.release,
+  });
+  const version = versionMetadata.packageVersion;
   const outputDirectory = resolve(
     options?.outputDirectory ?? join(repositoryRoot, "build/local-alpha"),
   );
@@ -260,8 +274,9 @@ export async function buildLocalAlpha(options?: {
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>CFBundleName</key><string>Afternote</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>${version}</string>
-<key>CFBundleVersion</key><string>${version}</string>
+<key>AfternotePackageVersion</key><string>${version}</string>
+<key>CFBundleShortVersionString</key><string>${versionMetadata.marketingVersion}</string>
+<key>CFBundleVersion</key><string>${versionMetadata.bundleVersion}</string>
 <key>LSMinimumSystemVersion</key><string>${minimumMacosVersion}</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
@@ -276,8 +291,9 @@ export async function buildLocalAlpha(options?: {
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>CFBundleName</key><string>Afternote Vault Worker</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>${version}</string>
-<key>CFBundleVersion</key><string>${version}</string>
+<key>AfternotePackageVersion</key><string>${version}</string>
+<key>CFBundleShortVersionString</key><string>${versionMetadata.marketingVersion}</string>
+<key>CFBundleVersion</key><string>${versionMetadata.bundleVersion}</string>
 <key>LSBackgroundOnly</key><true/>
 <key>LSMinimumSystemVersion</key><string>${minimumMacosVersion}</string>
 </dict></plist>
@@ -292,8 +308,9 @@ export async function buildLocalAlpha(options?: {
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>CFBundleName</key><string>Afternote Client Signer</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>${version}</string>
-<key>CFBundleVersion</key><string>${version}</string>
+<key>AfternotePackageVersion</key><string>${version}</string>
+<key>CFBundleShortVersionString</key><string>${versionMetadata.marketingVersion}</string>
+<key>CFBundleVersion</key><string>${versionMetadata.bundleVersion}</string>
 <key>LSBackgroundOnly</key><true/>
 <key>LSMinimumSystemVersion</key><string>${minimumMacosVersion}</string>
 </dict></plist>
@@ -340,7 +357,7 @@ export async function buildLocalAlpha(options?: {
     "-O2",
     "-fobjc-arc",
     "-fblocks",
-    ...(signing.release ? ["-mmacosx-version-min=13.3"] : []),
+    "-mmacosx-version-min=13.3",
     ...(acceptanceBuild ? ["-DAFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING=1"] : []),
     ...(!signing.release ? ["-DAFTERNOTE_DEVELOPMENT_BUILD=1"] : []),
     ...(signing.release ? ["-DAFTERNOTE_RELEASE_BUILD=1"] : []),
@@ -513,7 +530,7 @@ export async function buildLocalAlpha(options?: {
     "-std=c++17",
     "-O2",
     "-fobjc-arc",
-    ...(signing.release ? ["-mmacosx-version-min=13.3"] : []),
+    "-mmacosx-version-min=13.3",
     `-DAFTERNOTE_ALLOWED_PARENT_CODE_REQUIREMENT=${JSON.stringify(allowedSignerParents)}`,
     `-DAFTERNOTE_CLIENT_KEYCHAIN_ACCESS_GROUP=${JSON.stringify(
       signing.clientAccessGroup ?? "development-unavailable",
@@ -803,6 +820,8 @@ export async function buildLocalAlpha(options?: {
 
   return {
     version,
+    marketingVersion: versionMetadata.marketingVersion,
+    bundleVersion: versionMetadata.bundleVersion,
     platform: "darwin-arm64",
     binaryPath,
     brokerBinaryPath,
@@ -1147,15 +1166,6 @@ export function runTextOnlyTransformersCompile(command: string[]): void {
     writeFileSync(onnxBindingModulePath, originalOnnxBindingModule);
     writeFileSync(transformersPath, original);
   }
-}
-
-function isPackageVersion(value: string): boolean {
-  return (
-    value.length <= 128 &&
-    /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/.test(
-      value,
-    )
-  );
 }
 
 function sha256(path: string): string {

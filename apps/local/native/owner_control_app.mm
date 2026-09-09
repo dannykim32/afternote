@@ -49,12 +49,6 @@ typedef NS_ENUM(NSInteger, AfternoteLibraryMode) {
   AfternoteLibraryModeBrowse = 2,
 };
 
-constexpr NSInteger kMemoryTabIndex = 0;
-constexpr NSInteger kConnectionsTabIndex = 1;
-constexpr NSInteger kRecoveryTabIndex = 2;
-constexpr NSInteger kSetupTabIndex = 3;
-constexpr NSInteger kSettingsTabIndex = 4;
-
 NSString *const kLibraryResultKindKey = @"resultKind";
 NSString *const kLibrarySearchResultKind = @"search";
 NSString *const kSetupGuideDismissedDefaultsKey =
@@ -468,6 +462,10 @@ BOOL IsAuditPrincipal(NSDictionary *event) {
         ([operation isEqualToString:@"audit.prune"] ||
          [operation isEqualToString:@"admin.export"] ||
          [operation isEqualToString:@"admin.diagnostics"] ||
+         [operation isEqualToString:@"admin.telemetry.status"] ||
+         [operation isEqualToString:@"admin.telemetry.enable"] ||
+         [operation isEqualToString:@"admin.telemetry.disable"] ||
+         [operation isEqualToString:@"admin.telemetry.reset"] ||
          [operation isEqualToString:@"admin.prepare_client_rotation"] ||
          [operation isEqualToString:@"lifecycle.authority_invalidate"] ||
          [operation isEqualToString:@"lifecycle.lock"] ||
@@ -1787,8 +1785,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     self.connections = @{ @"clients" : @[], @"grants" : @[], @"sessions" : @[] };
     [self.auditEvents removeAllObjects];
     [self render];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
-    [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
+    [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-reconnect"]) {
     self.integrationStatuses[@"claude-code"] = @{
       @"toolAvailable" : @YES,
@@ -1803,49 +1800,39 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     };
     self.setupGuideDismissed = NO;
     [self renderSetupGuide];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kSetupTabIndex];
+    [self displaySurface:AfternoteProductSurfaceSetup recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-onboarding"]) {
     self.connections = @{ @"clients" : @[], @"grants" : @[], @"sessions" : @[] };
     [self.auditEvents removeAllObjects];
     self.setupGuideDismissed = NO;
     [self renderSetupGuide];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kSetupTabIndex];
+    [self displaySurface:AfternoteProductSurfaceSetup recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-onboarding-banner"]) {
     self.setupGuideDismissed = NO;
     self.activeQuery = @"";
     self.librarySearch.stringValue = @"";
     [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:NO];
     [self updateSetupBannerVisibility];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-settings"]) {
-    self.surfaceSelector.selectedSegment = -1;
-    [self.surfaceTabs selectTabViewItemAtIndex:kSettingsTabIndex];
+    [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-new-note"]) {
     [self beginNewNote:nil];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-write"]) {
     [self showLibraryMode:AfternoteLibraryModeWrite loadBrowse:NO];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-browse"]) {
     self.activeQuery = @"";
     self.librarySearch.stringValue = @"";
     [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:NO];
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--connections"]) {
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
-    [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
+    [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
   } else if ([arguments containsObject:@"--library"]) {
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--recovery"]) {
-    self.surfaceSelector.selectedSegment = -1;
-    [self.surfaceTabs selectTabViewItemAtIndex:kRecoveryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceRecovery recoveryReady:YES];
     self.recoveryState = @"ready";
     self.recoveryStatusLabel.stringValue = @"Vault ready";
     self.recoveryProgress.hidden = YES;
@@ -1856,8 +1843,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:NO];
   }
   if ([arguments containsObject:@"--preview-focus-ask"]) {
-    self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+    [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
     [self showLibraryMode:AfternoteLibraryModeAsk loadBrowse:NO];
     [self.window makeFirstResponder:self.librarySearch];
     self.askComposer.afternoteFocused = YES;
@@ -2042,9 +2028,11 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)updateProductNavigationState {
   NSInteger selected = self.surfaceSelector.selectedSegment;
   [self styleProductNavigationButton:self.memoryNavigationButton
-                            selected:selected == AfternoteProductSurfaceMemory];
+                            selected:selected == AfternoteNavigationSegmentForSurface(
+                                AfternoteProductSurfaceMemory)];
   [self styleProductNavigationButton:self.connectionsNavigationButton
-                            selected:selected == AfternoteProductSurfaceConnections];
+                            selected:selected == AfternoteNavigationSegmentForSurface(
+                                AfternoteProductSurfaceConnections)];
 }
 
 - (AfternoteProductSurface)displaySurface:(AfternoteProductSurface)surface
@@ -2055,7 +2043,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.surfaceSelector.selectedSegment =
       AfternoteNavigationSegmentForSurface(resolved);
   [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:(NSInteger)resolved];
+  [self.surfaceTabs selectTabViewItemAtIndex:AfternoteTabIndexForSurface(resolved)];
   return resolved;
 }
 
@@ -2538,7 +2526,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                                                             trackingMode:NSSegmentSwitchTrackingSelectOne
                                                                   target:self
                                                                   action:@selector(switchSurface:)];
-  self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
+  self.surfaceSelector.selectedSegment =
+      AfternoteNavigationSegmentForSurface(AfternoteProductSurfaceMemory);
   self.surfaceSelector.accessibilityLabel = @"Afternote section";
   self.surfaceSelector.controlSize = NSControlSizeRegular;
   self.surfaceSelector.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
@@ -2548,12 +2537,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.memoryNavigationButton = [NSButton buttonWithTitle:@"Notes"
                                                    target:self
                                                    action:@selector(selectProductSurface:)];
-  self.memoryNavigationButton.tag = AfternoteProductSurfaceMemory;
+  self.memoryNavigationButton.tag =
+      AfternoteNavigationSegmentForSurface(AfternoteProductSurfaceMemory);
   self.memoryNavigationButton.accessibilityLabel = @"Open Notes";
   self.connectionsNavigationButton = [NSButton buttonWithTitle:@"Connections"
                                                         target:self
                                                         action:@selector(selectProductSurface:)];
-  self.connectionsNavigationButton.tag = AfternoteProductSurfaceConnections;
+  self.connectionsNavigationButton.tag =
+      AfternoteNavigationSegmentForSurface(AfternoteProductSurfaceConnections);
   self.connectionsNavigationButton.accessibilityLabel = @"Open Connections";
   NSStackView *productNavigation = [NSStackView stackViewWithViews:@[
     self.memoryNavigationButton,
@@ -2610,7 +2601,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self.surfaceTabs addTabViewItem:recoveryItem];
   [self.surfaceTabs addTabViewItem:setupItem];
   [self.surfaceTabs addTabViewItem:settingsItem];
-  [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+  [self.surfaceTabs selectTabViewItemAtIndex:AfternoteTabIndexForSurface(
+      AfternoteProductSurfaceMemory)];
   [self.surfaceSelector setEnabled:NO forSegment:0];
   [self.surfaceSelector setEnabled:NO forSegment:1];
   self.libraryAuthenticateButton.enabled = NO;
@@ -3247,7 +3239,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSInteger segment = sender.selectedSegment;
   BOOL recoveryReady = self.recoveryState.length == 0 ||
       [self.recoveryState isEqualToString:@"ready"];
-  AfternoteProductSurface requested = segment == AfternoteProductSurfaceMemory
+  AfternoteProductSurface requested = segment == AfternoteNavigationSegmentForSurface(
+      AfternoteProductSurfaceMemory)
       ? AfternoteProductSurfaceMemory
       : AfternoteProductSurfaceConnections;
   AfternoteProductSurface resolved = [self displaySurface:requested
@@ -3721,14 +3714,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       }
       if (!continueToRequestedSurface) return;
       if ([NSProcessInfo.processInfo.arguments containsObject:@"--connections"]) {
-        self.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
-        [self updateProductNavigationState];
-        [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
+        [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
         [self authenticate:nil];
       } else if ([NSProcessInfo.processInfo.arguments containsObject:@"--library"]) {
-        self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-        [self updateProductNavigationState];
-        [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+        [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
         [self authenticateLibrary:nil];
       } else {
         [self openReadyLibrary:nil];
@@ -3764,14 +3753,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       [self renderRecoveryState];
       if (!continueToRequestedSurface) return;
       if (self.vaultLocked) {
-        self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-        [self updateProductNavigationState];
-        [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+        [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
         [self setLibraryBusy:NO status:LockedLibraryMessage()];
       } else if ([NSProcessInfo.processInfo.arguments containsObject:@"--connections"]) {
-        self.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
-        [self updateProductNavigationState];
-        [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
+        [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
         [self authenticate:nil];
       } else if ([NSProcessInfo.processInfo.arguments containsObject:@"--library"]) {
         [self openReadyLibrary:nil];
@@ -3785,9 +3770,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)openReadyLibrary:(id)sender {
   (void)sender;
   [self setPrivilegedSurfacesReady:YES];
-  self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+  [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   [self authenticateLibrary:nil];
 }
 
@@ -5481,8 +5464,9 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)openConnectionsFromSetup:(id)sender {
   (void)sender;
-  self.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
-  [self switchSurface:self.surfaceSelector];
+  [self displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
+  if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];
+  else [self authenticate:nil];
 }
 
 - (void)openSetupGuide:(id)sender {
@@ -5491,18 +5475,14 @@ doCommandBySelector:(SEL)commandSelector {
   [NSUserDefaults.standardUserDefaults setBool:NO
                                         forKey:kSetupGuideDismissedDefaultsKey];
   [self updateSetupBannerVisibility];
-  self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:kSetupTabIndex];
+  [self displaySurface:AfternoteProductSurfaceSetup recoveryReady:YES];
   [self renderSetupGuide];
   if (self.connections == nil) [self authenticate:nil];
 }
 
 - (void)returnFromSetupGuide:(id)sender {
   (void)sender;
-  self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+  [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
 }
 
 - (void)dismissSetupGuide:(id)sender {
@@ -6450,7 +6430,8 @@ OwnerControlDelegate *BrokerRecoveryProbeDelegate(
       segmentedControlWithLabels:@[ @"Notes", @"Connections" ]
                   trackingMode:NSSegmentSwitchTrackingSelectOne
                         target:nil action:nil];
-  delegate.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
+  delegate.surfaceSelector.selectedSegment =
+      AfternoteNavigationSegmentForSurface(AfternoteProductSurfaceMemory);
   delegate.surfaceTabs = [[NSTabView alloc] init];
   for (NSString *label in @[ @"Notes", @"Connections", @"Recovery", @"Setup", @"Settings" ]) {
     [delegate.surfaceTabs addTabViewItem:
@@ -6504,12 +6485,14 @@ int RunBrokerRecoverySmoke() {
       [[BrokerRecoveryProbeConnection alloc] initWithRecoveryFailures:0];
   lockedBroker.lifecycleState = @"locked";
   OwnerControlDelegate *locked = BrokerRecoveryProbeDelegate(lockedBroker);
-  locked.surfaceSelector.selectedSegment = AfternoteProductSurfaceConnections;
+  locked.surfaceSelector.selectedSegment =
+      AfternoteNavigationSegmentForSurface(AfternoteProductSurfaceConnections);
   [locked brokerDidDisconnect];
   WaitForBrokerRecovery(locked);
   BOOL lockedVaultRemainsActionable = !locked.brokerRecoveryInFlight &&
       [locked.recoveryState isEqualToString:@"ready"] && locked.vaultLocked &&
-      locked.surfaceSelector.selectedSegment == AfternoteProductSurfaceMemory &&
+      locked.surfaceSelector.selectedSegment == AfternoteNavigationSegmentForSurface(
+          AfternoteProductSurfaceMemory) &&
       [locked.libraryAuthenticateButton.title isEqualToString:@"Unlock vault"];
 
   BrokerRecoveryProbeConnection *racingBroker =

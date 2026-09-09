@@ -192,6 +192,11 @@ export async function manageCodexIntegration(
   if (action === "rotate-identity") {
     throw new Error("Codex identity rotation must be routed separately");
   }
+  if (!standalone) {
+    throw new Error(
+      "Codex integration must be configured from a standalone Afternote artifact",
+    );
+  }
   return manageConnectorLifecycle(
     action,
     standalone,

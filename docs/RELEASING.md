@@ -6,7 +6,9 @@ The command creates a detached temporary worktree, performs a fresh frozen insta
 gate below, finalizes the DMG, and copies only the DMG, checksum, and final report to
 `build/public-release`.
 
-1. Start from a clean standalone Git checkout and a reviewed commit. Do not build a public
+1. Move the reviewed changes from `Unreleased` into a dated version section, increment the
+   numeric `afternote.bundleVersion` in the root `package.json`, and confirm every workspace
+   package version matches. Start from that clean standalone Git commit. Do not build a public
    release from a normal interactive login that is running unrelated software.
 2. Use Bun 1.3.14. The release command installs dependencies in its detached worktree with
    `--frozen-lockfile --ignore-scripts --no-cache`, then records and rechecks their tree digest.

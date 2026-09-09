@@ -34,6 +34,9 @@ int main() {
     Require(AfternoteNavigationSegmentForSurface(
                 AfternoteProductSurfaceSettings) == -1,
             @"auxiliary surfaces do not select product navigation");
+    Require(AfternoteTabIndexForSurface(AfternoteProductSurfaceMemory) == 0 &&
+                AfternoteTabIndexForSurface(AfternoteProductSurfaceSettings) == 4,
+            @"surface-to-tab routing is explicit and independent of enum ordinals");
 
     [router beginBrokerRecoveryFromNavigationSegment:1];
     Require([router finishBrokerRecoveryWithVaultLocked:NO] ==

@@ -1026,7 +1026,10 @@ export class VaultBrokerWorker {
     for (const [challengeId, pending] of this.#pendingPresence) {
       if (pending.challengeExpiresAt > now) continue;
       this.#pendingPresence.delete(challengeId);
-      if (pending.kind === "activation") {
+      if (pending.kind === "pairing") {
+        this.#authority().denyPairing(pending.pairingRequestId, "owner_timeout");
+      } else if (pending.kind === "activation") {
+        this.#authority().denyActivation(pending.activationId, "owner_timeout");
         this.#activationTtls.delete(pending.activationId);
       }
       if (pending.kind === "lifecycle") {
@@ -3059,7 +3062,12 @@ export class VaultBrokerWorker {
       );
     }
     if (claimIssue === "expired") {
-      if (pending.kind === "library-delete") {
+      if (pending.kind === "pairing") {
+        this.#authority().denyPairing(pending.pairingRequestId, "owner_timeout");
+      } else if (pending.kind === "activation") {
+        this.#authority().denyActivation(pending.activationId, "owner_timeout");
+        this.#activationTtls.delete(pending.activationId);
+      } else if (pending.kind === "library-delete") {
         this.#librarySessions.delete(ownerSessionKey(pending.binding));
         this.#authority().recordNativeLibraryOutcome(
           pending.sessionId,

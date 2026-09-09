@@ -19,6 +19,23 @@ spctl --assess --type execute --verbose=4 /Volumes/Afternote/Afternote.app
 xcrun stapler validate /Volumes/Afternote/Afternote.app
 ```
 
+Confirm the release identity recorded in the bundle:
+
+```bash
+/usr/libexec/PlistBuddy -c "Print :AfternotePackageVersion" \
+  /Volumes/Afternote/Afternote.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+  /Volumes/Afternote/Afternote.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" \
+  /Volumes/Afternote/Afternote.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" \
+  /Volumes/Afternote/Afternote.app/Contents/Info.plist
+```
+
+For alpha.9 these values are, in order, `2.0.0-alpha.9`, `2.0.0`, `9`, and `13.3`.
+The first value is Afternote's full package version. The next two are Apple's required numeric
+marketing and build versions.
+
 The signature details must show Team Identifier `486B2A8N8A` and identifier
 `dev.afternote.owner-control`. Gatekeeper and stapler validation must succeed. The signed app
 contains the runtime, SPDX SBOM, third-party notices, license texts, and a manifest binding

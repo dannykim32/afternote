@@ -1,5 +1,51 @@
 import { VAULT_BROKER_IDENTIFIER } from "../apps/local/src/vault-broker-metadata";
 
+const PACKAGE_VERSION =
+  /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
+
+export function releaseVersionMetadata(options: {
+  rootVersion: string;
+  workspaceVersions: readonly string[];
+  bundleVersion: string;
+  requestedVersion?: string;
+  release: boolean;
+}): {
+  packageVersion: string;
+  marketingVersion: string;
+  bundleVersion: string;
+} {
+  const rootMatch = options.rootVersion.match(PACKAGE_VERSION);
+  if (!rootMatch || options.rootVersion.length > 128) {
+    throw new Error(`Invalid Afternote package version: ${options.rootVersion}`);
+  }
+  if (options.workspaceVersions.some((version) => version !== options.rootVersion)) {
+    throw new Error("Workspace package versions must match the root package version");
+  }
+  const packageVersion = options.requestedVersion ?? options.rootVersion;
+  const packageMatch = packageVersion.match(PACKAGE_VERSION);
+  if (!packageMatch || packageVersion.length > 128) {
+    throw new Error(`Invalid Afternote package version: ${packageVersion}`);
+  }
+  if (options.release && packageVersion !== options.rootVersion) {
+    throw new Error("Public release version must match the reviewed package version");
+  }
+  const bundleParts = options.bundleVersion.split(".");
+  if (
+    bundleParts.length < 1 || bundleParts.length > 3 ||
+    !bundleParts.every((part) => /^\d+$/.test(part)) ||
+    bundleParts[0]!.length > 4 ||
+    (bundleParts[1]?.length ?? 0) > 2 ||
+    (bundleParts[2]?.length ?? 0) > 2
+  ) {
+    throw new Error("Apple bundle version must contain one to three bounded integers");
+  }
+  return {
+    packageVersion,
+    marketingVersion: `${packageMatch[1]}.${packageMatch[2]}.${packageMatch[3]}`,
+    bundleVersion: options.bundleVersion,
+  };
+}
+
 export function desktopRuntimeEntries(includeSemanticRuntime: boolean): string[] {
   return [
     "afternote",

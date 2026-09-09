@@ -11,6 +11,8 @@ const version = "2.0.0-alpha.3";
 const paths = releaseFinalizationPaths(outputDirectory, version);
 const publicReport = {
   version,
+  marketingVersion: "2.0.0",
+  bundleVersion: "3",
   platform: "darwin-arm64",
   releaseFlavor: "public",
   semanticRuntimeIncluded: true,
@@ -79,6 +81,10 @@ describe("release finalization gates", () => {
       { ...publicReport, signing: "ad-hoc development signature" },
       paths.portableDirectory,
     )).toThrow("requires a Developer ID build");
+    expect(() => assertPublicArtifactReport(
+      { ...publicReport, bundleVersion: "alpha.3" },
+      paths.portableDirectory,
+    )).toThrow("Apple bundle version metadata");
     expect(() => assertPublicArtifactReport(
       { ...publicReport, portableDirectory: "/tmp/other" },
       paths.portableDirectory,

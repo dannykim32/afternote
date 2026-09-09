@@ -7,6 +7,17 @@ NSInteger AfternoteNavigationSegmentForSurface(AfternoteProductSurface surface) 
   return -1;
 }
 
+NSInteger AfternoteTabIndexForSurface(AfternoteProductSurface surface) {
+  switch (surface) {
+    case AfternoteProductSurfaceMemory: return 0;
+    case AfternoteProductSurfaceConnections: return 1;
+    case AfternoteProductSurfaceRecovery: return 2;
+    case AfternoteProductSurfaceSetup: return 3;
+    case AfternoteProductSurfaceSettings: return 4;
+  }
+  return NSNotFound;
+}
+
 @interface AfternoteProductSurfaceRouter ()
 @property(nonatomic) AfternoteProductSurface surface;
 @property(nonatomic) AfternoteProductSurface recoveryDestination;

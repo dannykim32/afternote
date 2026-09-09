@@ -6,7 +6,7 @@ import {
   sign,
 } from "node:crypto";
 /* eslint-disable @typescript-eslint/no-explicit-any -- protocol fixtures decode untyped JSON */
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
@@ -1371,6 +1371,77 @@ describe("vault broker worker protocol", () => {
     expect(denied.error.code).toBe("owner_denied");
   });
 
+  it("terminalizes pairing and activation when owner-presence challenges expire", async () => {
+    let now = Date.now();
+    const fixture = workerFixture({ now: () => now });
+    const connection = { connectionId: randomUUID(), peerPid: 42002 };
+    const durable = p256();
+    const pairing = await request(fixture.worker, connection, "client.begin", {
+      kind: "codex",
+      displayName: "Codex",
+      installIdentity: randomUUID(),
+      publicKey: durable.publicKey,
+      signingMode: "development-exact-build",
+      requestedCapabilities: ["memory.recall"],
+      forgetPolicy: "never",
+    });
+    const pendingPairing = await beginMemoryClientRequest(
+      fixture.worker,
+      connection,
+      "client.complete_pairing",
+      {
+        requestId: pairing.requestId,
+        clientSignature: signature(pairing.clientProofTranscript, durable.privateKey),
+      },
+    );
+    now = Date.parse(pendingPairing.ownerPresenceChallenge.expiresAt) + 1;
+    expect(await completeMemoryOwnerPresence(
+      fixture.worker,
+      connection,
+      pendingPairing.ownerPresenceChallenge.challengeId,
+      "approved",
+    )).toMatchObject({ ok: false, error: { code: "owner_timeout" } });
+    expect(fixture.worker.readAuditForTest()).toContainEqual(expect.objectContaining({
+      operation: "client.pair",
+      outcome: "denied",
+      errorCode: "owner_timeout",
+    }));
+
+    const paired = await pairClient(
+      fixture,
+      connection,
+      "codex",
+      durable,
+      ["memory.recall"],
+    );
+    const session = p256();
+    const activation = await beginActivation(
+      fixture,
+      connection,
+      paired,
+      session,
+      ["memory.recall"],
+    );
+    const pendingActivation = await beginMemoryClientRequest(
+      fixture.worker,
+      connection,
+      "session.complete",
+      activationProofs(activation, durable, session),
+    );
+    now = Date.parse(pendingActivation.ownerPresenceChallenge.expiresAt) + 1;
+    expect(await completeMemoryOwnerPresence(
+      fixture.worker,
+      connection,
+      pendingActivation.ownerPresenceChallenge.challengeId,
+      "approved",
+    )).toMatchObject({ ok: false, error: { code: "owner_timeout" } });
+    expect(fixture.worker.readAuditForTest()).toContainEqual(expect.objectContaining({
+      operation: "session.activate",
+      outcome: "denied",
+      errorCode: "owner_timeout",
+    }));
+  });
+
   it("distinguishes owner denial, cancellation, timeout, and unavailable authentication", async () => {
     for (const [outcome, code, message] of [
       ["denied", "owner_denied", "denied access"],
@@ -1654,48 +1725,34 @@ describe("vault broker worker protocol", () => {
   });
 
   it("upgrades an alpha.8 vault to alpha.9 without losing revisions, identities, or grants", async () => {
-    const fixture = workerFixture({ applicationVersion: "2.0.0-alpha.8" });
-    const connector = { connectionId: randomUUID(), peerPid: 44480 };
-    const owner = { connectionId: randomUUID(), peerPid: 44481 };
-    const durable = p256();
-    const session = p256();
-    const activated = await pairAndActivate(
-      fixture,
-      connector,
-      durable,
-      session,
-      ["memory.remember", "memory.recall", "memory.get_note"],
-    );
-    await ownerRequest(fixture.worker, owner, "library.session.begin", {
-      requestedScopes: [
-        "library.get_note",
-        "library.list_revisions",
-        "library.inspect_source",
-        "library.remember",
-        "library.update_note",
-      ],
-      ttlMs: 15 * 60 * 1_000,
-    }, true);
-    const created = (await ownerRequest(fixture.worker, owner, "library.remember", {
-      content: "Alpha.8 compatibility revision one",
-      source: null,
-    })).note;
-    await ownerRequest(fixture.worker, owner, "library.update_note", {
-      id: created.id,
-      content: "Alpha.9 compatibility revision two",
-      expectedRevision: 1,
-      source: null,
-    });
-    fixture.worker.close();
-
+    const fixtureRoot = join(import.meta.dir, "fixtures/alpha8");
+    const metadata = JSON.parse(readFileSync(
+      join(fixtureRoot, "fixture.json"),
+      "utf8",
+    )) as {
+      sourceCommit: string;
+      vault: VaultContext;
+      noteId: string;
+      clientId: string;
+      grantId: string;
+      sessionId: string;
+    };
+    expect(metadata.sourceCommit).toBe("95fefd08dfd1e1b2df360b0906e17631a64944c3");
+    const directory = mkdtempSync(join(tmpdir(), "afternote-alpha8-upgrade-"));
+    directories.push(directory);
+    const path = join(directory, "vault.db");
+    copyFileSync(join(fixtureRoot, "vault.db"), path);
+    const key = readFileSync(join(fixtureRoot, "vault.key"));
     const restarted = new VaultBrokerWorker({
       applicationVersion: "2.0.0-alpha.9",
-      vaultPath: fixture.path,
-      vaultKey: fixture.key,
-      vault: fixture.vault,
+      vaultPath: path,
+      vaultKey: key,
+      vault: metadata.vault,
       bootId: randomUUID(),
     });
     workers.push(restarted);
+    const connector = { connectionId: randomUUID(), peerPid: 44480 };
+    const owner = { connectionId: randomUUID(), peerPid: 44481 };
     await ownerRequest(restarted, owner, "library.session.begin", {
       requestedScopes: [
         "library.get_note",
@@ -1705,17 +1762,17 @@ describe("vault broker worker protocol", () => {
       ttlMs: 15 * 60 * 1_000,
     }, true);
     expect(await ownerRequest(restarted, owner, "library.get_note", {
-      id: created.id,
+      id: metadata.noteId,
       revision: null,
     })).toMatchObject({
       note: {
-        id: created.id,
+        id: metadata.noteId,
         revision: 2,
-        content: "Alpha.9 compatibility revision two",
+        content: "Alpha.8 fixture revision two",
       },
     });
     expect((await ownerRequest(restarted, owner, "library.list_revisions", {
-      id: created.id,
+      id: metadata.noteId,
       cursor: null,
       limit: 10,
     })).revisions.map((revision: { revision: number }) => revision.revision))
@@ -1726,6 +1783,7 @@ describe("vault broker worker protocol", () => {
         "owner.inspect_clients",
         "owner.inspect_grants",
         "owner.inspect_sessions",
+        "owner.inspect_audit",
       ],
       ttlMs: 5 * 60 * 1_000,
     }, true);
@@ -1736,20 +1794,31 @@ describe("vault broker worker protocol", () => {
       {},
     );
     expect(connections.clients[0]).toMatchObject({
-      clientId: activated.clientId,
+      clientId: metadata.clientId,
       status: "paired",
     });
     expect(connections.grants[0]).toMatchObject({
-      grantId: activated.grantId,
+      grantId: metadata.grantId,
       status: "active",
     });
+    expect(connections.sessions).toContainEqual(expect.objectContaining({
+      sessionId: metadata.sessionId,
+      status: "disconnected",
+    }));
+    const audit = await ownerRequest(restarted, owner, "owner.inspect_audit", {
+      cursor: null,
+      pageSize: 100,
+    });
+    expect(audit.events).toContainEqual(expect.objectContaining({
+      operation: "admin.telemetry.enable",
+    }));
 
     const nextSession = p256();
     const activation = await request(restarted, connector, "session.begin", {
-      clientId: activated.clientId,
-      grantId: activated.grantId,
+      clientId: metadata.clientId,
+      grantId: metadata.grantId,
       sessionPublicKey: nextSession.publicKey,
-      requestedCapabilities: activated.capabilities,
+      requestedCapabilities: ["memory.remember", "memory.recall", "memory.get_note"],
       ttlMs: 15 * 60 * 1_000,
     });
     expect(activation.activationId).toEqual(expect.any(String));

@@ -491,11 +491,15 @@ const SCHEMA_MIGRATIONS = [
         note_id text primary key,
         note_revision integer not null,
         reference_timestamp text not null,
+        source_timestamp text,
         timezone text not null,
         resolver_version integer not null,
         indexed_at text not null,
         foreign key (note_id) references notes(id) on delete cascade
       );
+
+      create index if not exists note_temporal_index_source_timestamp
+      on note_temporal_index (source_timestamp, note_revision, note_id);
 
       create table if not exists note_temporal_annotations (
         note_id text not null,
@@ -1822,26 +1826,33 @@ export class SqliteMemory implements Memory {
     const candidates = new Map<string, RecallResult>();
     for (const annotation of annotations) {
       const statement = this.#database
-        .query<NoteRow & { annotation_match: number; captured_match: number; source_match: number }, [string, string, string, string, string, string]>(
+        .query<NoteRow & { temporal_score: number }, [string, string, string, string, string, string]>(
           `select notes.id, notes.content, notes.current_revision, notes.source_json,
                   notes.created_at, notes.updated_at,
-                  exists (
-                    select 1 from note_temporal_annotations temporal
-                    join note_temporal_index temporal_index
-                      on temporal_index.note_id = temporal.note_id
-                    where temporal.note_id = notes.id
-                      and temporal.note_revision = notes.current_revision
-                      and temporal_index.note_revision = notes.current_revision
-                      and temporal.range_start < ? and temporal.range_end > ?
-                  ) as annotation_match,
-                  (notes.created_at >= ? and notes.created_at < ?) as captured_match,
-                  (unixepoch(json_extract(notes.source_json, '$.timestamp')) >= unixepoch(?) and
-                   unixepoch(json_extract(notes.source_json, '$.timestamp')) < unixepoch(?)) as source_match
-           from notes
-           where annotation_match = 1 or captured_match = 1 or source_match = 1
+                  max(matches.temporal_score) as temporal_score
+           from (
+             select temporal.note_id, 5 as temporal_score
+             from note_temporal_annotations temporal
+             join note_temporal_index temporal_index
+               on temporal_index.note_id = temporal.note_id
+              and temporal_index.note_revision = temporal.note_revision
+             where temporal.range_start < ? and temporal.range_end > ?
+             union all
+             select notes.id as note_id, 3 as temporal_score
+             from notes
+             where notes.created_at >= ? and notes.created_at < ?
+             union all
+             select temporal_index.note_id, 6 as temporal_score
+             from note_temporal_index temporal_index
+             where temporal_index.source_timestamp >= ?
+               and temporal_index.source_timestamp < ?
+           ) matches
+           join notes on notes.id = matches.note_id
+           group by notes.id
+           order by temporal_score desc, notes.created_at desc, notes.id desc
            limit ${MAX_RECALL_CANDIDATES}`,
         );
-      let rows: Array<NoteRow & { annotation_match: number; captured_match: number; source_match: number }>;
+      let rows: Array<NoteRow & { temporal_score: number }>;
       try {
         rows = statement.all(
           annotation.rangeEnd,
@@ -1856,11 +1867,7 @@ export class SqliteMemory implements Memory {
       }
       for (const row of rows) {
         const note = rowToNote(row);
-        const temporalScore = row.source_match === 1
-          ? 6
-          : row.annotation_match === 1
-            ? 5
-            : 3;
+        const temporalScore = row.temporal_score;
         const existing = candidates.get(note.id);
         if (!existing || temporalScore > existing.score) {
           candidates.set(note.id, {
@@ -1948,13 +1955,14 @@ export class SqliteMemory implements Memory {
     run("delete from note_temporal_index where note_id = ?", [note.id]);
     run(
       `insert into note_temporal_index (
-           note_id, note_revision, reference_timestamp, timezone,
-           resolver_version, indexed_at
-         ) values (?, ?, ?, ?, ?, ?)`,
+           note_id, note_revision, reference_timestamp, source_timestamp,
+           timezone, resolver_version, indexed_at
+         ) values (?, ?, ?, ?, ?, ?, ?)`,
       [
         note.id,
         note.revision,
         note.updatedAt,
+        note.source?.timestamp ?? null,
         timeZone,
         TEMPORAL_RESOLVER_VERSION,
         this.#now().toISOString(),

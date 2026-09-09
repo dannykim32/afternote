@@ -17,5 +17,7 @@ tmp/
 *.db
 *.db-shm
 *.db-wal
+!apps/local/src/fixtures/alpha8/vault.db
+!apps/local/src/fixtures/alpha8/vault.key
 *.tsbuildinfo
 *.log

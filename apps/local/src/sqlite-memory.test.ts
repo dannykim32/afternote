@@ -796,6 +796,30 @@ describe("SqliteMemory storage and schema migrations", () => {
     }
   });
 
+  it("materializes source timestamps for indexed temporal recall", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-source-time-index-"));
+    tempDirectories.push(directory);
+    const path = join(directory, "vault.db");
+    const memory = new SqliteMemory(path, localVault);
+    const note = await memory.remember(localVault, {
+      content: "The signed venue agreement is ready.",
+      source: { timestamp: "2026-08-28T11:45:00-06:00" },
+    });
+    memory.close();
+
+    const database = new Database(path, { readonly: true });
+    try {
+      expect(database.query<{ source_timestamp: string }, [string]>(
+        "select source_timestamp from note_temporal_index where note_id = ?",
+      ).get(note.id)?.source_timestamp).toBe("2026-08-28T17:45:00.000Z");
+      expect(database.query<{ name: string }, []>(
+        "select name from sqlite_schema where type = 'index' and name = 'note_temporal_index_source_timestamp'",
+      ).get()?.name).toBe("note_temporal_index_source_timestamp");
+    } finally {
+      database.close();
+    }
+  });
+
   it("keeps browse order stable across edits and binds cursors to their search", async () => {
     const memory = new SqliteMemory(":memory:", localVault);
     const originalDateNow = Date.now;

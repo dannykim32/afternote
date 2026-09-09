@@ -29,6 +29,12 @@ describe("Codex integration discovery", () => {
     ).rejects.toThrow("Codex identity rotation must be routed separately");
   });
 
+  it("rejects non-standalone use before resolving any installation paths", async () => {
+    await expect(manageCodexIntegration("status", false)).rejects.toThrow(
+      "Codex integration must be configured from a standalone Afternote artifact",
+    );
+  });
+
   it("uses an executable desktop-bundled Codex CLI when PATH has none", () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-codex-discovery-"));
     const bundled = join(directory, "ChatGPT.app/Contents/Resources/codex");

@@ -42,6 +42,8 @@ if (process.versions.bun !== "1.3.14") {
 
 type ArtifactReport = {
   version: string;
+  marketingVersion: string;
+  bundleVersion: string;
   platform: string;
   releaseFlavor: string;
   semanticRuntimeIncluded: boolean;
@@ -109,6 +111,10 @@ export function assertPublicArtifactReport(
 ): void {
   if (report.platform !== "darwin-arm64") {
     throw new Error("Release finalization requires a darwin-arm64 artifact");
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(report.marketingVersion) ||
+    !/^\d+(?:\.\d+){0,2}$/.test(report.bundleVersion)) {
+    throw new Error("Release finalization requires valid Apple bundle version metadata");
   }
   if (report.releaseFlavor !== "public" || !report.semanticRuntimeIncluded) {
     throw new Error("Release finalization requires the public semantic-capable artifact");

@@ -249,3 +249,18 @@ stop_legacy_runtime() {
 verify_legacy_runtime_retired() {
   "$script_dir/afternote" package-verify-legacy-runtime-retired >/dev/null
 }
+# Remove only the retired alpha telemetry state owned by the current user. Never follow or
+# replace an unexpected filesystem object at that path.
+afternote_remove_legacy_telemetry_state() {
+  legacy_telemetry_state="$HOME/.afternote/.vault.db.afternote-telemetry.json"
+  if [ ! -e "$legacy_telemetry_state" ] && [ ! -L "$legacy_telemetry_state" ]; then
+    return 0
+  fi
+  if [ -L "$legacy_telemetry_state" ] || [ ! -f "$legacy_telemetry_state" ] ||
+    [ "$(/usr/bin/stat -f '%u' "$legacy_telemetry_state" 2>/dev/null || printf invalid)" != "$(/usr/bin/id -u)" ]; then
+    printf 'Retained unexpected legacy telemetry state at %s for manual review.\n' \
+      "$legacy_telemetry_state" >&2
+    return 0
+  fi
+  rm -f -- "$legacy_telemetry_state"
+}

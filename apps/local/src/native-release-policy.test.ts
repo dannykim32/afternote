@@ -61,9 +61,34 @@ describe("native release input policy", () => {
     );
     expect(nativeBuild).toContain('join(repositoryRoot, "apps/local/native/release-deps")');
     expect(nativeBuild).toContain('requiredDigest(manifest.onnxRuntimeLibrarySha256');
-    expect(packageBuild).toContain('signing.release ? "13.3" : "26.0"');
-    expect(packageBuild).toContain('["-mmacosx-version-min=13.3"]');
+    expect(nativeBuild).toContain('"-mcpu=apple-m1"');
+    expect(packageBuild).toContain('const minimumMacosVersion = "13.3"');
+    expect(packageBuild).toContain('"-mmacosx-version-min=13.3"');
     expect(packageBuild).toContain('["/usr/bin/xcode-select", "-p"]');
     expect(packageBuild).toContain("com.apple.pkg.CLTools_Executables");
+  });
+
+  it("applies the shared policy to direct native build inputs", () => {
+    for (const [environment, expected] of [
+      [{ AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS: "sometimes" }, "must be 0 or 1"],
+      [{ AFTERNOTE_ACCEPTANCE_BROKER_MACH_SERVICE: "dev.afternote.vault-broker.acceptance.test" }, "requires AFTERNOTE_ACCEPTANCE_BUILD=1"],
+      [{
+        AFTERNOTE_ACCEPTANCE_BUILD: "1",
+        AFTERNOTE_ACCEPTANCE_BROKER_MACH_SERVICE: `dev.afternote.vault-broker.acceptance.${"x".repeat(240)}`,
+      }, "Acceptance broker Mach service"],
+    ] as const) {
+      const result = Bun.spawnSync([
+        process.execPath,
+        "run",
+        "scripts/build-local-sqlcipher-addon.ts",
+      ], {
+        cwd: repositoryRoot,
+        env: { ...process.env, ...environment },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain(expected);
+    }
   });
 });

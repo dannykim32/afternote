@@ -307,5 +307,6 @@ if [ -n "$previous_launch_agent" ]; then
   rm -f "$previous_launch_agent"
   previous_launch_agent=""
 fi
+afternote_remove_legacy_telemetry_state
 
 printf 'Installed Afternote Local %s at %s\n' "$version" "$version_root"

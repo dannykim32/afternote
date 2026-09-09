@@ -89,7 +89,16 @@ describe("native owner administration production boundary", () => {
     expect(nativeAppSource).toContain("RunAdminCommand");
     expect(nativeAppSource).toContain('admin.export');
     expect(nativeAppSource).toContain('admin.diagnostics');
-    expect(nativeAppSource).not.toContain('admin.telemetry');
+    expect(nativeAppSource).not.toContain('[method isEqualToString:@"admin.telemetry"]');
+    expect(nativeAppSource).not.toContain('"--admin-telemetry"');
+    for (const historicalOperation of [
+      "admin.telemetry.status",
+      "admin.telemetry.enable",
+      "admin.telemetry.disable",
+      "admin.telemetry.reset",
+    ]) {
+      expect(nativeAppSource).toContain(historicalOperation);
+    }
     expect(nativeAppSource).toContain('admin.prepare_client_rotation');
     expect(nativeAppSource).toContain('"--admin-prepare-client-rotation"');
     expect(nativeAppSource).toContain('@"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity"');
