@@ -10,9 +10,15 @@ describe("native release input policy", () => {
       join(repositoryRoot, "scripts/native-release-inputs.json"),
       "utf8",
     )) as Record<string, unknown>;
-    expect(configuration.schemaVersion).toBe(2);
+    expect(configuration.schemaVersion).toBe(3);
     expect(configuration.platform).toBe("darwin-arm64");
     expect(configuration.minimumMacosVersion).toBe("13.3");
+    expect(configuration.releaseToolchain).toEqual({
+      commandLineToolsVersion: "14.3.1.0.1.1683849156",
+      macosSdkVersion: "13.3",
+      clangVersion: "Apple clang version 14.0.3 (clang-1403.0.22.14.1)",
+      linkerVersion: "@(#)PROGRAM:ld  PROJECT:ld64-857.1",
+    });
     for (const key of [
       "bunExecutableSha256",
       "nodeHeadersSha256",
@@ -45,6 +51,8 @@ describe("native release input policy", () => {
     expect(preparation).toContain('"--retry", "8"');
     expect(preparation).toContain('"--max-filesize", String(input.maximumBytes)');
     expect(preparation).toContain("SOURCE_DATE_EPOCH: sourceDateEpoch");
+    expect(preparation).toContain("if (releaseBuild)");
+    expect(preparation).toContain("Native release build requires the reviewed Apple toolchain");
     expect(preparation).toContain('"-DSQLITE_ENABLE_FTS5"');
     expect(preparation).toContain("assertDeploymentTarget(cryptoPath)");
     expect(preparation).toContain("assertNoBuildPath(sqlcipherPath, temporaryRoot)");
@@ -59,6 +67,10 @@ describe("native release input policy", () => {
       join(repositoryRoot, "scripts/build-local-alpha.ts"),
       "utf8",
     );
+    const supplyChain = readFileSync(
+      join(repositoryRoot, "scripts/release-supply-chain.ts"),
+      "utf8",
+    );
     expect(nativeBuild).toContain('join(repositoryRoot, "apps/local/native/release-deps")');
     expect(nativeBuild).toContain('requiredDigest(manifest.onnxRuntimeLibrarySha256');
     expect(nativeBuild).toContain('"-mcpu=apple-m1"');
@@ -70,6 +82,8 @@ describe("native release input policy", () => {
     expect(packageBuild).toContain('"-mmacosx-version-min=13.3"');
     expect(packageBuild).toContain('["/usr/bin/xcode-select", "-p"]');
     expect(packageBuild).toContain("com.apple.pkg.CLTools_Executables");
+    expect(supplyChain).not.toContain("/opt/homebrew/opt/sqlcipher");
+    expect(supplyChain).not.toContain("/opt/homebrew/opt/openssl@4");
   });
 
   it("applies the shared policy to direct native build inputs", () => {

@@ -23,10 +23,17 @@ const minimumMacosVersion = "13.3";
 const sourceDateEpoch = "0";
 
 type SourceInput = { version: string; url: string; sha256: string; maximumBytes: number };
+type NativeToolchain = {
+  commandLineToolsVersion: string;
+  macosSdkVersion: string;
+  clangVersion: string;
+  linkerVersion: string;
+};
 type Configuration = {
   schemaVersion: number;
   platform: string;
   minimumMacosVersion: string;
+  releaseToolchain: NativeToolchain;
   opensslSource: SourceInput;
   sqlcipherSource: SourceInput;
   opensslLibrarySha256?: string;
@@ -43,6 +50,11 @@ if (process.versions.bun !== "1.3.14") {
 
 const configuration = JSON.parse(readFileSync(configurationPath, "utf8")) as Configuration;
 assertConfiguration(configuration);
+const releaseBuild = process.env.AFTERNOTE_RELEASE_BUILD === "1";
+const toolchain = nativeToolchain();
+if (releaseBuild && JSON.stringify(toolchain) !== JSON.stringify(configuration.releaseToolchain)) {
+  throw new Error("Native release build requires the reviewed Apple toolchain");
+}
 const temporaryRoot = mkdtempSync(join(tmpdir(), "afternote-native-release-"));
 const stagedRoot = `${outputRoot}.staging-${process.pid}`;
 try {
@@ -116,15 +128,18 @@ try {
     version: 1,
     platform: configuration.platform,
     minimumMacosVersion,
+    toolchain,
     opensslSourceSha256: configuration.opensslSource.sha256,
     sqlcipherSourceSha256: configuration.sqlcipherSource.sha256,
     opensslLibrarySha256: sha256(cryptoPath),
     sqlcipherLibrarySha256: sha256(sqlcipherPath),
     sqlcipherHeaderSha256: sha256(headerPath),
   };
-  assertPinnedOutput("OpenSSL library", configuration.opensslLibrarySha256, generated.opensslLibrarySha256);
-  assertPinnedOutput("SQLCipher library", configuration.sqlcipherLibrarySha256, generated.sqlcipherLibrarySha256);
-  assertPinnedOutput("SQLCipher header", configuration.sqlcipherHeaderSha256, generated.sqlcipherHeaderSha256);
+  if (releaseBuild) {
+    assertPinnedOutput("OpenSSL library", configuration.opensslLibrarySha256, generated.opensslLibrarySha256);
+    assertPinnedOutput("SQLCipher library", configuration.sqlcipherLibrarySha256, generated.sqlcipherLibrarySha256);
+    assertPinnedOutput("SQLCipher header", configuration.sqlcipherHeaderSha256, generated.sqlcipherHeaderSha256);
+  }
   writeFileSync(
     join(stagedRoot, "BUILD_MANIFEST.json"),
     `${JSON.stringify(generated, null, 2)}\n`,
@@ -139,7 +154,7 @@ try {
 }
 
 function assertConfiguration(value: Configuration): void {
-  if (value.schemaVersion !== 2 || value.platform !== "darwin-arm64" ||
+  if (value.schemaVersion !== 3 || value.platform !== "darwin-arm64" ||
     value.minimumMacosVersion !== minimumMacosVersion) {
     throw new Error("Native release input configuration is incompatible");
   }
@@ -147,6 +162,17 @@ function assertConfiguration(value: Configuration): void {
     if (!input || !/^https:\/\//.test(input.url) || !/^[a-f0-9]{64}$/.test(input.sha256) ||
       !Number.isSafeInteger(input.maximumBytes) || input.maximumBytes <= 0) {
       throw new Error("Native release source configuration is invalid");
+    }
+  }
+  for (const key of [
+    "commandLineToolsVersion",
+    "macosSdkVersion",
+    "clangVersion",
+    "linkerVersion",
+  ] as const) {
+    if (!value.releaseToolchain || typeof value.releaseToolchain[key] !== "string" ||
+      value.releaseToolchain[key].length === 0) {
+      throw new Error("Native release toolchain configuration is invalid");
     }
   }
 }
@@ -197,6 +223,21 @@ function assertPinnedOutput(label: string, expected: string | undefined, actual:
   }
 }
 
+function nativeToolchain(): NativeToolchain {
+  const packageInfo = run([
+    "pkgutil",
+    "--pkg-info=com.apple.pkg.CLTools_Executables",
+  ]);
+  const commandLineToolsVersion = /^version:\s*(.+)$/m.exec(packageInfo)?.[1]?.trim();
+  const macosSdkVersion = run(["xcrun", "--sdk", "macosx", "--show-sdk-version"]).trim();
+  const clangVersion = run(["clang", "--version"]).split("\n")[0]?.trim();
+  const linkerVersion = run(["ld", "-v"]).split("\n")[0]?.trim();
+  if (!commandLineToolsVersion || !macosSdkVersion || !clangVersion || !linkerVersion) {
+    throw new Error("Could not identify the native Apple toolchain");
+  }
+  return { commandLineToolsVersion, macosSdkVersion, clangVersion, linkerVersion };
+}
+
 function assertDeploymentTarget(path: string): void {
   const output = run(["otool", "-l", path]);
   const versions = [...output.matchAll(/\bminos\s+(\d+\.\d+)/g)].map((match) => match[1]);
@@ -223,11 +264,15 @@ function run(
   const [tool, ...args] = command;
   const tools: Readonly<Record<string, string>> = {
     "./configure": "./configure",
+    clang: "/usr/bin/clang",
     install_name_tool: "/usr/bin/install_name_tool",
+    ld: "/usr/bin/ld",
     make: "/usr/bin/make",
     otool: "/usr/bin/otool",
     perl: "/usr/bin/perl",
+    pkgutil: "/usr/sbin/pkgutil",
     tar: "/usr/bin/tar",
+    xcrun: "/usr/bin/xcrun",
   };
   const executable = tool?.startsWith("/") ? tool : tool ? tools[tool] : undefined;
   if (!executable) throw new Error(`Native source build tool is not pinned: ${tool ?? "missing"}`);
@@ -242,5 +287,5 @@ function run(
       `Native source build failed (${tool}): ${result.stderr.toString().slice(-8_000) || result.stdout?.toString().slice(-8_000) || "no output"}`,
     );
   }
-  return result.stdout?.toString() ?? "";
+  return `${result.stdout?.toString() ?? ""}${result.stderr.toString()}`;
 }

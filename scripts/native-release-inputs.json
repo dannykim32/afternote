@@ -1,7 +1,13 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "platform": "darwin-arm64",
   "minimumMacosVersion": "13.3",
+  "releaseToolchain": {
+    "commandLineToolsVersion": "14.3.1.0.1.1683849156",
+    "macosSdkVersion": "13.3",
+    "clangVersion": "Apple clang version 14.0.3 (clang-1403.0.22.14.1)",
+    "linkerVersion": "@(#)PROGRAM:ld  PROJECT:ld64-857.1"
+  },
   "bunExecutableSha256": "e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233",
   "nodeVersion": "v25.9.0",
   "nodeHeadersSha256": "de480ac8a830dbb86942be7d259ada88784da856e40d94e81c842388b18496bb",

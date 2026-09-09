@@ -89,6 +89,35 @@ describe("plaintext-to-SQLCipher migration", () => {
     }
   });
 
+  it("migrates and reopens the earlier alpha.9 temporal-index shape", async () => {
+    const { path, noteId } = await plaintextVault();
+    const alpha9 = new Database(path);
+    alpha9.exec("pragma user_version = 9");
+    alpha9.close();
+    const key = randomBytes(32);
+
+    migratePlaintextVault({
+      databasePath: path,
+      key,
+      legacyDecision: { action: "delete" },
+    });
+
+    const reopened = new SqliteMemory(path, vault, {
+      encryptionKey: key,
+      now: () => new Date("2026-09-08T12:00:00.000Z"),
+      timeZone: "America/Denver",
+    });
+    try {
+      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(10);
+      expect(await reopened.getNote(vault, noteId)).toMatchObject({
+        revision: 2,
+        content: "current",
+      });
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("does not import broker clients or grants from an untrusted plaintext vault", async () => {
     const { path } = await plaintextVault();
     const plaintext = new Database(path);

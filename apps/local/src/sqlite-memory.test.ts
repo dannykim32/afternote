@@ -820,6 +820,35 @@ describe("SqliteMemory storage and schema migrations", () => {
     }
   });
 
+  it("upgrades the earlier alpha.9 temporal-index shape without adding the column twice", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-alpha9-time-index-"));
+    tempDirectories.push(directory);
+    const path = join(directory, "vault.db");
+    const current = new SqliteMemory(path, localVault);
+    const note = await current.remember(localVault, {
+      content: "The signed venue agreement arrived on August 28.",
+      source: { timestamp: "2026-08-28T11:45:00-06:00" },
+    });
+    current.close();
+
+    const alpha9 = new Database(path);
+    alpha9.exec("pragma user_version = 9");
+    alpha9.close();
+
+    const upgraded = new SqliteMemory(path, localVault, {
+      now: () => new Date("2026-09-08T12:00:00.000Z"),
+      timeZone: "America/Denver",
+    });
+    try {
+      expect(upgraded.diagnosticSnapshot(localVault).schemaVersion).toBe(10);
+      expect(await upgraded.recall(localVault, "What happened on August 28?")).toMatchObject([
+        { note: { id: note.id }, citation: { noteId: note.id } },
+      ]);
+    } finally {
+      upgraded.close();
+    }
+  });
+
   it("keeps browse order stable across edits and binds cursors to their search", async () => {
     const memory = new SqliteMemory(":memory:", localVault);
     const originalDateNow = Date.now;

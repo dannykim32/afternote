@@ -35,6 +35,11 @@ signed for local development; it does not carry the maintainer's Developer ID, n
 ticket, or release Keychain entitlements. Public binaries are produced only by the guarded
 release flow in [RELEASING.md](docs/RELEASING.md).
 
+Development and CI builds verify the pinned SQLCipher and OpenSSL source archives, record the
+Apple toolchain that compiled them, and require a macOS 13.3 deployment target. Public release
+builds additionally require the exact reviewed Apple toolchain and byte-for-byte native output
+digests recorded in `scripts/native-release-inputs.json`.
+
 After work-laptop acceptance, the signed and notarized DMG will be published on the
 [GitHub Releases page](https://github.com/dannykim32/afternote/releases). Download the DMG
 and `SHA256SUMS` together, then follow [the verification steps](docs/VERIFY_RELEASE.md)

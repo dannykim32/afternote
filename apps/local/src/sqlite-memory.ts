@@ -280,7 +280,13 @@ type RevisionsCursor = {
   id: string;
 };
 
-const SCHEMA_MIGRATIONS = [
+type SchemaMigration = {
+  version: number;
+  sql: string;
+  prepare?: (database: Database) => void;
+};
+
+const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   {
     version: 1,
     sql: `
@@ -517,9 +523,15 @@ const SCHEMA_MIGRATIONS = [
   },
   {
     version: 10,
+    prepare: (database) => {
+      const columns = database
+        .query<{ name: string }, []>("pragma table_info(note_temporal_index)")
+        .all();
+      if (!columns.some(({ name }) => name === "source_timestamp")) {
+        database.exec("alter table note_temporal_index add column source_timestamp text");
+      }
+    },
     sql: `
-      alter table note_temporal_index add column source_timestamp text;
-
       update note_temporal_index
       set source_timestamp = (
         select json_extract(notes.source_json, '$.timestamp')
@@ -527,7 +539,7 @@ const SCHEMA_MIGRATIONS = [
         where notes.id = note_temporal_index.note_id
       );
 
-      create index note_temporal_index_source_timestamp
+      create index if not exists note_temporal_index_source_timestamp
       on note_temporal_index (source_timestamp, note_revision, note_id);
     `,
   },
@@ -2587,6 +2599,7 @@ export class SqliteMemory implements Memory {
       if (migration.version <= currentVersion) continue;
 
       this.#database.transaction(() => {
+        migration.prepare?.(this.#database);
         this.#database.exec(migration.sql);
         this.#database.exec(`PRAGMA user_version = ${migration.version};`);
       })();

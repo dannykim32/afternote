@@ -161,27 +161,8 @@ export function writeReleaseSupplyChainArtifacts(options: {
   );
 
   const bunVersion = verifiedVersion("Bun", process.versions.bun, "1.3.14");
-  const sqlcipherVersion = options.release
-    ? requiredVersion(nativeInputs.sqlcipherVersion, "SQLCipher")
-    : verifiedVersion(
-      "SQLCipher",
-      commandOutput([
-        "/opt/homebrew/opt/sqlcipher/bin/sqlcipher",
-        ":memory:",
-        "pragma cipher_version;",
-      ]),
-      "4.18.0 community",
-    ).split(" ")[0];
-  const opensslVersion = options.release
-    ? requiredVersion(nativeInputs.opensslVersion, "OpenSSL")
-    : verifiedVersion(
-      "OpenSSL",
-      /^OpenSSL\s+(\S+)/.exec(commandOutput([
-        "/opt/homebrew/opt/openssl@4/bin/openssl",
-        "version",
-      ]))?.[1],
-      "4.0.2",
-    );
+  const sqlcipherVersion = requiredVersion(nativeInputs.sqlcipherVersion, "SQLCipher");
+  const opensslVersion = requiredVersion(nativeInputs.opensslVersion, "OpenSSL");
 
   components.push(
     {
@@ -207,9 +188,7 @@ export function writeReleaseSupplyChainArtifacts(options: {
       version: sqlcipherVersion,
       license: "BSD-3-Clause",
       downloadLocation: `https://github.com/sqlcipher/sqlcipher/tree/v${sqlcipherVersion}`,
-      licenseSource: options.release
-        ? join(nativeReleaseDependencies, "SQLCIPHER_LICENSE.txt")
-        : "/opt/homebrew/opt/sqlcipher/LICENSE.md",
+      licenseSource: join(nativeReleaseDependencies, "SQLCIPHER_LICENSE.txt"),
       licenseFilename: "SQLCIPHER_LICENSE.md",
       kind: "native",
     },
@@ -218,9 +197,7 @@ export function writeReleaseSupplyChainArtifacts(options: {
       version: opensslVersion,
       license: "Apache-2.0",
       downloadLocation: `https://github.com/openssl/openssl/tree/openssl-${opensslVersion}`,
-      licenseSource: options.release
-        ? join(nativeReleaseDependencies, "OPENSSL_LICENSE.txt")
-        : "/opt/homebrew/opt/openssl@4/LICENSE.txt",
+      licenseSource: join(nativeReleaseDependencies, "OPENSSL_LICENSE.txt"),
       licenseFilename: "OPENSSL_LICENSE.txt",
       kind: "native",
     },
@@ -441,14 +418,6 @@ export function npmPackagePurl(name: string, version: string): string {
     return `pkg:npm/${scope}/${packageName}@${encodeURIComponent(version)}`;
   }
   return `pkg:npm/${encodeURIComponent(name)}@${encodeURIComponent(version)}`;
-}
-
-function commandOutput(command: string[]): string {
-  const result = Bun.spawnSync(command, { stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode !== 0) {
-    throw new Error(`Could not determine release dependency version: ${command[0]}`);
-  }
-  return result.stdout.toString().trim();
 }
 
 function verifiedVersion(

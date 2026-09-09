@@ -205,12 +205,16 @@ function assertPreparedNativeDependencies(): void {
     join(repositoryRoot, "scripts/native-release-inputs.json"),
     "utf8",
   )) as Record<string, unknown>;
+  const buildManifest = JSON.parse(readFileSync(
+    join(releaseDependenciesRoot, "BUILD_MANIFEST.json"),
+    "utf8",
+  )) as Record<string, unknown>;
   const expectations: Array<[string, string]> = [
-    [sqlcipherSource, requiredDigest(manifest.sqlcipherLibrarySha256, "SQLCipher library")],
-    [cryptoSource, requiredDigest(manifest.opensslLibrarySha256, "OpenSSL library")],
+    [sqlcipherSource, requiredDigest(buildManifest.sqlcipherLibrarySha256, "prepared SQLCipher library")],
+    [cryptoSource, requiredDigest(buildManifest.opensslLibrarySha256, "prepared OpenSSL library")],
     [
       join(releaseDependenciesRoot, "include/sqlite3.h"),
-      requiredDigest(manifest.sqlcipherHeaderSha256, "SQLCipher header"),
+      requiredDigest(buildManifest.sqlcipherHeaderSha256, "prepared SQLCipher header"),
     ],
   ];
   for (const [path, expected] of expectations) {
@@ -218,15 +222,9 @@ function assertPreparedNativeDependencies(): void {
       throw new Error(`Native release input changed without review: ${path}`);
     }
   }
-  const buildManifest = JSON.parse(readFileSync(
-    join(releaseDependenciesRoot, "BUILD_MANIFEST.json"),
-    "utf8",
-  )) as Record<string, unknown>;
   for (const key of [
+    "platform",
     "minimumMacosVersion",
-    "opensslLibrarySha256",
-    "sqlcipherLibrarySha256",
-    "sqlcipherHeaderSha256",
   ] as const) {
     if (buildManifest[key] !== manifest[key]) {
       throw new Error(`Prepared native dependency manifest disagrees with reviewed input: ${key}`);
@@ -237,6 +235,20 @@ function assertPreparedNativeDependencies(): void {
     buildManifest.sqlcipherSourceSha256 !== (manifest.sqlcipherSource as Record<string, unknown>)?.sha256
   ) {
     throw new Error("Prepared native dependency sources disagree with reviewed inputs");
+  }
+  if (releaseBuild) {
+    for (const key of [
+      "opensslLibrarySha256",
+      "sqlcipherLibrarySha256",
+      "sqlcipherHeaderSha256",
+    ] as const) {
+      if (buildManifest[key] !== manifest[key]) {
+        throw new Error(`Release native dependency disagrees with reviewed input: ${key}`);
+      }
+    }
+    if (JSON.stringify(buildManifest.toolchain) !== JSON.stringify(manifest.releaseToolchain)) {
+      throw new Error("Release native dependency toolchain disagrees with reviewed input");
+    }
   }
 }
 

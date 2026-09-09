@@ -19,11 +19,12 @@ import { sha256DirectoryTree } from "./release-inputs";
 const BUN_VERSION = "1.3.14";
 
 export const PUBLIC_RELEASE_COMMANDS = [
-  ["run", "typecheck"],
-  ["run", "test"],
-  ["run", "test:quality"],
-  ["run", "audit"],
-  ["run", "test:package"],
+  { args: ["run", "prepare:native-release"], phase: "release-preparation" },
+  { args: ["run", "typecheck"], phase: "quality" },
+  { args: ["run", "test"], phase: "quality" },
+  { args: ["run", "test:quality"], phase: "quality" },
+  { args: ["run", "audit"], phase: "quality" },
+  { args: ["run", "test:package"], phase: "quality" },
 ] as const;
 
 if (import.meta.main) buildPublicRelease();
@@ -49,9 +50,11 @@ function buildPublicRelease(): void {
     git(["worktree", "add", "--detach", stagedRepository, sourceCommit], repositoryRoot);
     worktreeCreated = true;
     requireCleanSource(stagedRepository);
-    const qualityEnvironment = releaseCommandEnvironment(process.env, {
+    const qualityEnvironment = releaseCommandEnvironment({}, {
       AFTERNOTE_RELEASE_BUILD: undefined,
       AFTERNOTE_RELEASE_DEPENDENCY_TREE_SHA256: undefined,
+      HOME: process.env.HOME,
+      TMPDIR: process.env.TMPDIR,
     });
     runBun(
       ["install", "--frozen-lockfile", "--ignore-scripts", "--no-cache"],
@@ -59,11 +62,21 @@ function buildPublicRelease(): void {
       qualityEnvironment,
     );
     const dependencyTreeSha256 = sha256DirectoryTree(join(stagedRepository, "node_modules"));
+    const preparationEnvironment = releaseCommandEnvironment({}, {
+      AFTERNOTE_RELEASE_BUILD: "1",
+      HOME: process.env.HOME,
+      TMPDIR: process.env.TMPDIR,
+    });
 
     for (const command of PUBLIC_RELEASE_COMMANDS) {
-      runBun([...command], stagedRepository, qualityEnvironment);
+      runBun(
+        [...command.args],
+        stagedRepository,
+        command.phase === "release-preparation"
+          ? preparationEnvironment
+          : qualityEnvironment,
+      );
     }
-    runBun(["run", "prepare:native-release"], stagedRepository, qualityEnvironment);
 
     const releaseEnvironment = releaseCommandEnvironment(process.env, {
       AFTERNOTE_RELEASE_BUILD: "1",
