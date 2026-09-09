@@ -35,6 +35,8 @@ describeMacos("native integration command runner", () => {
       join(import.meta.dir, "../native/setup_guide_state.mm"),
       join(import.meta.dir, "../native/plain_text_list_formatting.mm"),
       join(import.meta.dir, "../native/application_installation.mm"),
+      join(import.meta.dir, "../native/owner_broker.mm"),
+      join(import.meta.dir, "../native/product_surface_router.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
       "-o",
       runner,
@@ -63,7 +65,10 @@ describeMacos("native integration command runner", () => {
       stdout: "pipe",
       stderr: "pipe",
     });
-    expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
+    expect(
+      smoke.exitCode,
+      `${smoke.stderr.toString()}\n${smoke.stdout.toString()}`,
+    ).toBe(0);
     return JSON.parse(smoke.stdout.toString()) as {
       result?: { healthy: boolean; installed: boolean };
       error?: string;
@@ -143,7 +148,10 @@ describeMacos("native integration command runner", () => {
       runner,
       "--broker-recovery-smoke",
     ], { stdout: "pipe", stderr: "pipe" });
-    expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
+    expect(
+      smoke.exitCode,
+      `${smoke.stderr.toString()}\n${smoke.stdout.toString()}`,
+    ).toBe(0);
     expect(JSON.parse(smoke.stdout.toString())).toEqual({
       boundedFailure: true,
       disconnectRaceRestartsRecovery: true,

@@ -1,7 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #include <fcntl.h>
-#include <xpc/xpc.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -10,6 +9,7 @@
 #import "connector_presentation.h"
 #import "note_editor_state.h"
 #import "owner_broker.h"
+#import "product_surface_router.h"
 #import "setup_guide_state.h"
 #import "application_installation.h"
 
@@ -29,8 +29,6 @@
 namespace {
 
 constexpr size_t kMaximumResponseBytes = 1024 * 1024;
-constexpr int64_t kOwnerPresenceTimeoutSeconds = 125;
-constexpr int64_t kAdminOperationTimeoutSeconds = 10 * 60;
 constexpr int64_t kIntegrationCommandTimeoutSeconds = 45;
 constexpr CGFloat kAskComposerHeight = 38;
 constexpr CGFloat kAskComposerMaximumHeight = 78;
@@ -55,11 +53,6 @@ constexpr NSInteger kConnectionsTabIndex = 1;
 constexpr NSInteger kRecoveryTabIndex = 2;
 constexpr NSInteger kSetupTabIndex = 3;
 constexpr NSInteger kSettingsTabIndex = 4;
-
-typedef NS_ENUM(NSInteger, AfternoteProductSurface) {
-  AfternoteProductSurfaceMemory = 0,
-  AfternoteProductSurfaceConnections = 1,
-};
 
 NSString *const kLibraryResultKindKey = @"resultKind";
 NSString *const kLibrarySearchResultKind = @"search";
@@ -86,10 +79,6 @@ int64_t RoutineAuthenticationTtlMilliseconds() {
 
 NSString *ServiceName() {
   return [NSString stringWithUTF8String:AFTERNOTE_OWNER_CONTROL_MACH_SERVICE];
-}
-
-NSString *Identifier() {
-  return [[NSUUID UUID] UUIDString];
 }
 
 NSString *StringValue(id value, NSString *fallback = @"") {
@@ -1037,308 +1026,24 @@ BOOL IsBrokerResult(NSString *method, NSDictionary *result, NSDictionary *params
             : [method hasPrefix:@"recovery."] && IsRecoveryResult(method, result);
 }
 
+OwnerBrokerConnection *NewOwnerBrokerConnection(NSString *service) {
+  return [[OwnerBrokerConnection alloc]
+      initWithService:service
+      resultValidator:^BOOL(NSString *method, NSDictionary *result,
+                            NSDictionary *params) {
+        return IsBrokerResult(method, result, params);
+      }
+      errorValidator:^BOOL(NSDictionary *error) {
+        return IsKnownBrokerError(error);
+      }
+      lifecycleValidator:^BOOL(NSString *method, NSDictionary *before,
+                               NSDictionary *after) {
+        return IsLifecycleTransitionConsistent(method, before, after);
+      }];
+}
+
 }  // namespace
 
-@interface OwnerBrokerConnection : NSObject <AfternoteOwnerBroker> {
-  xpc_connection_t _connection;
-  NSString *_service;
-  dispatch_queue_t _connectionQueue;
-  NSUInteger _connectionGeneration;
-  NSUInteger _disconnectGenerationReported;
-}
-@property(nonatomic, copy) void (^disconnectHandler)(void);
-- (instancetype)initWithService:(NSString *)service;
-- (void)requestMethod:(NSString *)method
-               params:(NSDictionary *)params
-                reply:(BrokerReply)reply;
-- (void)replaceConnection;
-- (BOOL)requestSynchronouslyMethod:(NSString *)method
-                            params:(NSDictionary *)params
-                            result:(NSDictionary **)result
-                             error:(NSDictionary **)error;
-- (void)requestLifecycleTransitionMethod:(NSString *)method reply:(BrokerReply)reply;
-#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
-- (BOOL)testRejectsSerializedResponse:(NSString *)serialized method:(NSString *)method params:(NSDictionary *)params;
-- (BOOL)testAcceptsSerializedResponse:(NSString *)serialized method:(NSString *)method params:(NSDictionary *)params;
-#endif
-@end
-
-@implementation OwnerBrokerConnection
-
-- (void)connectLocked {
-  _connectionGeneration += 1;
-  NSUInteger generation = _connectionGeneration;
-  _connection = xpc_connection_create_mach_service(
-      _service.UTF8String,
-      _connectionQueue, 0);
-  if (_connection == nullptr) return;
-  xpc_connection_t connection = _connection;
-  if (xpc_connection_set_peer_code_signing_requirement(
-          connection, AFTERNOTE_BROKER_CODE_REQUIREMENT) != 0) {
-    xpc_connection_cancel(connection);
-    _connection = nullptr;
-    return;
-  }
-  __weak OwnerBrokerConnection *weakSelf = self;
-  xpc_connection_set_event_handler(connection, ^(xpc_object_t event) {
-    OwnerBrokerConnection *strongSelf = weakSelf;
-    if (strongSelf == nil || xpc_get_type(event) != XPC_TYPE_ERROR ||
-        strongSelf->_connection != connection ||
-        strongSelf->_connectionGeneration != generation ||
-        strongSelf->_disconnectGenerationReported == generation) return;
-    strongSelf->_disconnectGenerationReported = generation;
-    void (^handler)(void) = strongSelf.disconnectHandler;
-    if (handler != nil) handler();
-  });
-  xpc_connection_resume(connection);
-}
-
-- (void)resetConnectionLockedForGeneration:(NSUInteger)generation {
-  if (generation != _connectionGeneration) return;
-  if (_connection != nullptr) {
-    xpc_connection_cancel(_connection);
-    _connection = nullptr;
-  }
-  [self connectLocked];
-}
-
-- (instancetype)initWithService:(NSString *)service {
-  self = [super init];
-  if (self == nil) return nil;
-  _service = [service copy];
-  _connectionQueue = dispatch_queue_create("dev.afternote.owner-control.xpc", DISPATCH_QUEUE_SERIAL);
-  dispatch_sync(_connectionQueue, ^{ [self connectLocked]; });
-  return self;
-}
-
-- (void)dealloc {
-  if (_connection != nullptr) xpc_connection_cancel(_connection);
-}
-
-- (void)sendMethodLocked:(NSString *)method
-                  params:(NSDictionary *)params
-              connection:(xpc_connection_t)connection
-              generation:(NSUInteger)generation
-                   reply:(BrokerReply)reply {
-  if (_connection != connection || _connectionGeneration != generation) {
-    reply(nil, @{ @"code" : @"broker_unavailable",
-                  @"message" : @"The Afternote broker connection changed." });
-    return;
-  }
-  NSString *requestId = Identifier();
-  NSDictionary *request = @{
-    @"protocolVersion" : @1,
-    @"requestId" : requestId,
-    @"method" : method,
-    @"params" : params,
-  };
-  NSData *data = [NSJSONSerialization dataWithJSONObject:request options:0 error:nil];
-  if (data == nil || data.length == 0 || data.length > kMaximumResponseBytes) {
-    reply(nil, @{ @"code" : @"invalid_request", @"message" : @"The owner request could not be encoded." });
-    return;
-  }
-  NSString *serialized = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-  xpc_object_t message = xpc_dictionary_create(nullptr, nullptr, 0);
-  xpc_dictionary_set_string(message, "request", serialized.UTF8String);
-  xpc_connection_send_message_with_reply(
-      connection, message,
-      dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
-      ^(xpc_object_t response) {
-    dispatch_async(self->_connectionQueue, ^{
-      if (self->_connection != connection || self->_connectionGeneration != generation) return;
-      if (response == nullptr || xpc_get_type(response) == XPC_TYPE_ERROR) {
-        reply(nil, @{ @"code" : @"broker_unavailable", @"message" : @"The Afternote broker is unavailable or restarting." });
-        return;
-      }
-      const char *transportError = xpc_dictionary_get_string(response, "error");
-      if (transportError != nullptr) {
-        reply(nil, @{ @"code" : @"broker_unavailable", @"message" : @"The Afternote broker refused the native connection." });
-        return;
-      }
-      const char *bytes = xpc_dictionary_get_string(response, "response");
-      if (bytes == nullptr || strlen(bytes) > kMaximumResponseBytes) {
-        [self rejectInvalidResponseLocked:@"The broker returned an invalid response."
-                               generation:generation reply:reply];
-        return;
-      }
-      NSString *responseString = [[NSString alloc]
-          initWithBytes:bytes length:strlen(bytes) encoding:NSUTF8StringEncoding];
-      [self deliverSerializedResponseLocked:responseString requestId:requestId
-                                     method:method params:params generation:generation reply:reply];
-    });
-  });
-}
-
-- (void)requestMethod:(NSString *)method
-               params:(NSDictionary *)params
-                reply:(BrokerReply)reply {
-  dispatch_async(_connectionQueue, ^{
-    if (self->_connection == nullptr) {
-      reply(nil, @{ @"code" : @"broker_unavailable", @"message" : @"The Afternote broker identity could not be verified." });
-      return;
-    }
-    xpc_connection_t connection = self->_connection;
-    NSUInteger generation = self->_connectionGeneration;
-    [self sendMethodLocked:method params:params connection:connection
-                generation:generation reply:reply];
-  });
-}
-
-- (void)replaceConnection {
-  dispatch_async(_connectionQueue, ^{
-    [self resetConnectionLockedForGeneration:self->_connectionGeneration];
-  });
-}
-
-- (void)requestLifecycleTransitionMethod:(NSString *)method reply:(BrokerReply)reply {
-  if (![method isEqualToString:@"lifecycle.lock"] &&
-      ![method isEqualToString:@"lifecycle.unlock"]) {
-    reply(nil, @{ @"code" : @"invalid_request",
-                  @"message" : @"Lifecycle transition is invalid." });
-    return;
-  }
-  dispatch_async(_connectionQueue, ^{
-    if (self->_connection == nullptr) {
-      reply(nil, @{ @"code" : @"broker_unavailable",
-                    @"message" : @"The Afternote broker identity could not be verified." });
-      return;
-    }
-    xpc_connection_t connection = self->_connection;
-    NSUInteger generation = self->_connectionGeneration;
-    [self sendMethodLocked:@"lifecycle.status" params:@{} connection:connection
-                generation:generation
-                     reply:^(NSDictionary *before, NSDictionary *statusError) {
-      if (statusError != nil) {
-        reply(nil, statusError);
-        return;
-      }
-      [self sendMethodLocked:method params:@{} connection:connection
-                  generation:generation
-                       reply:^(NSDictionary *after, NSDictionary *transitionError) {
-        if (transitionError != nil) {
-          reply(nil, transitionError);
-          return;
-        }
-        if (!IsLifecycleTransitionConsistent(method, before, after)) {
-          [self rejectInvalidResponseLocked:
-              @"Lifecycle transition response did not match its preflight."
-                                 generation:generation reply:reply];
-          return;
-        }
-        reply(after, nil);
-      }];
-    }];
-  });
-}
-
-- (BOOL)requestSynchronouslyMethod:(NSString *)method
-                            params:(NSDictionary *)params
-                            result:(NSDictionary **)result
-                             error:(NSDictionary **)error {
-  __block NSDictionary *receivedResult = nil;
-  __block NSDictionary *receivedError = nil;
-  dispatch_semaphore_t completed = dispatch_semaphore_create(0);
-  [self requestMethod:method params:params reply:^(NSDictionary *value, NSDictionary *failure) {
-    receivedResult = value;
-    receivedError = failure;
-    dispatch_semaphore_signal(completed);
-  }];
-  if (dispatch_semaphore_wait(
-          completed, dispatch_time(DISPATCH_TIME_NOW,
-              (kOwnerPresenceTimeoutSeconds + kAdminOperationTimeoutSeconds) *
-                  NSEC_PER_SEC)) != 0) return NO;
-  if (result != nullptr) *result = receivedResult;
-  if (error != nullptr) *error = receivedError;
-  return YES;
-}
-
-- (void)rejectInvalidResponseLocked:(NSString *)message
-                         generation:(NSUInteger)generation
-                              reply:(BrokerReply)reply {
-  if (generation != _connectionGeneration) return;
-  void (^handler)(void) = self.disconnectHandler;
-  [self resetConnectionLockedForGeneration:generation];
-  if (handler != nil) handler();
-  reply(nil, @{ @"code" : @"invalid_response", @"message" : message });
-}
-
-- (void)deliverSerializedResponseLocked:(NSString *)serialized
-                               requestId:(NSString *)requestId
-                                  method:(NSString *)method
-                                  params:(NSDictionary *)params
-                              generation:(NSUInteger)generation
-                                   reply:(BrokerReply)reply {
-  NSData *responseData = [serialized dataUsingEncoding:NSUTF8StringEncoding];
-  id decoded = responseData == nil ? nil :
-      [NSJSONSerialization JSONObjectWithData:responseData options:0 error:nil];
-  if (![decoded isKindOfClass:[NSDictionary class]]) {
-    [self rejectInvalidResponseLocked:@"The broker returned an invalid response."
-                           generation:generation reply:reply];
-    return;
-  }
-  NSDictionary *object = decoded;
-  id ok = object[@"ok"];
-  if (![object[@"protocolVersion"] isEqual:@1] ||
-      ![object[@"requestId"] isEqual:requestId] || !IsBoolean(ok)) {
-    [self rejectInvalidResponseLocked:@"The broker response context did not match this request."
-                           generation:generation reply:reply];
-    return;
-  }
-  if ([ok boolValue]) {
-    id result = object[@"result"];
-    if (![result isKindOfClass:[NSDictionary class]] ||
-        !ExactKeys(object, @[ @"protocolVersion", @"requestId", @"ok", @"result" ]) ||
-        !IsBrokerResult(method, result, params)) {
-      [self rejectInvalidResponseLocked:@"The broker returned a malformed operation result."
-                             generation:generation reply:reply];
-      return;
-    }
-    reply(result, nil);
-    return;
-  }
-  id error = object[@"error"];
-  if (![error isKindOfClass:[NSDictionary class]] ||
-      !ExactKeys(object, @[ @"protocolVersion", @"requestId", @"ok", @"error" ]) ||
-      !IsKnownBrokerError(error)) {
-    [self rejectInvalidResponseLocked:@"The broker returned a malformed error result."
-                           generation:generation reply:reply];
-    return;
-  }
-  reply(nil, error);
-}
-
-#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
-- (BOOL)testRejectsSerializedResponse:(NSString *)serialized method:(NSString *)method params:(NSDictionary *)params {
-  __block BOOL rejected = NO;
-  dispatch_sync(_connectionQueue, ^{
-    NSString *requestId = @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    NSUInteger generation = self->_connectionGeneration;
-    [self deliverSerializedResponseLocked:serialized requestId:requestId method:method params:params
-                               generation:generation
-                                    reply:^(NSDictionary *result, NSDictionary *error) {
-      rejected = result == nil && [error[@"code"] isEqualToString:@"invalid_response"] &&
-          self->_connectionGeneration == generation + 1;
-    }];
-  });
-  return rejected;
-}
-
-- (BOOL)testAcceptsSerializedResponse:(NSString *)serialized method:(NSString *)method params:(NSDictionary *)params {
-  __block BOOL accepted = NO;
-  dispatch_sync(_connectionQueue, ^{
-    NSString *requestId = @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    NSUInteger generation = self->_connectionGeneration;
-    [self deliverSerializedResponseLocked:serialized requestId:requestId method:method params:params
-                               generation:generation
-                                    reply:^(NSDictionary *result, NSDictionary *error) {
-      accepted = result != nil && error == nil && self->_connectionGeneration == generation;
-    }];
-  });
-  return accepted;
-}
-#endif
-
-@end
 
 BOOL ParseRecoveryPolicy(NSString *value, NSString **action, id *destination) {
   if ([value isEqualToString:@"keep"] || [value isEqualToString:@"delete"]) {
@@ -1429,7 +1134,7 @@ int RunAdminCommand(int argc, const char *argv[]) {
     return 64;
   }
 
-  OwnerBrokerConnection *broker = [[OwnerBrokerConnection alloc] initWithService:ServiceName()];
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 1;
   NSDictionary *priorLifecycleStatus = nil;
   NSDictionary *result = nil;
@@ -1846,6 +1551,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @interface OwnerControlDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSOpenSavePanelDelegate>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) NSTabView *surfaceTabs;
+@property(nonatomic, strong) AfternoteProductSurfaceRouter *surfaceRouter;
 @property(nonatomic, strong) NSSegmentedControl *surfaceSelector;
 @property(nonatomic, strong) NSButton *memoryNavigationButton;
 @property(nonatomic, strong) NSButton *connectionsNavigationButton;
@@ -1868,7 +1574,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) NSUInteger recoveryStatusRequestSequence;
 @property(nonatomic) NSUInteger brokerRecoverySequence;
 @property(nonatomic) NSUInteger brokerRecoveryAttempt;
-@property(nonatomic) NSInteger brokerRecoverySurface;
 @property(nonatomic) BOOL brokerRecoveryInFlight;
 @property(nonatomic, strong) id<AfternoteOwnerBroker> broker;
 @property(nonatomic, strong) NSDictionary *connections;
@@ -1951,6 +1656,13 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 
 @implementation OwnerControlDelegate
 
+- (instancetype)init {
+  self = [super init];
+  if (self == nil) return nil;
+  self.surfaceRouter = [[AfternoteProductSurfaceRouter alloc] init];
+  return self;
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   (void)notification;
   self.auditEvents = [NSMutableArray array];
@@ -1978,7 +1690,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
              name:@"dev.afternote.vault-did-unlock"
            object:nil];
 #if !defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
-  self.broker = [[OwnerBrokerConnection alloc] initWithService:ServiceName()];
+  self.broker = NewOwnerBrokerConnection(ServiceName());
   __weak OwnerControlDelegate *weakSelf = self;
   self.broker.disconnectHandler = ^{
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -2332,6 +2044,18 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                             selected:selected == AfternoteProductSurfaceMemory];
   [self styleProductNavigationButton:self.connectionsNavigationButton
                             selected:selected == AfternoteProductSurfaceConnections];
+}
+
+- (AfternoteProductSurface)displaySurface:(AfternoteProductSurface)surface
+                             recoveryReady:(BOOL)recoveryReady {
+  AfternoteProductSurface resolved =
+      [self.surfaceRouter selectRequestedSurface:surface
+                                   recoveryReady:recoveryReady];
+  self.surfaceSelector.selectedSegment =
+      AfternoteNavigationSegmentForSurface(resolved);
+  [self updateProductNavigationState];
+  [self.surfaceTabs selectTabViewItemAtIndex:(NSInteger)resolved];
+  return resolved;
 }
 
 - (void)selectProductSurface:(NSButton *)sender {
@@ -3520,32 +3244,31 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 
 - (void)switchSurface:(NSSegmentedControl *)sender {
   NSInteger segment = sender.selectedSegment;
-  if (self.recoveryState.length > 0 && ![self.recoveryState isEqualToString:@"ready"]) {
-    sender.selectedSegment = -1;
-    [self.surfaceTabs selectTabViewItemAtIndex:kRecoveryTabIndex];
+  BOOL recoveryReady = self.recoveryState.length == 0 ||
+      [self.recoveryState isEqualToString:@"ready"];
+  AfternoteProductSurface requested = segment == AfternoteProductSurfaceMemory
+      ? AfternoteProductSurfaceMemory
+      : AfternoteProductSurfaceConnections;
+  AfternoteProductSurface resolved = [self displaySurface:requested
+                                             recoveryReady:recoveryReady];
+  if (resolved == AfternoteProductSurfaceRecovery) {
     [self refreshRecovery:nil];
-    [self updateProductNavigationState];
     return;
   }
-  [self updateProductNavigationState];
-  if (segment == AfternoteProductSurfaceMemory) {
-    [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+  if (resolved == AfternoteProductSurfaceMemory) {
     if (self.libraryExpiresAt.length == 0) {
       if (self.vaultLocked) [self setLibraryBusy:NO status:LockedLibraryMessage()];
       else [self authenticateLibrary:nil];
     } else [self refreshVisibleLibraryNotes:nil];
     return;
   }
-  [self.surfaceTabs selectTabViewItemAtIndex:kConnectionsTabIndex];
   if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];
   else [self authenticate:nil];
 }
 
 - (void)openSettings:(id)sender {
   (void)sender;
-  self.surfaceSelector.selectedSegment = -1;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:kSettingsTabIndex];
+  [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
   if (self.broker == nil) return;
   [self refreshRoutineAuthenticationPreference];
   NSUInteger requestSequence = ++self.lifecycleStatusRequestSequence;
@@ -3663,9 +3386,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       self.vaultStatusCheckInFlight = NO;
       [self updateVaultAccessButton];
       [self clearLibraryPlaintext:@"Vault locked. Connector sessions were disconnected."];
-      self.surfaceSelector.selectedSegment = AfternoteProductSurfaceMemory;
-      [self updateProductNavigationState];
-      [self.surfaceTabs selectTabViewItemAtIndex:kMemoryTabIndex];
+      [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
     });
   }];
 }
@@ -3733,9 +3454,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self.auditEvents removeAllObjects];
   [self.revocationTargets removeAllObjects];
   if (self.content != nil) [self render];
-  self.surfaceSelector.selectedSegment = -1;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:kRecoveryTabIndex];
+  [self displaySurface:AfternoteProductSurfaceRecovery recoveryReady:YES];
   [self setRecoveryBusy:NO status:status];
   [self renderRecoveryState];
 }
@@ -3755,7 +3474,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.recoveryOperationSequence += 1;
   self.recoveryOperationInFlight = NO;
   self.ownerSessionGeneration += 1;
-  self.brokerRecoverySurface = self.surfaceSelector.selectedSegment;
+  [self.surfaceRouter beginBrokerRecoveryFromNavigationSegment:
+      self.surfaceSelector.selectedSegment];
   NSUInteger sequence = ++self.brokerRecoverySequence;
   [self setPrivilegedSurfacesReady:NO];
   [self clearLibraryPlaintext:@"The broker restarted. Reconnecting…"];
@@ -3789,15 +3509,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.brokerRecoveryInFlight = NO;
   self.recoveryState = @"ready";
   [self setPrivilegedSurfacesReady:YES];
-  NSInteger surface = self.brokerRecoverySurface;
-  if (self.vaultLocked || surface != AfternoteProductSurfaceConnections) {
-    surface = AfternoteProductSurfaceMemory;
-  }
-  self.surfaceSelector.selectedSegment = surface;
-  [self updateProductNavigationState];
-  [self.surfaceTabs selectTabViewItemAtIndex:
-      surface == AfternoteProductSurfaceConnections
-          ? kConnectionsTabIndex : kMemoryTabIndex];
+  AfternoteProductSurface surface =
+      [self.surfaceRouter finishBrokerRecoveryWithVaultLocked:self.vaultLocked];
+  [self displaySurface:surface recoveryReady:YES];
   self.libraryAuthenticateButton.enabled = YES;
   self.authenticateButton.enabled = YES;
   self.libraryAuthenticateButton.title = self.vaultLocked
@@ -6966,8 +6680,8 @@ int RunFormattingSmoke() {
 }
 
 int RunLifecyclePeerInvalidationSmoke(BOOL expectFailure) {
-  OwnerBrokerConnection *observer = [[OwnerBrokerConnection alloc] initWithService:ServiceName()];
-  OwnerBrokerConnection *locker = [[OwnerBrokerConnection alloc] initWithService:ServiceName()];
+  OwnerBrokerConnection *observer = NewOwnerBrokerConnection(ServiceName());
+  OwnerBrokerConnection *locker = NewOwnerBrokerConnection(ServiceName());
   if (observer == nil || locker == nil) return 2;
   dispatch_semaphore_t disconnected = dispatch_semaphore_create(0);
   observer.disconnectHandler = ^{ dispatch_semaphore_signal(disconnected); };
@@ -7128,8 +6842,8 @@ int RunLibraryCleanupSmoke() {
       [delegate.recoveryErrorMessage isEqualToString:@"Fixture recovery error remains visible"] &&
       delegate.recoveryContent.arrangedSubviews.count == 2;
 
-  OwnerBrokerConnection *responseBroker = [[OwnerBrokerConnection alloc]
-      initWithService:@"dev.afternote.invalid-response-fixture"];
+  OwnerBrokerConnection *responseBroker = NewOwnerBrokerConnection(
+      @"dev.afternote.invalid-response-fixture");
   NSArray<NSDictionary *> *malformedResponses = @[
     @{ @"method" : @"library.session.begin",
        @"response" : @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":true,\"result\":{}}" },
@@ -7412,7 +7126,7 @@ int RunLibraryCleanupSmoke() {
 }
 
 int RunProtocolSmoke() {
-  OwnerBrokerConnection *broker = [[OwnerBrokerConnection alloc] initWithService:ServiceName()];
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 2;
   __block NSDictionary *sessionResult = nil;
   __block NSDictionary *sessionError = nil;

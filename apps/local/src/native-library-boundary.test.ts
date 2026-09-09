@@ -7,6 +7,10 @@ const nativeAppSource = readFileSync(
   join(sourceDirectory, "../native/owner_control_app.mm"),
   "utf8",
 );
+const ownerBrokerSource = readFileSync(
+  join(sourceDirectory, "../native/owner_broker.mm"),
+  "utf8",
+);
 const setupGuideStateSource = readFileSync(
   join(sourceDirectory, "../native/setup_guide_state.mm"),
   "utf8",
@@ -410,11 +414,11 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("if (!NSThread.isMainThread)");
     expect(nativeAppSource).toContain("noteEditor.undoManager removeAllActions");
     expect(nativeAppSource).toContain("librarySensitiveAlert");
-    expect(nativeAppSource).toContain("resetConnection");
-    expect(nativeAppSource).toContain("invalid_response");
+    expect(ownerBrokerSource).toContain("resetConnection");
+    expect(ownerBrokerSource).toContain("invalid_response");
     expect(nativeAppSource).toContain("libraryMutationInFlight");
-    expect(nativeAppSource).toContain("testRejectsSerializedResponse");
-    expect(nativeAppSource).toContain("testAcceptsSerializedResponse");
+    expect(ownerBrokerSource).toContain("testRejectsSerializedResponse");
+    expect(ownerBrokerSource).toContain("testAcceptsSerializedResponse");
     expect(nativeAppSource).toContain("IsAuditClientId");
     expect(nativeAppSource).toContain("IsAuditPrincipal");
     expect(nativeAppSource).toContain("IsBrokerResult");

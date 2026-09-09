@@ -369,6 +369,8 @@ export async function buildLocalAlpha(options?: {
     join(repositoryRoot, "apps/local/native/setup_guide_state.mm"),
     join(repositoryRoot, "apps/local/native/plain_text_list_formatting.mm"),
     join(repositoryRoot, "apps/local/native/application_installation.mm"),
+    join(repositoryRoot, "apps/local/native/owner_broker.mm"),
+    join(repositoryRoot, "apps/local/native/product_surface_router.mm"),
     join(repositoryRoot, "apps/local/native/owner_control_app.mm"),
     "-o",
     ownerControlBinaryPath,
