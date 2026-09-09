@@ -32,10 +32,11 @@ bun run test
 bun run package:local
 ```
 
-The development DMG is written to `build/local-alpha`. It is ad hoc signed for local
-development; it does not carry the maintainer's Developer ID, notarization ticket, or release
-Keychain entitlements. Public binaries are produced only by the guarded release flow in
-[RELEASING.md](docs/RELEASING.md).
+The development archive and its `SHA256SUMS` file are written to `build/local-alpha`. Verify
+the checksum there, extract the archive, and run the enclosed `install.sh`. The app is ad hoc
+signed for local development; it does not carry the maintainer's Developer ID, notarization
+ticket, or release Keychain entitlements. Public binaries are produced only by the guarded
+release flow in [RELEASING.md](docs/RELEASING.md).
 
 ## Remember and Recall
 
