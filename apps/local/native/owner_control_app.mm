@@ -5358,6 +5358,7 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)authenticate:(id)sender {
   (void)sender;
+  [self refreshIntegrationStatuses];
   NSUInteger generation = ++self.ownerSessionGeneration;
   [self setBusy:YES status:OwnerApprovalWaitMessage()];
   NSArray *scopes = @[

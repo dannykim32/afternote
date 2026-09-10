@@ -6,6 +6,13 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.11 - 2026-09-10
+
+### Fixed
+
+- Refreshing Connections now rescans Codex and Claude Code connector installation state, so
+  connector changes made with the Afternote CLI appear without restarting the app.
+
 ## 2.0.0-alpha.10 - 2026-09-09
 
 ### Fixed

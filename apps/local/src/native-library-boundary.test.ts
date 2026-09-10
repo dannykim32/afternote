@@ -323,6 +323,15 @@ describe("native Library production boundary", () => {
     );
   });
 
+  it("refreshes connector installation truth from the Connections refresh action", () => {
+    const refreshAction = nativeAppSource.slice(
+      nativeAppSource.indexOf("- (void)authenticate:"),
+      nativeAppSource.indexOf("- (void)applyOwnerSessionResult:"),
+    );
+    expect(refreshAction).toContain("[self refreshIntegrationStatuses];");
+    expect(refreshAction).toContain('requestMethod:@"owner.session.begin"');
+  });
+
   it("presents semantic recall from runtime truth while keeping exact search as the release default", () => {
     expect(nativeAppSource).toContain('@"Active · local 23 MB model"');
     expect(nativeAppSource).toContain(
