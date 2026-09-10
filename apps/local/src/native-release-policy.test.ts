@@ -10,7 +10,7 @@ describe("native release input policy", () => {
       join(repositoryRoot, "scripts/native-release-inputs.json"),
       "utf8",
     )) as Record<string, unknown>;
-    expect(configuration.schemaVersion).toBe(3);
+    expect(configuration.schemaVersion).toBe(4);
     expect(configuration.platform).toBe("darwin-arm64");
     expect(configuration.minimumMacosVersion).toBe("13.3");
     expect(configuration.releaseToolchain).toEqual({
@@ -30,12 +30,25 @@ describe("native release input policy", () => {
     ]) {
       expect(configuration[key]).toMatch(/^[a-f0-9]{64}$/);
     }
-    for (const key of ["opensslSource", "sqlcipherSource"]) {
+    for (const key of ["opensslSource", "sqlcipherSource", "sparkleDistribution"]) {
       const source = configuration[key] as Record<string, unknown>;
       expect(source.url).toMatch(/^https:\/\//);
       expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(source.maximumBytes).toBeGreaterThan(0);
     }
+    expect(configuration.sparkleVersion).toBe("2.9.6");
+    expect(configuration.sparklePublicEdKey).toBe(
+      "XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=",
+    );
+    expect(configuration.sparkleFeedUrl).toBe(
+      "https://raw.githubusercontent.com/dannykim32/afternote/main/appcast-alpha.xml",
+    );
+    expect(configuration.sparkleDistribution).toEqual({
+      version: "2.9.6",
+      url: "https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-for-Swift-Package-Manager.zip",
+      sha256: "8d5fb41d960b43f4a68aa14126bf62b098544ec8d191cdcc73eb14e63a8e7606",
+      maximumBytes: 50_000_000,
+    });
   });
 
   it("builds release libraries from pinned source with a reproducible epoch", () => {
@@ -56,6 +69,11 @@ describe("native release input policy", () => {
     expect(preparation).toContain('"-DSQLITE_ENABLE_FTS5"');
     expect(preparation).toContain("assertDeploymentTarget(cryptoPath)");
     expect(preparation).toContain("assertNoBuildPath(sqlcipherPath, temporaryRoot)");
+    expect(preparation).toContain("sparkleDistribution");
+    expect(preparation).toContain("Sparkle.framework");
+    expect(preparation).toContain("generate_keys");
+    expect(preparation).toContain("sign_update");
+    expect(preparation).toContain("SPARKLE_LICENSE.txt");
   });
 
   it("keeps Homebrew out of signed release libraries and claims only their target", () => {

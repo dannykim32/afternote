@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "platform": "darwin-arm64",
   "minimumMacosVersion": "13.3",
   "releaseToolchain": {
@@ -15,6 +15,10 @@
   "sqliteVersion": "3.53.4",
   "opensslVersion": "4.0.2",
   "onnxRuntimeVersion": "1.21.0",
+  "sparkleVersion": "2.9.6",
+  "sparklePublicEdKey": "XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=",
+  "sparkleFeedUrl": "https://raw.githubusercontent.com/dannykim32/afternote/main/appcast-alpha.xml",
+  "sparkleSigningAccount": "afternote-updates",
   "onnxRuntimeBindingSha256": "8ad39fe71b4e4683ae5ae7b5edb8f4d2fb47f58dc139c68a2a14d3977281b9a5",
   "onnxRuntimeLibrarySha256": "1bce2d05d778282c912e7fab6d5dfc5fa851f5797e8d0914a62d4adeb1d4d82b",
   "opensslLibrarySha256": "897d0e466b2127e29bc28669a0b4049dc1f5de9aec97aca17666044a12a724b0",
@@ -31,5 +35,11 @@
     "url": "https://github.com/sqlcipher/sqlcipher/archive/refs/tags/v4.18.0.tar.gz",
     "sha256": "1df02d1b346fa27feaf2da2cb2c0d8209e788248e461ec288718aa5d3e9643e5",
     "maximumBytes": 25000000
+  },
+  "sparkleDistribution": {
+    "version": "2.9.6",
+    "url": "https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-for-Swift-Package-Manager.zip",
+    "sha256": "8d5fb41d960b43f4a68aa14126bf62b098544ec8d191cdcc73eb14e63a8e7606",
+    "maximumBytes": 50000000
   }
 }

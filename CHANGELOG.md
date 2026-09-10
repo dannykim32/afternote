@@ -6,6 +6,22 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.12 - 2026-09-10
+
+### Added
+
+- Signed in-app update checks for official releases, with a manual Check for Updates command
+  and a configurable daily background check.
+- A guarded Sparkle appcast step that signs the notarized DMG and fails the release if the
+  expected version, byte length, HTTPS URL, or EdDSA signature is missing.
+
+### Security
+
+- Pinned Sparkle 2.9.6 by archive digest, embedded and re-signed its release framework, and
+  added it to the generated SBOM and third-party license inventory.
+- Update checks send no optional system profile. Downloads and installation always require
+  user approval, and both the feed and update archive must pass EdDSA verification.
+
 ## 2.0.0-alpha.11 - 2026-09-10
 
 ### Fixed

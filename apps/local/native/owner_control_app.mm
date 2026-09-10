@@ -13,6 +13,7 @@
 #import "product_surface_router.h"
 #import "setup_guide_state.h"
 #import "application_installation.h"
+#import "software_update.h"
 
 #ifndef AFTERNOTE_OWNER_CONTROL_MACH_SERVICE
 #define AFTERNOTE_OWNER_CONTROL_MACH_SERVICE "dev.afternote.vault-broker.owner-control"
@@ -1208,6 +1209,11 @@ void InstallApplicationMenu(NSApplication *application) {
                                                                action:nil
                                                         keyEquivalent:@""];
   NSMenu *applicationMenu = [[NSMenu alloc] initWithTitle:@""];
+#if defined(AFTERNOTE_RELEASE_BUILD)
+  AddResponderMenuItem(applicationMenu, @"Check for Updates…",
+                       @selector(checkForUpdates:), @"", 0);
+  [applicationMenu addItem:NSMenuItem.separatorItem];
+#endif
   AddResponderMenuItem(applicationMenu, @"Quit Afternote", @selector(terminate:),
                        @"q", NSEventModifierFlagCommand);
   applicationMenuItem.submenu = applicationMenu;
@@ -1625,6 +1631,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSButton *createNoteButton;
 @property(nonatomic, strong) NSButton *vaultAccessButton;
 @property(nonatomic, strong) NSPopUpButton *routineAuthenticationMenu;
+@property(nonatomic, strong) AfternoteSoftwareUpdateController *softwareUpdateController;
+@property(nonatomic, strong) NSButton *automaticUpdateChecksButton;
+@property(nonatomic, strong) NSButton *checkForUpdatesButton;
 @property(nonatomic, strong) NSStackView *libraryViews;
 @property(nonatomic, strong) NSDictionary *activeNote;
 @property(nonatomic, strong) NSArray<NSDictionary *> *revisionSummaries;
@@ -1678,6 +1687,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       boolForKey:kSetupGuideDismissedDefaultsKey];
   self.recoveryState = @"checking";
   self.recoveryActionButtons = [NSMutableArray array];
+  self.softwareUpdateController = AfternoteCreateSoftwareUpdateController();
   [NSDistributedNotificationCenter.defaultCenter
       addObserver:self
          selector:@selector(vaultDidLock:)
@@ -2277,10 +2287,34 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   identityState.textColor = AfternoteMutedTextColor();
 
   NSTextField *productHeading = [self label:@"Product" size:18 weight:NSFontWeightSemibold];
-  NSTextField *version = [self label:@"2.0 local alpha" size:12 weight:NSFontWeightMedium];
+  NSString *packageVersion = [NSBundle.mainBundle
+      objectForInfoDictionaryKey:@"AfternotePackageVersion"];
+  if (![packageVersion isKindOfClass:[NSString class]] || packageVersion.length == 0) {
+    packageVersion = @"Development";
+  }
+  NSTextField *version = [self label:packageVersion size:12 weight:NSFontWeightMedium];
   version.textColor = AfternoteMutedTextColor();
-  NSTextField *updateState = [self label:@"Manual during alpha" size:12 weight:NSFontWeightMedium];
-  updateState.textColor = AfternoteMutedTextColor();
+  self.automaticUpdateChecksButton = [NSButton checkboxWithTitle:@"Check automatically"
+                                                            target:self
+                                                            action:@selector(automaticUpdateChecksChanged:)];
+  self.automaticUpdateChecksButton.state =
+      self.softwareUpdateController.automaticallyChecksForUpdates
+          ? NSControlStateValueOn
+          : NSControlStateValueOff;
+  self.automaticUpdateChecksButton.enabled = self.softwareUpdateController.available;
+  self.automaticUpdateChecksButton.accessibilityLabel = @"Automatically check for Afternote updates";
+  self.checkForUpdatesButton = [AfternoteButton buttonWithTitle:@"Check now"
+                                                         target:self
+                                                         action:@selector(checkForUpdates:)];
+  [self styleSecondaryButton:self.checkForUpdatesButton];
+  self.checkForUpdatesButton.enabled = self.softwareUpdateController.available;
+  self.checkForUpdatesButton.accessibilityLabel = @"Check for Afternote updates";
+  NSStackView *updateControls = [NSStackView stackViewWithViews:@[
+    self.automaticUpdateChecksButton, self.checkForUpdatesButton
+  ]];
+  updateControls.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  updateControls.alignment = NSLayoutAttributeCenterY;
+  updateControls.spacing = 10;
   NSButton *showSetup = [AfternoteButton buttonWithTitle:@"Show setup guide"
                                                    target:self
                                                    action:@selector(openSetupGuide:)];
@@ -2320,7 +2354,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self settingsRowWithTitle:@"Build policy" detail:@"Development convenience is isolated from release builds." control:developmentState],
     productHeading,
     [self settingsRowWithTitle:@"Version" detail:@"Afternote V2 local memory." control:version],
-    [self settingsRowWithTitle:@"Updates" detail:@"Signed automatic updates are a release gate, not an alpha default." control:updateState],
+    [self settingsRowWithTitle:@"Updates" detail:self.softwareUpdateController.available
+        ? @"Daily checks are private and signed. Download and installation always require approval."
+        : @"Update checks are available only in signed release builds."
+        control:updateControls],
     [self settingsRowWithTitle:@"Setup guide" detail:@"Reconnect a tool or repeat the save-and-recall walkthrough." control:showSetup],
     [self settingsRowWithTitle:@"Feedback" detail:@"Report a bug or suggestion. Diagnostics are attached only if you review and add them." control:sendFeedback],
     [self settingsRowWithTitle:@"Uninstall" detail:@"Remove connector configuration and background components. Your encrypted vault and reconnect authorization are preserved." control:uninstall],
@@ -2347,6 +2384,15 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [column.widthAnchor constraintGreaterThanOrEqualToConstant:640],
   ]];
   return root;
+}
+
+- (void)automaticUpdateChecksChanged:(NSButton *)sender {
+  self.softwareUpdateController.automaticallyChecksForUpdates =
+      sender.state == NSControlStateValueOn;
+}
+
+- (void)checkForUpdates:(id)sender {
+  [self.softwareUpdateController checkForUpdates:sender];
 }
 
 - (void)uninstallAfternote:(id)sender {

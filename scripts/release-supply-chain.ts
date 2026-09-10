@@ -163,6 +163,7 @@ export function writeReleaseSupplyChainArtifacts(options: {
   const bunVersion = verifiedVersion("Bun", process.versions.bun, "1.3.14");
   const sqlcipherVersion = requiredVersion(nativeInputs.sqlcipherVersion, "SQLCipher");
   const opensslVersion = requiredVersion(nativeInputs.opensslVersion, "OpenSSL");
+  const sparkleVersion = requiredVersion(nativeInputs.sparkleVersion, "Sparkle");
 
   components.push(
     {
@@ -202,6 +203,17 @@ export function writeReleaseSupplyChainArtifacts(options: {
       kind: "native",
     },
   );
+  if (options.release) {
+    components.push({
+      name: "Sparkle",
+      version: sparkleVersion,
+      license: "MIT",
+      downloadLocation: `https://github.com/sparkle-project/Sparkle/tree/${sparkleVersion}`,
+      licenseSource: join(nativeReleaseDependencies, "SPARKLE_LICENSE.txt"),
+      licenseFilename: "SPARKLE_LICENSE.txt",
+      kind: "native",
+    });
+  }
   components.push(...BUN_EMBEDDED_COMPONENTS.map((component) => ({
     name: `Bun embedded: ${component.name}`,
     version: `bundled-with-bun-${bunVersion}`,

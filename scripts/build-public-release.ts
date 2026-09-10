@@ -106,11 +106,17 @@ function publishLocally(stagedRepository: string, repositoryRoot: string): void 
   const report = JSON.parse(readFileSync(
     join(source, "release-finalization-report.json"),
     "utf8",
-  )) as { finalDmg?: unknown; checksums?: unknown };
-  if (typeof report.finalDmg !== "string" || typeof report.checksums !== "string") {
+  )) as { finalDmg?: unknown; checksums?: unknown; appcast?: unknown };
+  if (typeof report.finalDmg !== "string" || typeof report.checksums !== "string" ||
+    typeof report.appcast !== "string") {
     throw new Error("Final public release report is incomplete");
   }
-  const inputs = [report.finalDmg, report.checksums, join(source, "release-finalization-report.json")];
+  const inputs = [
+    report.finalDmg,
+    report.appcast,
+    report.checksums,
+    join(source, "release-finalization-report.json"),
+  ];
   for (const input of inputs) {
     const info = lstatSync(input);
     if (!info.isFile() || info.isSymbolicLink()) {

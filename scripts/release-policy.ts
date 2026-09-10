@@ -3,6 +3,49 @@ import { VAULT_BROKER_IDENTIFIER } from "../apps/local/src/vault-broker-metadata
 const PACKAGE_VERSION =
   /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
 
+export type SoftwareUpdatePolicy =
+  | { enabled: false }
+  | {
+    enabled: true;
+    feedUrl: string;
+    publicEdKey: string;
+    automaticallyChecks: true;
+    automaticallyDownloads: false;
+    allowsAutomaticUpdates: false;
+    sendsSystemProfile: false;
+    scheduledCheckIntervalSeconds: 86_400;
+    verifiesBeforeExtraction: true;
+    requiresSignedFeed: true;
+    signedFeedFailureExpirationIntervalSeconds: 0;
+  };
+
+export function softwareUpdatePolicy(options: {
+  release: boolean;
+  feedUrl?: string;
+  publicEdKey?: string;
+}): SoftwareUpdatePolicy {
+  if (!options.release) return { enabled: false };
+  if (!options.feedUrl?.startsWith("https://")) {
+    throw new Error("Release software update feed must use HTTPS");
+  }
+  if (!options.publicEdKey || !/^[A-Za-z0-9+/]{43}=$/.test(options.publicEdKey)) {
+    throw new Error("Release software update public EdDSA key is invalid");
+  }
+  return {
+    enabled: true,
+    feedUrl: options.feedUrl,
+    publicEdKey: options.publicEdKey,
+    automaticallyChecks: true,
+    automaticallyDownloads: false,
+    allowsAutomaticUpdates: false,
+    sendsSystemProfile: false,
+    scheduledCheckIntervalSeconds: 86_400,
+    verifiesBeforeExtraction: true,
+    requiresSignedFeed: true,
+    signedFeedFailureExpirationIntervalSeconds: 0,
+  };
+}
+
 export function releaseVersionMetadata(options: {
   rootVersion: string;
   workspaceVersions: readonly string[];

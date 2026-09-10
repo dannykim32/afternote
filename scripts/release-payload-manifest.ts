@@ -1,7 +1,9 @@
 import {
   lstatSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
@@ -12,6 +14,10 @@ export type PayloadManifestEntry = {
   sha256: string;
   mode: string;
   bytes: number;
+} | {
+  path: string;
+  type: "symlink";
+  target: string;
 };
 
 export function readPayloadManifestEntries(portableRoot: string): PayloadManifestEntry[] {
@@ -40,8 +46,14 @@ function collectEntries(
         (relativePath === "Afternote.app" || relativePath.startsWith("Afternote.app/"))) continue;
       if (includeApplication && isExcludedApplicationEntry(relativePath)) continue;
       const info = lstatSync(path);
-      if (info.isSymbolicLink()) throw new Error(`Release payload contains a symlink: ${relativePath}`);
-      if (info.isDirectory()) visit(path, includeApplication);
+      if (info.isSymbolicLink()) {
+        const resolvedTarget = realpathSync(path);
+        const fromRoot = relative(realpathSync(portableRoot), resolvedTarget);
+        if (fromRoot === "" || fromRoot.startsWith("..") || fromRoot.startsWith("/")) {
+          throw new Error(`Release payload symlink escapes its payload root: ${relativePath}`);
+        }
+        entries.push({ path: relativePath, type: "symlink", target: readlinkSync(path) });
+      } else if (info.isDirectory()) visit(path, includeApplication);
       else if (info.isFile()) entries.push({
         path: relativePath,
         sha256: sha256(path),
@@ -78,8 +90,8 @@ export function assertEmbeddedRuntimeMatchesPortable(portableRoot: string): void
   for (const embedded of entries.filter((entry) => entry.path.startsWith(prefix))) {
     const relativePath = embedded.path.slice(prefix.length);
     const expected = outer.get(relativePath);
-    if (!expected || expected.sha256 !== embedded.sha256 ||
-      expected.mode !== embedded.mode || expected.bytes !== embedded.bytes) {
+    const normalizedEmbedded = { ...embedded, path: relativePath };
+    if (!expected || JSON.stringify(expected) !== JSON.stringify(normalizedEmbedded)) {
       throw new Error(`Embedded runtime differs from the reviewed portable payload: ${relativePath}`);
     }
   }
@@ -89,7 +101,7 @@ export function writePayloadManifest(portableRoot: string): string {
   const path = payloadManifestPath(portableRoot);
   writeFileSync(path, `${JSON.stringify({
     format: "afternote-signed-payload-manifest",
-    version: 2,
+    version: 3,
     entries: collectPayloadEntries(portableRoot),
   }, null, 2)}\n`, { mode: 0o644 });
   return path;
@@ -113,7 +125,7 @@ export function verifyEmbeddedRuntimeManifest(ownerApplicationPath: string): voi
     entries?: unknown;
   };
   if (parsed.format !== "afternote-signed-payload-manifest" ||
-    parsed.version !== 2 || !Array.isArray(parsed.entries)) {
+    parsed.version !== 3 || !Array.isArray(parsed.entries)) {
     throw new Error("Signed payload manifest is invalid");
   }
   const expected = (parsed.entries as PayloadManifestEntry[]).filter((entry) =>
@@ -137,7 +149,7 @@ export function verifyApplicationPayloadManifest(ownerApplicationPath: string): 
     entries?: unknown;
   };
   if (parsed.format !== "afternote-signed-payload-manifest" ||
-    parsed.version !== 2 || !Array.isArray(parsed.entries)) {
+    parsed.version !== 3 || !Array.isArray(parsed.entries)) {
     throw new Error("Signed payload manifest is invalid");
   }
   const expected = (parsed.entries as PayloadManifestEntry[]).filter((entry) =>
@@ -174,7 +186,7 @@ function parsePayloadManifest(portableRoot: string): {
     entries?: unknown;
   };
   if (parsed.format !== "afternote-signed-payload-manifest" ||
-    parsed.version !== 2 || !Array.isArray(parsed.entries)) {
+    parsed.version !== 3 || !Array.isArray(parsed.entries)) {
     throw new Error("Signed payload manifest is invalid");
   }
   return parsed as { format: string; version: number; entries: PayloadManifestEntry[] };

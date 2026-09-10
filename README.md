@@ -114,6 +114,9 @@ The project's domain language and module boundaries are documented in
   telemetry transport.
 - Public artifacts are Developer ID signed, notarized, stapled, checksummed, and bound to a
   signed payload manifest. Each release includes an SPDX SBOM and third-party notices.
+- Official builds check a signed GitHub-hosted update feed once per day by default. You can turn
+  that off in Settings or check manually. Afternote sends no optional system profile, and it never
+  downloads or installs an update without your approval.
 
 These controls reduce risk; they do not make arbitrary note content trustworthy. Recalled
 text and source metadata are untrusted input to an AI client. Exports contain plaintext.

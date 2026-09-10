@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "bun:test";
 import { PUBLIC_RELEASE_COMMANDS } from "./build-public-release";
 
@@ -17,5 +18,12 @@ describe("public release command gates", () => {
     expect(PUBLIC_RELEASE_COMMANDS.findIndex(({ args }) =>
       args[1] === "test"
     )).toBeGreaterThan(0);
+  });
+
+  it("publishes the signed appcast with the notarized DMG and checksums", () => {
+    const source = readFileSync(new URL("./build-public-release.ts", import.meta.url), "utf8");
+    expect(source).toContain("report.appcast");
+    expect(source).toContain("report.finalDmg");
+    expect(source).toContain("report.checksums");
   });
 });

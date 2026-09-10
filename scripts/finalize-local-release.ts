@@ -32,6 +32,14 @@ import {
 } from "./release-environment";
 import { sha256DirectoryTree } from "./release-inputs";
 import {
+  appcastGenerationCommand,
+  assertSparkleSigningIdentity,
+  assertSignedUpdateAppcast,
+  releaseAssetUrlPrefix,
+  releaseNotesForVersion,
+  signedUpdateSignature,
+} from "./release-appcast";
+import {
   releaseProvisioningProfileIdentity,
   releaseToolchainIdentity,
 } from "./build-local-alpha";
@@ -61,6 +69,9 @@ type ArtifactReport = {
   onnxRuntimeBindingPath: string;
   onnxRuntimePath: string;
   ownerControlAppPath: string;
+  sparkleFrameworkPath: string;
+  sparkleAutoupdatePath: string;
+  sparkleUpdaterAppPath: string;
   embeddedRuntimePath: string;
   sourceCommit: string;
   sourceTree: string;
@@ -72,6 +83,7 @@ type ArtifactReport = {
   provisioningProfilesSha256: string | null;
   payloadManifestSha256: string | null;
   buildProvenanceSha256: string | null;
+  nativeReleaseDependencyTreeSha256: string | null;
 };
 
 export type ReleaseFinalizationPaths = {
@@ -82,6 +94,7 @@ export type ReleaseFinalizationPaths = {
   finalDmg: string;
   verificationArchive: string;
   checksums: string;
+  appcast: string;
   report: string;
 };
 
@@ -101,6 +114,7 @@ export function releaseFinalizationPaths(
     finalDmg: join(outputDirectory, `${base}.dmg`),
     verificationArchive: join(outputDirectory, `.${base}-verification.zip`),
     checksums: join(outputDirectory, "SHA256SUMS"),
+    appcast: join(outputDirectory, "appcast-alpha.xml"),
     report: join(outputDirectory, "release-finalization-report.json"),
   };
 }
@@ -138,7 +152,9 @@ export function assertPublicArtifactReport(
     typeof report.payloadManifestSha256 !== "string" ||
     !/^[a-f0-9]{64}$/.test(report.payloadManifestSha256) ||
     typeof report.buildProvenanceSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(report.buildProvenanceSha256)) {
+    !/^[a-f0-9]{64}$/.test(report.buildProvenanceSha256) ||
+    typeof report.nativeReleaseDependencyTreeSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(report.nativeReleaseDependencyTreeSha256)) {
     throw new Error("Release finalization requires signed dependency and payload provenance");
   }
   if (resolve(report.portableDirectory) !== resolve(expectedPortableDirectory)) {
@@ -152,6 +168,15 @@ export function assertPublicArtifactReport(
   );
   if (resolve(report.embeddedRuntimePath) !== resolve(expectedRuntime)) {
     throw new Error("Release finalization requires the self-contained desktop runtime");
+  }
+  const expectedFramework = join(
+    report.ownerControlAppPath,
+    "Contents",
+    "Frameworks",
+    "Sparkle.framework",
+  );
+  if (resolve(report.sparkleFrameworkPath) !== resolve(expectedFramework)) {
+    throw new Error("Release finalization requires the embedded Sparkle framework");
   }
 }
 
@@ -206,6 +231,10 @@ function finalizeLocalRelease(): void {
   if (provisioningProfilesSha256 !== artifact.provisioningProfilesSha256) {
     throw new Error("Release provisioning profiles changed after packaging");
   }
+  if (sha256DirectoryTree(join(repositoryRoot, "apps/local/native/release-deps")) !==
+    artifact.nativeReleaseDependencyTreeSha256) {
+    throw new Error("Prepared native release dependencies changed after packaging");
+  }
 
   const teamId = requiredEnvironment("AFTERNOTE_TEAM_ID");
   if (!/^[A-Z0-9]{10}$/.test(teamId)) {
@@ -237,6 +266,9 @@ function finalizeLocalRelease(): void {
     artifact.cryptoLibraryPath,
     artifact.onnxRuntimeBindingPath,
     artifact.onnxRuntimePath,
+    artifact.sparkleAutoupdatePath,
+    artifact.sparkleUpdaterAppPath,
+    artifact.sparkleFrameworkPath,
     artifact.ownerControlAppPath,
     artifact.brokerWorkerAppPath,
     artifact.clientSignerAppPath,
@@ -255,6 +287,7 @@ function finalizeLocalRelease(): void {
     paths.submissionDmg,
     paths.finalDmg,
     paths.verificationArchive,
+    paths.appcast,
     paths.report,
   ]) rmSync(output, { force: true });
 
@@ -340,6 +373,14 @@ function finalizeLocalRelease(): void {
   rmSync(paths.submissionDmg, { force: true });
   verifyDesktopDmg(paths.finalDmg, teamId, artifact.payloadManifestSha256);
 
+  generateSignedAppcast({
+    repositoryRoot,
+    outputPath: paths.appcast,
+    finalDmg: paths.finalDmg,
+    version: artifact.version,
+    bundleVersion: artifact.bundleVersion,
+  });
+
   run(["ditto", "-c", "-k", "--keepParent", portableRoot, paths.verificationArchive]);
   verifyExtractedArchive(paths.verificationArchive, portableRoot, artifact, teamId);
   rmSync(paths.verificationArchive, { force: true });
@@ -352,12 +393,16 @@ function finalizeLocalRelease(): void {
     throw new Error("Release source inputs changed during finalization");
   }
 
-  const checksums = [`${sha256(paths.finalDmg)}  ${basename(paths.finalDmg)}`];
+  // SHA256SUMS accompanies the immutable GitHub Release asset. The signed
+  // appcast is published separately at the repository root and authenticates
+  // itself with Sparkle's EdDSA feed signature.
+  const checksums = [paths.finalDmg]
+    .map((path) => `${sha256(path)}  ${basename(path)}`);
   writeFileSync(paths.checksums, `${checksums.join("\n")}\n`, { mode: 0o644 });
 
   writeFileSync(paths.report, `${JSON.stringify({
     format: "afternote-local-release-finalization",
-    version: 1,
+    version: 2,
     sourceCommit,
     artifactVersion: artifact.version,
     notarySubmissionId: notary.id,
@@ -366,11 +411,92 @@ function finalizeLocalRelease(): void {
     dmgNotarySubmissionId: dmgNotary.id,
     finalDmg: paths.finalDmg,
     finalDmgSha256: sha256(paths.finalDmg),
+    appcast: paths.appcast,
+    appcastSha256: sha256(paths.appcast),
     checksums: paths.checksums,
     embeddedBuildProvenanceSha256: artifact.buildProvenanceSha256,
     finalPayloadManifestSha256: artifact.payloadManifestSha256,
   }, null, 2)}\n`, { mode: 0o644 });
   console.log(readFileSync(paths.report, "utf8"));
+}
+
+function generateSignedAppcast(options: {
+  repositoryRoot: string;
+  outputPath: string;
+  finalDmg: string;
+  version: string;
+  bundleVersion: string;
+}): void {
+  const inputs = JSON.parse(readFileSync(
+    join(options.repositoryRoot, "scripts/native-release-inputs.json"),
+    "utf8",
+  )) as { sparklePublicEdKey?: unknown; sparkleSigningAccount?: unknown };
+  if (typeof inputs.sparkleSigningAccount !== "string" ||
+    typeof inputs.sparklePublicEdKey !== "string") {
+    throw new Error("Native release inputs are missing the Sparkle signing identity");
+  }
+  const generateKeysTool = join(
+    options.repositoryRoot,
+    "apps/local/native/release-deps/generate_keys",
+  );
+  assertSparkleSigningIdentity(
+    run([generateKeysTool, "--account", inputs.sparkleSigningAccount, "-p"]).stdout,
+    inputs.sparklePublicEdKey,
+  );
+  const stage = mkdtempSync(join(tmpdir(), "afternote-appcast-"));
+  try {
+    const artifactFilename = basename(options.finalDmg);
+    const stagedDmg = join(stage, artifactFilename);
+    copyFileSync(options.finalDmg, stagedDmg);
+    writeFileSync(
+      join(stage, `${artifactFilename.slice(0, -4)}.md`),
+      releaseNotesForVersion(
+        readFileSync(join(options.repositoryRoot, "CHANGELOG.md"), "utf8"),
+        options.version,
+      ),
+      { mode: 0o644 },
+    );
+    const previousAppcast = join(options.repositoryRoot, "appcast-alpha.xml");
+    const stagedAppcast = join(stage, "appcast-alpha.xml");
+    if (existsSync(previousAppcast)) copyFileSync(previousAppcast, stagedAppcast);
+    const downloadUrlPrefix = releaseAssetUrlPrefix(options.version);
+    run(appcastGenerationCommand({
+      toolPath: join(
+        options.repositoryRoot,
+        "apps/local/native/release-deps/generate_appcast",
+      ),
+      account: inputs.sparkleSigningAccount,
+      outputPath: stagedAppcast,
+      archiveDirectory: stage,
+      downloadUrlPrefix,
+    }), options.repositoryRoot);
+    const appcast = readFileSync(stagedAppcast, "utf8");
+    assertSignedUpdateAppcast(appcast, {
+      artifactFilename,
+      artifactBytes: lstatSync(stagedDmg).size,
+      bundleVersion: options.bundleVersion,
+      downloadUrlPrefix,
+    });
+    const signUpdateTool = join(
+      options.repositoryRoot,
+      "apps/local/native/release-deps/sign_update",
+    );
+    run([signUpdateTool, "--account", inputs.sparkleSigningAccount, "--verify", stagedAppcast]);
+    run([
+      signUpdateTool,
+      "--account",
+      inputs.sparkleSigningAccount,
+      "--verify",
+      stagedDmg,
+      signedUpdateSignature(
+        appcast,
+        `${downloadUrlPrefix}${encodeURIComponent(artifactFilename)}`,
+      ),
+    ]);
+    copyFileSync(stagedAppcast, options.outputPath);
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
 }
 
 function resealDesktopApplication(options: {
@@ -602,6 +728,9 @@ function verifyExtractedArchive(
       artifact.cryptoLibraryPath,
       artifact.onnxRuntimeBindingPath,
       artifact.onnxRuntimePath,
+      artifact.sparkleAutoupdatePath,
+      artifact.sparkleUpdaterAppPath,
+      artifact.sparkleFrameworkPath,
       artifact.ownerControlAppPath,
       artifact.brokerWorkerAppPath,
       artifact.clientSignerAppPath,
@@ -631,14 +760,15 @@ function verifyBuildProvenance(
     throw new Error("Signed build provenance does not match the build report");
   }
   const parsed = JSON.parse(readFileSync(provenancePath, "utf8")) as Record<string, unknown>;
-  if (parsed.format !== "afternote-signed-build-provenance" || parsed.version !== 1 ||
+  if (parsed.format !== "afternote-signed-build-provenance" || parsed.version !== 2 ||
     parsed.sourceCommit !== artifact.sourceCommit ||
     parsed.sourceTree !== artifact.sourceTree ||
     parsed.dependencyLockSha256 !== artifact.dependencyLockSha256 ||
     parsed.dependencyTreeSha256 !== artifact.dependencyTreeSha256 ||
     parsed.buildEnvironmentSha256 !== artifact.buildEnvironmentSha256 ||
     parsed.toolchainSha256 !== artifact.toolchainSha256 ||
-    parsed.provisioningProfilesSha256 !== artifact.provisioningProfilesSha256) {
+    parsed.provisioningProfilesSha256 !== artifact.provisioningProfilesSha256 ||
+    parsed.nativeReleaseDependencyTreeSha256 !== artifact.nativeReleaseDependencyTreeSha256) {
     throw new Error("Signed build provenance contents are invalid");
   }
   if (repositoryRoot) {

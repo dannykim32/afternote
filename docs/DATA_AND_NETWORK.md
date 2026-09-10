@@ -53,6 +53,15 @@ only while the device is unlocked.
 The installed Afternote runtime has no telemetry, Afternote account, or sync endpoint. Exact and
 date-aware search make no outbound request.
 
+Official signed builds check the HTTPS update feed at
+`raw.githubusercontent.com/dannykim32/afternote/main/appcast-alpha.xml` once per day by default.
+Users can disable that check in Settings or run it manually. Afternote disables Sparkle's optional
+system-profile attachment, so the request is an ordinary feed fetch rather than a hardware or OS
+inventory submission. If the user approves an available update, Sparkle downloads the versioned
+DMG from `github.com/dannykim32/afternote/releases`. The feed and DMG carry EdDSA signatures;
+the app also requires Apple code signing. Development builds contain no update feed or updater
+framework and make no update request.
+
 The only direct application download is an explicit `afternote semantic install`, which
 fetches a fixed file set from `https://huggingface.co` at the pinned model revision. Every
 file has a byte limit and SHA-256 digest and is verified before publication. The model and

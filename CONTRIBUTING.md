@@ -11,7 +11,7 @@ identity, installation, and recovery.
 3. Add a failing test for the behavior being changed.
 4. Implement the smallest coherent fix.
 5. Run `bun run prepare:native-release` once to build the checksum-pinned SQLCipher and
-   OpenSSL dependencies for macOS 13.3.
+   OpenSSL dependencies and stage the checksum-pinned Sparkle framework for macOS 13.3.
 6. Run `bun run typecheck` and `bun run test`.
 7. Explain the privacy and security impact in the pull request.
 

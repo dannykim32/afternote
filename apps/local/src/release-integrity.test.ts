@@ -58,6 +58,32 @@ describe("public release input controls", () => {
 });
 
 describe("signed release payload manifest", () => {
+  it("binds contained framework symlinks and rejects links that escape the payload", () => {
+    const root = temporaryDirectory();
+    mkdirSync(join(root, "Afternote.app/Contents/Frameworks/Example.framework/Versions/A"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, "Afternote.app/Contents/Frameworks/Example.framework/Versions/A/Example"),
+      "framework\n",
+    );
+    symlinkSync(
+      "Versions/A/Example",
+      join(root, "Afternote.app/Contents/Frameworks/Example.framework/Example"),
+    );
+    expect(collectPayloadEntries(root)).toContainEqual({
+      path: "Afternote.app/Contents/Frameworks/Example.framework/Example",
+      type: "symlink",
+      target: "Versions/A/Example",
+    });
+
+    symlinkSync(
+      "/Applications",
+      join(root, "Afternote.app/Contents/Frameworks/Example.framework/escape"),
+    );
+    expect(() => collectPayloadEntries(root)).toThrow("escapes its payload root");
+  });
+
   it("binds the embedded runtime and detects divergence from the portable payload", () => {
     const root = temporaryDirectory();
     const application = join(root, "Afternote.app");

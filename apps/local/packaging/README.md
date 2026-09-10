@@ -43,9 +43,9 @@ host. The release command builds in a detached temporary worktree, performs a fr
 dependency install, rejects ambient compiler configuration, and rechecks source and dependency
 digests. The finalizer verifies the signed payload manifest against both the portable files and
 the runtime embedded in the app, submits artifacts to Apple, staples tickets, re-verifies a
-private extracted archive, and writes a checksum for the only distributable binary artifact:
-the notarized DMG. Portable archives are development and verification inputs, not public release
-artifacts.
+private extracted archive, signs and verifies the Sparkle feed and DMG with the dedicated EdDSA
+key, and writes checksums for the notarized DMG and appcast. Portable archives are development
+and verification inputs, not public release artifacts.
 
 Credential files must remain outside the repository. Never place their contents, signing
 identities, secrets, or notarization credentials in documentation, logs, fixtures, or

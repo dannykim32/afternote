@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { releaseCommandEnvironment } from "./release-environment";
+import { sha256DirectoryTree } from "./release-inputs";
 
 const repositoryRoot = resolve(process.cwd());
 const configurationPath = join(repositoryRoot, "scripts/native-release-inputs.json");
@@ -36,6 +37,11 @@ type Configuration = {
   releaseToolchain: NativeToolchain;
   opensslSource: SourceInput;
   sqlcipherSource: SourceInput;
+  sparkleDistribution: SourceInput;
+  sparkleVersion: string;
+  sparklePublicEdKey: string;
+  sparkleFeedUrl: string;
+  sparkleSigningAccount: string;
   opensslLibrarySha256?: string;
   sqlcipherLibrarySha256?: string;
   sqlcipherHeaderSha256?: string;
@@ -60,8 +66,12 @@ const stagedRoot = `${outputRoot}.staging-${process.pid}`;
 try {
   const opensslArchive = await downloadSource(configuration.opensslSource, temporaryRoot);
   const sqlcipherArchive = await downloadSource(configuration.sqlcipherSource, temporaryRoot);
+  const sparkleArchive = await downloadSource(configuration.sparkleDistribution, temporaryRoot);
   run(["tar", "-xzf", opensslArchive, "-C", temporaryRoot]);
   run(["tar", "-xzf", sqlcipherArchive, "-C", temporaryRoot]);
+  const sparkleSource = join(temporaryRoot, "sparkle");
+  mkdirSync(sparkleSource, { mode: 0o700 });
+  run(["ditto", "-x", "-k", sparkleArchive, sparkleSource]);
 
   const opensslSource = join(temporaryRoot, `openssl-${configuration.opensslSource.version}`);
   const sqlcipherSource = join(temporaryRoot, `sqlcipher-${configuration.sqlcipherSource.version}`);
@@ -110,6 +120,29 @@ try {
   copyFileSync(join(sqlcipherSource, "sqlite3.h"), headerPath);
   copyFileSync(join(opensslSource, "LICENSE.txt"), join(stagedRoot, "OPENSSL_LICENSE.txt"));
   copyFileSync(join(sqlcipherSource, "LICENSE.txt"), join(stagedRoot, "SQLCIPHER_LICENSE.txt"));
+  const sparkleFrameworkSource = join(
+    sparkleSource,
+    "Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework",
+  );
+  const sparkleFrameworkPath = join(stagedRoot, "Sparkle.framework");
+  run(["ditto", sparkleFrameworkSource, sparkleFrameworkPath]);
+  // Afternote is not sandboxed. These XPC adapters are unnecessary and would
+  // expand both the signed payload and its privileged execution surface.
+  rmSync(join(sparkleFrameworkPath, "Versions/B/XPCServices"), {
+    recursive: true,
+    force: true,
+  });
+  rmSync(join(sparkleFrameworkPath, "XPCServices"), { force: true });
+  copyFileSync(join(sparkleSource, "LICENSE"), join(stagedRoot, "SPARKLE_LICENSE.txt"));
+  const generateKeysPath = join(stagedRoot, "generate_keys");
+  copyFileSync(join(sparkleSource, "bin/generate_keys"), generateKeysPath);
+  chmodSync(generateKeysPath, 0o755);
+  const generateAppcastPath = join(stagedRoot, "generate_appcast");
+  copyFileSync(join(sparkleSource, "bin/generate_appcast"), generateAppcastPath);
+  chmodSync(generateAppcastPath, 0o755);
+  const signUpdatePath = join(stagedRoot, "sign_update");
+  copyFileSync(join(sparkleSource, "bin/sign_update"), signUpdatePath);
+  chmodSync(signUpdatePath, 0o755);
   chmodSync(cryptoPath, 0o755);
   chmodSync(sqlcipherPath, 0o755);
   run(["install_name_tool", "-id", "@loader_path/libcrypto.4.dylib", cryptoPath]);
@@ -131,6 +164,12 @@ try {
     toolchain,
     opensslSourceSha256: configuration.opensslSource.sha256,
     sqlcipherSourceSha256: configuration.sqlcipherSource.sha256,
+    sparkleDistributionSha256: configuration.sparkleDistribution.sha256,
+    sparkleVersion: configuration.sparkleVersion,
+    sparkleFrameworkSha256: sha256DirectoryTree(sparkleFrameworkPath),
+    sparkleGenerateKeysSha256: sha256(generateKeysPath),
+    sparkleGenerateAppcastSha256: sha256(generateAppcastPath),
+    sparkleSignUpdateSha256: sha256(signUpdatePath),
     opensslLibrarySha256: sha256(cryptoPath),
     sqlcipherLibrarySha256: sha256(sqlcipherPath),
     sqlcipherHeaderSha256: sha256(headerPath),
@@ -154,15 +193,25 @@ try {
 }
 
 function assertConfiguration(value: Configuration): void {
-  if (value.schemaVersion !== 3 || value.platform !== "darwin-arm64" ||
+  if (value.schemaVersion !== 4 || value.platform !== "darwin-arm64" ||
     value.minimumMacosVersion !== minimumMacosVersion) {
     throw new Error("Native release input configuration is incompatible");
   }
-  for (const input of [value.opensslSource, value.sqlcipherSource]) {
+  for (const input of [
+    value.opensslSource,
+    value.sqlcipherSource,
+    value.sparkleDistribution,
+  ]) {
     if (!input || !/^https:\/\//.test(input.url) || !/^[a-f0-9]{64}$/.test(input.sha256) ||
       !Number.isSafeInteger(input.maximumBytes) || input.maximumBytes <= 0) {
       throw new Error("Native release source configuration is invalid");
     }
+  }
+  if (value.sparkleVersion !== value.sparkleDistribution.version ||
+    !/^https:\/\//.test(value.sparkleFeedUrl) ||
+    !/^[A-Za-z0-9+/]{43}=$/.test(value.sparklePublicEdKey) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.sparkleSigningAccount)) {
+    throw new Error("Sparkle update configuration is invalid");
   }
   for (const key of [
     "commandLineToolsVersion",
@@ -265,6 +314,7 @@ function run(
   const tools: Readonly<Record<string, string>> = {
     "./configure": "./configure",
     clang: "/usr/bin/clang",
+    ditto: "/usr/bin/ditto",
     install_name_tool: "/usr/bin/install_name_tool",
     ld: "/usr/bin/ld",
     make: "/usr/bin/make",

@@ -63,8 +63,10 @@ authentic encrypted snapshot is the newest state.
 ## Network and AI-provider boundary
 
 Exact search, date-aware search, vault storage, and local inference have no Afternote cloud
-dependency. The installed runtime has no telemetry, account service, sync endpoint, or
-automatic update check.
+dependency. The installed runtime has no telemetry, account service, or sync endpoint. Official
+builds fetch a signed update feed from GitHub once per day by default; the user can disable it.
+The request does not include Sparkle's optional system profile. Downloads occur only after user
+approval and must pass EdDSA archive and feed verification plus Apple code-signing validation.
 
 The optional `afternote semantic install` action downloads a fixed, size-limited, SHA-256-pinned
 model file set from `https://huggingface.co`. After installation, inference is local.
@@ -80,7 +82,8 @@ There is no MDM package or fleet console in this alpha. Deployment is per user. 
 the Team ID and identifiers, distribute the notarized DMG, and verify its published SHA-256 before
 installation. The installer uses versioned directories, refuses overwrite, verifies signed
 components, switches the active version transactionally, and restores the previous version after
-a failed health check. Rollback selects an already installed signed version.
+a failed health check. Rollback selects an already installed signed version. The native app can
+check for a newer signed release, but it never downloads or installs one without user approval.
 
 Public releases are built through one guarded command from a clean reviewed commit. The process
 uses a fresh detached checkout and frozen dependency install, rejects ambient compiler inputs,

@@ -25,6 +25,10 @@ handle.
 - The finalizer verifies signed code and a manifest covering both the portable payload and
   the embedded runtime. The installer verifies the signed application before running its
   lifecycle code, and the lifecycle flow verifies installed executable signatures.
+- Official updates require three independent checks: HTTPS transport, a signed appcast and
+  archive under Afternote's EdDSA key, and the existing Apple Developer ID requirement. The
+  updater does not accept an unsigned fallback. Release tooling verifies those signatures
+  before it publishes the feed candidate.
 
 ## Session lifecycle
 
@@ -76,6 +80,9 @@ Do not restore a file whose provenance you do not trust.
   same-login processes. A compromised account that can change the release tooling while also
   using its signing and notarization credentials can sign malicious bytes; in-repository checks
   cannot make that account safe.
+- Loss of the EdDSA private key would stop the fail-closed update feed. Recovery requires a
+  deliberate Developer ID-backed key rotation; the application will not silently accept an
+  unsigned feed.
 
 ## Security status
 

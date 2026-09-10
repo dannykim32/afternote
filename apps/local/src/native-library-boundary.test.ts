@@ -387,6 +387,14 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain("NSPasteboard");
   });
 
+  it("exposes signed updates through one owner-controlled native seam", () => {
+    expect(nativeAppSource).toContain('#import "software_update.h"');
+    expect(nativeAppSource).toContain('@"Check for Updates…"');
+    expect(nativeAppSource).toContain("AfternoteCreateSoftwareUpdateController");
+    expect(nativeAppSource).toContain('@"Check automatically"');
+    expect(nativeAppSource).toContain("automaticallyChecksForUpdates");
+  });
+
   it("routes both CLI entry points through macOS to the signed native application bundle", () => {
     expect(cliSource).toContain('openNativeApplication("library"');
     expect(cliSource).toContain('openNativeApplication("connections"');

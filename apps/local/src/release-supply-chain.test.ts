@@ -28,6 +28,16 @@ describe("release supply-chain inventory", () => {
     expect(source).toContain('licenseFilename: "LGPL-2.1.txt"');
   });
 
+  it("accounts for the pinned Sparkle update framework", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "../../../scripts/release-supply-chain.ts"),
+      "utf8",
+    );
+    expect(source).toContain('name: "Sparkle"');
+    expect(source).toContain('licenseFilename: "SPARKLE_LICENSE.txt"');
+    expect(source).toContain("sparkleVersion");
+  });
+
   it("enumerates every linked library and embedded polyfill named by pinned Bun", () => {
     expect(BUN_EMBEDDED_COMPONENTS.length).toBe(47);
     expect(BUN_EMBEDDED_COMPONENTS.map(({ name }) => name)).toContain("BoringSSL");

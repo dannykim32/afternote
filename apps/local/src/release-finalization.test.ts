@@ -30,6 +30,9 @@ const publicReport = {
   onnxRuntimeBindingPath: `${paths.portableDirectory}/onnxruntime_binding.node`,
   onnxRuntimePath: `${paths.portableDirectory}/libonnxruntime.1.21.0.dylib`,
   ownerControlAppPath: `${paths.portableDirectory}/Afternote.app`,
+  sparkleFrameworkPath: `${paths.portableDirectory}/Afternote.app/Contents/Frameworks/Sparkle.framework`,
+  sparkleAutoupdatePath: `${paths.portableDirectory}/Afternote.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate`,
+  sparkleUpdaterAppPath: `${paths.portableDirectory}/Afternote.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app`,
   embeddedRuntimePath: `${paths.portableDirectory}/Afternote.app/Contents/Resources/AfternoteRuntime`,
   sourceCommit: "0123456789abcdef0123456789abcdef01234567",
   sourceTree: "89abcdef0123456789abcdef0123456789abcdef",
@@ -41,6 +44,7 @@ const publicReport = {
   provisioningProfilesSha256: "1".repeat(64),
   payloadManifestSha256: "b".repeat(64),
   buildProvenanceSha256: "c".repeat(64),
+  nativeReleaseDependencyTreeSha256: "2".repeat(64),
 };
 
 describe("release finalization gates", () => {
@@ -52,6 +56,16 @@ describe("release finalization gates", () => {
     expect(paths.verificationArchive).toContain("/.afternote-local-");
     expect(paths.verificationArchive).toEndWith("-verification.zip");
     expect(paths.checksums).toEndWith("/SHA256SUMS");
+    expect(paths.appcast).toEndWith("/appcast-alpha.xml");
+  });
+
+  it("keeps release checksums scoped to the downloadable DMG", () => {
+    const finalizer = readFileSync(
+      new URL("../../../scripts/finalize-local-release.ts", import.meta.url),
+      "utf8",
+    );
+    expect(finalizer).toContain("const checksums = [paths.finalDmg]");
+    expect(finalizer).not.toContain("const checksums = [paths.finalDmg, paths.appcast]");
   });
 
   it("uses a compact Finder window with large, centered install icons", () => {
@@ -99,6 +113,10 @@ describe("release finalization gates", () => {
     )).toThrow("self-contained desktop runtime");
     expect(() => assertPublicArtifactReport(
       { ...publicReport, buildProvenanceSha256: null },
+      paths.portableDirectory,
+    )).toThrow("signed dependency and payload provenance");
+    expect(() => assertPublicArtifactReport(
+      { ...publicReport, nativeReleaseDependencyTreeSha256: null },
       paths.portableDirectory,
     )).toThrow("signed dependency and payload provenance");
     expect(() => assertPublicArtifactReport(

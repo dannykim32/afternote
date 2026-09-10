@@ -41,6 +41,7 @@ import {
   renderPackagingText,
   resolvedPeerRequirement,
   signedRequirement,
+  softwareUpdatePolicy,
 } from "./release-policy";
 export {
   acceptanceBrokerMachService,
@@ -52,6 +53,7 @@ export {
   renderPackagingText,
   resolvedPeerRequirement,
   signedRequirement,
+  softwareUpdatePolicy,
 } from "./release-policy";
 
 const repositoryRoot = resolve(process.cwd());
@@ -75,6 +77,9 @@ export type LocalAlphaArtifacts = {
   onnxRuntimeBindingPath: string;
   onnxRuntimePath: string;
   ownerControlAppPath: string;
+  sparkleFrameworkPath: string | null;
+  sparkleAutoupdatePath: string | null;
+  sparkleUpdaterAppPath: string | null;
   embeddedRuntimePath: string;
   portableArchivePath: string;
   checksumsPath: string;
@@ -95,6 +100,7 @@ export type LocalAlphaArtifacts = {
   provisioningProfilesSha256: string | null;
   payloadManifestSha256: string | null;
   buildProvenanceSha256: string | null;
+  nativeReleaseDependencyTreeSha256: string | null;
 };
 
 function assertPinnedBun(): void {
@@ -193,6 +199,18 @@ export async function buildLocalAlpha(options?: {
     requestedVersion: options?.version,
     release: signing.release,
   });
+  const nativeReleaseInputs = JSON.parse(readFileSync(
+    join(repositoryRoot, "scripts/native-release-inputs.json"),
+    "utf8",
+  )) as { sparkleFeedUrl?: string; sparklePublicEdKey?: string };
+  const updatePolicy = softwareUpdatePolicy({
+    release: signing.release,
+    feedUrl: nativeReleaseInputs.sparkleFeedUrl,
+    publicEdKey: nativeReleaseInputs.sparklePublicEdKey,
+  });
+  const nativeReleaseDependencyTreeSha256 = signing.release
+    ? assertPreparedSoftwareUpdateDependencies(nativeReleaseInputs)
+    : null;
   const version = versionMetadata.packageVersion;
   const outputDirectory = resolve(
     options?.outputDirectory ?? join(repositoryRoot, "build/local-alpha"),
@@ -225,6 +243,15 @@ export async function buildLocalAlpha(options?: {
     "MacOS",
     "Afternote",
   );
+  const sparkleFrameworkPath = signing.release
+    ? join(ownerControlContents, "Frameworks", "Sparkle.framework")
+    : null;
+  const sparkleAutoupdatePath = sparkleFrameworkPath
+    ? join(sparkleFrameworkPath, "Versions/B/Autoupdate")
+    : null;
+  const sparkleUpdaterAppPath = sparkleFrameworkPath
+    ? join(sparkleFrameworkPath, "Versions/B/Updater.app")
+    : null;
   const embeddedRuntimePath = join(
     ownerControlContents,
     "Resources",
@@ -265,6 +292,14 @@ export async function buildLocalAlpha(options?: {
   });
   mkdirSync(join(ownerControlContents, "MacOS"), { recursive: true, mode: 0o755 });
   mkdirSync(join(ownerControlContents, "Resources"), { recursive: true, mode: 0o755 });
+  if (sparkleFrameworkPath) {
+    mkdirSync(join(ownerControlContents, "Frameworks"), { recursive: true, mode: 0o755 });
+    cpSync(
+      join(repositoryRoot, "apps/local/native/release-deps/Sparkle.framework"),
+      sparkleFrameworkPath,
+      { recursive: true, preserveTimestamps: true, verbatimSymlinks: true },
+    );
+  }
   mkdirSync(join(clientSignerContents, "MacOS"), {
     recursive: true,
     mode: 0o755,
@@ -285,6 +320,16 @@ export async function buildLocalAlpha(options?: {
 <key>CFBundleVersion</key><string>${versionMetadata.bundleVersion}</string>
 <key>LSMinimumSystemVersion</key><string>${minimumMacosVersion}</string>
 <key>NSHighResolutionCapable</key><true/>
+${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</string>
+<key>SUPublicEDKey</key><string>${updatePolicy.publicEdKey}</string>
+<key>SUEnableAutomaticChecks</key><true/>
+<key>SUAutomaticallyUpdate</key><false/>
+<key>SUAllowsAutomaticUpdates</key><false/>
+<key>SUSendProfileInfo</key><false/>
+<key>SUScheduledCheckInterval</key><integer>${updatePolicy.scheduledCheckIntervalSeconds}</integer>
+<key>SUVerifyUpdateBeforeExtraction</key><true/>
+<key>SURequireSignedFeed</key><true/>
+<key>SUSignedFeedFailureExpirationInterval</key><integer>${updatePolicy.signedFeedFailureExpirationIntervalSeconds}</integer>` : ""}
 </dict></plist>
 `, { mode: 0o644 });
   writeFileSync(join(brokerWorkerContents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
@@ -388,12 +433,20 @@ export async function buildLocalAlpha(options?: {
     "Security",
     "-framework",
     "UniformTypeIdentifiers",
+    ...(signing.release
+      ? [
+          "-F", join(repositoryRoot, "apps/local/native/release-deps"),
+          "-framework", "Sparkle",
+          "-Wl,-rpath,@executable_path/../Frameworks",
+        ]
+      : []),
     join(repositoryRoot, "apps/local/native/connector_presentation.mm"),
     join(repositoryRoot, "apps/local/native/broker_recovery_state.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_state.mm"),
     join(repositoryRoot, "apps/local/native/setup_guide_state.mm"),
     join(repositoryRoot, "apps/local/native/plain_text_list_formatting.mm"),
     join(repositoryRoot, "apps/local/native/application_installation.mm"),
+    join(repositoryRoot, "apps/local/native/software_update.mm"),
     join(repositoryRoot, "apps/local/native/owner_broker.mm"),
     join(repositoryRoot, "apps/local/native/product_surface_router.mm"),
     join(repositoryRoot, "apps/local/native/owner_control_app.mm"),
@@ -401,6 +454,20 @@ export async function buildLocalAlpha(options?: {
     ownerControlBinaryPath,
   ]);
   chmodSync(ownerControlBinaryPath, 0o755);
+  if (signing.release) {
+    for (const path of [sparkleAutoupdatePath!, sparkleUpdaterAppPath!, sparkleFrameworkPath!]) {
+      runPackagingCommand([
+        "codesign",
+        "--force",
+        "--sign",
+        signing.identity,
+        "--options",
+        "runtime",
+        "--timestamp",
+        path,
+      ]);
+    }
+  }
   runPackagingCommand([
     "codesign",
     "--force",
@@ -695,6 +762,9 @@ export async function buildLocalAlpha(options?: {
     verifySigningTeam(brokerWorkerPath, signing.teamId!);
     verifySigningTeam(brokerWorkerAppPath, signing.teamId!);
     verifySigningTeam(clientSignerAppPath, signing.teamId!);
+    verifySigningTeam(sparkleAutoupdatePath!, signing.teamId!);
+    verifySigningTeam(sparkleUpdaterAppPath!, signing.teamId!);
+    verifySigningTeam(sparkleFrameworkPath!, signing.teamId!);
     verifySigningTeam(ownerControlAppPath, signing.teamId!);
     rmSync(join(outputDirectory, ".afternote-client-entitlements.plist"), {
       force: true,
@@ -763,7 +833,7 @@ export async function buildLocalAlpha(options?: {
     );
     writeFileSync(buildProvenancePath, `${JSON.stringify({
       format: "afternote-signed-build-provenance",
-      version: 1,
+      version: 2,
       sourceCommit,
       sourceTree,
       dependencyLockSha256,
@@ -773,6 +843,7 @@ export async function buildLocalAlpha(options?: {
       toolchain,
       provisioningProfilesSha256,
       provisioningProfiles,
+      nativeReleaseDependencyTreeSha256,
       nativeReleaseInputsManifestSha256: sha256(nativeInputsPath),
       nativeReleaseInputs: JSON.parse(readFileSync(nativeInputsPath, "utf8")),
     }, null, 2)}\n`, { mode: 0o644 });
@@ -841,6 +912,9 @@ export async function buildLocalAlpha(options?: {
     onnxRuntimeBindingPath,
     onnxRuntimePath: onnxRuntimeLibraryPath,
     ownerControlAppPath,
+    sparkleFrameworkPath,
+    sparkleAutoupdatePath,
+    sparkleUpdaterAppPath,
     embeddedRuntimePath,
     portableArchivePath,
     checksumsPath,
@@ -861,7 +935,38 @@ export async function buildLocalAlpha(options?: {
     provisioningProfilesSha256,
     payloadManifestSha256,
     buildProvenanceSha256,
+    nativeReleaseDependencyTreeSha256,
   };
+}
+
+function assertPreparedSoftwareUpdateDependencies(inputs: {
+  sparkleFeedUrl?: string;
+  sparklePublicEdKey?: string;
+}): string {
+  const dependencies = join(repositoryRoot, "apps/local/native/release-deps");
+  const manifest = JSON.parse(readFileSync(
+    join(dependencies, "BUILD_MANIFEST.json"),
+    "utf8",
+  )) as Record<string, unknown>;
+  const configured = JSON.parse(readFileSync(
+    join(repositoryRoot, "scripts/native-release-inputs.json"),
+    "utf8",
+  )) as Record<string, unknown>;
+  const distribution = configured.sparkleDistribution as Record<string, unknown> | undefined;
+  const framework = join(dependencies, "Sparkle.framework");
+  const generateKeys = join(dependencies, "generate_keys");
+  const generateAppcast = join(dependencies, "generate_appcast");
+  const signUpdate = join(dependencies, "sign_update");
+  if (!inputs.sparkleFeedUrl || !inputs.sparklePublicEdKey ||
+    manifest.sparkleVersion !== configured.sparkleVersion ||
+    manifest.sparkleDistributionSha256 !== distribution?.sha256 ||
+    manifest.sparkleFrameworkSha256 !== sha256DirectoryTree(framework) ||
+    manifest.sparkleGenerateKeysSha256 !== sha256(generateKeys) ||
+    manifest.sparkleGenerateAppcastSha256 !== sha256(generateAppcast) ||
+    manifest.sparkleSignUpdateSha256 !== sha256(signUpdate)) {
+    throw new Error("Prepared Sparkle dependencies do not match the reviewed release inputs");
+  }
+  return sha256DirectoryTree(dependencies);
 }
 
 function embedDesktopRuntime(

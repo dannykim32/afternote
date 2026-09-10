@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   readlinkSync,
   rmSync,
   writeFileSync,
@@ -19,6 +20,7 @@ import {
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseVersionMetadata,
+  softwareUpdatePolicy,
   releaseWorkerEntrypoint,
   renderPackagingText,
   signedRequirement,
@@ -109,6 +111,32 @@ public exact
       release: true,
     })).toThrow("Apple bundle version");
   });
+
+  it("enables only signed, privacy-preserving update checks in release builds", () => {
+    expect(softwareUpdatePolicy({ release: false })).toEqual({ enabled: false });
+    expect(softwareUpdatePolicy({
+      release: true,
+      feedUrl: "https://updates.example.test/appcast.xml",
+      publicEdKey: "XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=",
+    })).toEqual({
+      enabled: true,
+      feedUrl: "https://updates.example.test/appcast.xml",
+      publicEdKey: "XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=",
+      automaticallyChecks: true,
+      automaticallyDownloads: false,
+      allowsAutomaticUpdates: false,
+      sendsSystemProfile: false,
+      scheduledCheckIntervalSeconds: 86_400,
+      verifiesBeforeExtraction: true,
+      requiresSignedFeed: true,
+      signedFeedFailureExpirationIntervalSeconds: 0,
+    });
+    expect(() => softwareUpdatePolicy({
+      release: true,
+      feedUrl: "http://updates.example.test/appcast.xml",
+      publicEdKey: "XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=",
+    })).toThrow("HTTPS");
+  });
 });
 
 const shouldRun = process.platform === "darwin" && process.arch === "arm64";
@@ -180,6 +208,14 @@ exit 0
 
     expect(displayName).toBe("Afternote Development");
     expect(identifier).toBe("dev.afternote.owner-control.development");
+  });
+
+  it("keeps development builds free of the production update network path", () => {
+    const contents = join(alphaZero.ownerControlAppPath, "Contents");
+    expect(existsSync(join(contents, "Frameworks/Sparkle.framework"))).toBe(false);
+    const infoPlist = readFileSync(join(contents, "Info.plist"), "utf8");
+    expect(infoPlist).not.toContain("SUFeedURL");
+    expect(infoPlist).not.toContain("SUPublicEDKey");
   });
 
   it("installs, upgrades, rolls back, uninstalls, and reinstalls transactionally", () => {
