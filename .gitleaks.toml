@@ -1,2 +1,9 @@
 [extend]
 useDefault = true
+
+[[allowlists]]
+description = "Sparkle public Ed25519 verification key (not signing material)"
+regexTarget = "match"
+regexes = [
+  '''XvnOOnpqXBIE7Nq00NKD8cnMe3ZZHqLFbfykOD8tLOs=''',
+]
