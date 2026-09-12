@@ -64,7 +64,7 @@ Do not restore a file whose provenance you do not trust.
   audit history, lock state, grants, and connector-reconnect state. It cannot revive a live
   session from an earlier broker boot, and using a restored grant still requires the matching
   connector signing identity and a new owner-authorized work session.
-- A compromised Codex or Claude Code process can misuse the Remember/Recall scopes granted
+- A compromised Codex, Claude Code, or Claude Desktop process can misuse the Remember/Recall scopes granted
   to that connector during a live session.
 - The MCP contract tells connectors to call Remember only for an explicit user request, but
   the broker cannot independently prove which natural-language instruction caused a signed

@@ -6,6 +6,20 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.14 - 2026-09-12
+
+### Added
+
+- Claude Desktop support through a minimal local MCPB package. Afternote verifies Anthropic's
+  signed app, creates a separate device-bound connector identity, and leaves extension approval
+  to Claude's own install dialog.
+
+### Security
+
+- Claude Desktop runs through the same signed broker boundary and least-privilege Remember,
+  Recall, and Get Note grant as the existing connectors. Its authority, revocation, and reconnect
+  state remain separate from Claude Code.
+
 ## 2.0.0-alpha.13 - 2026-09-12
 
 ### Fixed

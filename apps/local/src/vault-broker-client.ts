@@ -172,7 +172,7 @@ export function vaultBrokerHealth(options?: {
   return requestVaultBroker("health", {}, options) as VaultBrokerHealth;
 }
 
-export type McpBrokerClientKind = "codex" | "claude";
+export type McpBrokerClientKind = "codex" | "claude" | "claude-desktop";
 export type BrokerMemoryClientKind = McpBrokerClientKind;
 
 type ActivatedSession = {
@@ -489,7 +489,11 @@ function clientProfile(
   keychainServicePrefix: string;
 } {
   return {
-    displayName: kind === "codex" ? "Codex" : "Claude Code",
+    displayName: kind === "codex"
+      ? "Codex"
+      : kind === "claude"
+      ? "Claude Code"
+      : "Claude Desktop",
     capabilities: ["memory.remember", "memory.recall", "memory.get_note"],
     sessionTtlMs: TRUSTED_MCP_CONNECTION_TTL_MS,
     keychainServicePrefix: `dev.afternote.mcp-client.${kind}`,

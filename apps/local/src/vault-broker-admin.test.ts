@@ -451,7 +451,7 @@ function workerFixture(options: {
 async function pairMcpClient(
   worker: VaultBrokerWorker,
   connection: { connectionId: string; peerPid: number },
-  kind: "codex" | "claude",
+  kind: "codex" | "claude" | "claude-desktop",
   installIdentity: string,
 ) {
   const durable = generateKeyPairSync("ec", {
@@ -461,7 +461,11 @@ async function pairMcpClient(
   });
   const begun = await rawRequest(worker, connection, "memory-client", "client.begin", {
     kind,
-    displayName: kind === "codex" ? "Codex" : "Claude Code",
+    displayName: kind === "codex"
+      ? "Codex"
+      : kind === "claude"
+      ? "Claude Code"
+      : "Claude Desktop",
     installIdentity,
     publicKey: durable.publicKey,
     signingMode: "development-exact-build",

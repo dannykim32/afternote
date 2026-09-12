@@ -28,6 +28,7 @@
   BOOL installed = [status[@"installed"] boolValue];
   BOOL healthy = [status[@"healthy"] boolValue];
   BOOL repairable = [status[@"repairable"] boolValue];
+  BOOL approvalRequired = [status[@"approvalRequired"] boolValue];
 
   if (connected) {
     NSString *detail = lastActiveLabel.length > 0
@@ -105,6 +106,16 @@
     connectionDetail:@"A connection starts automatically with Remember or Recall"];
     return view;
   }
+  if (approvalRequired) {
+    [view applyState:AfternoteConnectorStateAvailable
+              action:AfternoteConnectorActionCheckAgain
+               badge:@"Finish in Claude"
+                tone:@"warning"
+             summary:@"Claude Desktop is showing Afternote's extension preview. Approve it there, then check again."
+     connectionTitle:@"Waiting for Claude"
+    connectionDetail:@"Install the extension in Claude Desktop, then check again"];
+    return view;
+  }
   if (!installed || [problemCode isEqualToString:@"connector_missing"]) {
     [view applyState:AfternoteConnectorStateAvailable
               action:AfternoteConnectorActionConnect
@@ -123,6 +134,16 @@
              summary:[NSString stringWithFormat:@"%@ has an older Afternote connector that can be upgraded safely.", displayName]
      connectionTitle:@"Connector update required"
     connectionDetail:@"Repair replaces only the Afternote-owned entry"];
+    return view;
+  }
+  if ([problemCode isEqualToString:@"connector_disabled"] && repairable) {
+    [view applyState:AfternoteConnectorStateNeedsAttention
+              action:AfternoteConnectorActionReviewSetup
+               badge:@"Disabled"
+                tone:@"warning"
+             summary:[NSString stringWithFormat:@"The Afternote extension is installed in %@, but it is disabled.", displayName]
+     connectionTitle:@"Extension disabled"
+    connectionDetail:@"Enable Afternote in the tool, then check again"];
     return view;
   }
   if ([problemCode isEqualToString:@"runtime_unavailable"]) {

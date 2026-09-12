@@ -10,6 +10,10 @@ import {
   manageClaudeCodeIntegration,
   parseClaudeCodeIntegrationAction,
 } from "./claude-code-integration";
+import {
+  manageClaudeDesktopIntegration,
+  parseClaudeDesktopIntegrationAction,
+} from "./claude-desktop-integration";
 import { writeExclusivePrivateFile } from "./exclusive-export";
 import { runRecallEvaluation } from "./recall-eval";
 import { runOrganizationEvaluation } from "./organization-eval";
@@ -176,6 +180,40 @@ export async function runLocalCli(
       );
       return;
     }
+    case "claude-desktop": {
+      const action = parseClaudeDesktopIntegrationAction(args[1]);
+      if (action === "rotate-identity") {
+        console.log(JSON.stringify(
+          await rotateInstalledMcpClientIdentity("claude-desktop"),
+          null,
+          2,
+        ));
+        return;
+      }
+      const afternoteCommand = action === "install"
+        ? installedAfternoteCommand()
+        : undefined;
+      const identity = action === "install" && isReleaseArtifact()
+        ? await ensureInstalledMcpClientIdentity("claude-desktop")
+        : undefined;
+      const integration = await manageClaudeDesktopIntegration(
+        action,
+        isStandaloneArtifact,
+        {
+          ...(afternoteCommand ? { afternoteCommand } : {}),
+          packageVersion: LOCAL_VERSION,
+          probeIdentity: () => probeInstalledMcpClientIdentity("claude-desktop"),
+        },
+      );
+      console.log(
+        JSON.stringify(
+          { ...integration, ...(identity ? { identity } : {}) },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
     case "version":
     case "--version":
     case "-v":
@@ -319,10 +357,14 @@ async function runMcp(args: string[]): Promise<void> {
 
 function mcpClientKind(args: string[]): McpBrokerClientKind {
   if (args.length === 2 && args[0] === "--client") {
-    if (args[1] === "codex" || args[1] === "claude") return args[1];
+    if (
+      args[1] === "codex" ||
+      args[1] === "claude" ||
+      args[1] === "claude-desktop"
+    ) return args[1];
   }
   throw new Error(
-    "Afternote MCP requires an installed Codex or Claude Code client identity; run afternote codex install or afternote claude-code install",
+    "Afternote MCP requires an installed connector identity; install Codex, Claude Code, or Claude Desktop from Afternote Connections",
   );
 }
 
@@ -630,7 +672,7 @@ function printHelp(semanticHelp?: string): void {
 Usage: afternote <command>
 
 Commands:
-  mcp --client codex|claude
+  mcp --client codex|claude|claude-desktop
                        Run an installed, owner-approved MCP adapter
   connections [--no-open]
                        Open Connections in the signed native Afternote app
@@ -651,6 +693,8 @@ ${recallHelp}
                        Configure and validate the Codex MCP integration
   claude-code install|status|remove|rotate-identity
                        Configure and validate the Claude Code MCP integration
+  claude-desktop install|status|remove|rotate-identity
+                       Configure and validate the Claude Desktop MCP integration
   version             Print the artifact version
 
 Exports contain plaintext note content and source metadata. Markdown is not a restore format. Diagnostics use coarse allowlisted fields. Existing files and vaults are never overwritten.`);

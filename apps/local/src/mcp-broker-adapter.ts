@@ -228,7 +228,11 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
 
   #connectorAccessError(error: unknown): unknown {
     if (!this.#connectorKind || !connectorNeedsReconnect(error)) return error;
-    const label = this.#connectorKind === "codex" ? "Codex" : "Claude Code";
+    const label = this.#connectorKind === "codex"
+      ? "Codex"
+      : this.#connectorKind === "claude"
+      ? "Claude Code"
+      : "Claude Desktop";
     return new MemoryError(
       "unauthorized",
       `${label} access needs to be reconnected. Open Afternote > Connections, ` +

@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type McpClientIdentityKind = "codex" | "claude";
+export type McpClientIdentityKind = "codex" | "claude" | "claude-desktop";
 
 export type McpClientRotationRequest = {
   kind: McpClientIdentityKind;

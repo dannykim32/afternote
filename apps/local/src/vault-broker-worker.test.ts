@@ -889,7 +889,7 @@ describe("vault broker worker protocol", () => {
       .join(" ");
     expect(completion.ownerPresenceChallenge.reason).toBe(
       "Start a shared Afternote work session for 24 hours with an inactivity limit of 24 hours? " +
-      "During this work session, previously paired Codex and Claude Code apps may " +
+      "During this work session, previously paired Codex, Claude Code, and Claude Desktop apps may " +
       "silently establish their own connection-bound, least-privilege sessions for " +
       "up to 15 minutes, limited to Remember, Recall, and Get. This triggering " +
       "connection lasts 15 minutes. " +
@@ -1063,7 +1063,7 @@ describe("vault broker worker protocol", () => {
     expect(JSON.stringify(audit)).not.toContain("cedar-7823");
   });
 
-  it("shares one owner-approved work session across paired Codex and Claude connections", async () => {
+  it("shares one owner-approved work session across each paired connector kind", async () => {
     const now = Date.parse("2026-08-29T16:00:00.000Z");
     const fixture = workerFixture({ now: () => now });
     const capabilities: MemoryCapability[] = [
@@ -1073,10 +1073,13 @@ describe("vault broker worker protocol", () => {
     ];
     const codexConnection = { connectionId: randomUUID(), peerPid: 41101 };
     const claudeConnection = { connectionId: randomUUID(), peerPid: 41102 };
+    const claudeDesktopConnection = { connectionId: randomUUID(), peerPid: 41103 };
     const codexDurable = p256();
     const claudeDurable = p256();
+    const claudeDesktopDurable = p256();
     const codexSession = p256();
     const claudeSession = p256();
+    const claudeDesktopSession = p256();
 
     const codexPaired = await pairClient(
       fixture,
@@ -1142,6 +1145,40 @@ describe("vault broker worker protocol", () => {
       result: {
         clientId: claudePaired.clientId,
         grantId: claudePaired.grantId,
+        expiresAt: new Date(now + 15 * 60 * 1_000).toISOString(),
+      },
+    });
+
+    const claudeDesktopPaired = await pairClient(
+      fixture,
+      claudeDesktopConnection,
+      "claude-desktop",
+      claudeDesktopDurable,
+      capabilities,
+    );
+    const claudeDesktopActivation = await beginActivation(
+      fixture,
+      claudeDesktopConnection,
+      claudeDesktopPaired,
+      claudeDesktopSession,
+      capabilities,
+    );
+    const claudeDesktopActivated = await beginMemoryClientRequest(
+      fixture.worker,
+      claudeDesktopConnection,
+      "session.complete",
+      activationProofs(
+        claudeDesktopActivation,
+        claudeDesktopDurable,
+        claudeDesktopSession,
+      ),
+    );
+    expect(claudeDesktopActivated.ownerPresenceChallenge).toBeUndefined();
+    expect(claudeDesktopActivated).toMatchObject({
+      ok: true,
+      result: {
+        clientId: claudeDesktopPaired.clientId,
+        grantId: claudeDesktopPaired.grantId,
         expiresAt: new Date(now + 15 * 60 * 1_000).toISOString(),
       },
     });
@@ -1986,13 +2023,17 @@ function workerFixture(options: {
 async function pairClient(
   fixture: ReturnType<typeof workerFixture>,
   connection: { connectionId: string; peerPid: number },
-  kind: "codex" | "claude",
+  kind: "codex" | "claude" | "claude-desktop",
   durable: ReturnType<typeof p256>,
   requestedCapabilities: MemoryCapability[],
 ) {
   const begun = await request(fixture.worker, connection, "client.begin", {
     kind,
-    displayName: kind === "codex" ? "Codex" : "Claude Code",
+    displayName: kind === "codex"
+      ? "Codex"
+      : kind === "claude"
+      ? "Claude Code"
+      : "Claude Desktop",
     installIdentity: randomUUID(),
     publicKey: durable.publicKey,
     signingMode: "development-exact-build",

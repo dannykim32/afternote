@@ -18,6 +18,7 @@ describe("native client signer boundary", () => {
     for (const prefix of [
       "dev.afternote.mcp-client.codex.",
       "dev.afternote.mcp-client.claude.",
+      "dev.afternote.mcp-client.claude-desktop.",
     ]) {
       expect(source).toContain(prefix);
     }

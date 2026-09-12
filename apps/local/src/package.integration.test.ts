@@ -167,11 +167,12 @@ exit 0
 
   afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-  it("contains only the declared Codex and Claude public surface", () => {
+  it("contains only the declared local MCP connector surface", () => {
     const help = run([alphaZero.binaryPath, "help"], baseEnvironment()).stdout;
-    expect(help).toContain("mcp --client codex|claude");
+    expect(help).toContain("mcp --client codex|claude|claude-desktop");
     expect(help).toContain("codex install|status|remove|rotate-identity");
     expect(help).toContain("claude-code install|status|remove|rotate-identity");
+    expect(help).toContain("claude-desktop install|status|remove|rotate-identity");
     expect(help).not.toMatch(/browser install|slack configure/i);
 
     const names = Bun.spawnSync([
@@ -412,6 +413,48 @@ exit 1
     expect(result.exitCode).toBe(0);
     expect(result.stderr.toString()).toContain("Codex is unavailable or unverified");
     expect(existsSync(installRoot)).toBe(false);
+  }, 30_000);
+
+  it("requires Claude Desktop to remove its owned extension before uninstall", () => {
+    const home = join(directory, "claude-desktop-uninstall-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const extension = join(
+      home,
+      "Library/Application Support/Claude/Claude Extensions/local.mcpb.danny-kim.afternote",
+    );
+    mkdirSync(extension, { recursive: true });
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+    };
+
+    run([join(alphaZero.portableDirectory, "install.sh")], environment);
+    writeExecutable(
+      join(installRoot, "versions/2.0.0-alpha.0/afternote"),
+      `#!/bin/sh
+if [ "\${1:-}" = claude-desktop ] && [ "\${2:-}" = status ]; then
+  printf '{"configHealthy": true}\n'
+  exit 0
+fi
+exit 1
+`,
+    );
+    const result = Bun.spawnSync([join(alphaZero.portableDirectory, "uninstall.sh")], {
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "Remove Afternote in Claude Desktop Settings > Extensions",
+    );
+    expect(existsSync(installRoot)).toBe(true);
   }, 30_000);
 
   it("rejects unsafe lifecycle roots and leaves unrelated files untouched", () => {

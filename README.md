@@ -1,6 +1,6 @@
 # Afternote
 
-Local memory for Codex and Claude Code on your Mac.
+Local memory for Codex, Claude Code, and Claude Desktop on your Mac.
 
 Tell either tool to remember a decision, deadline, or useful piece of context. Ask for it
 later from either one. Afternote keeps the note, its revision history, and its source in an
@@ -53,7 +53,7 @@ Once a connector is paired, the interaction stays deliberately small:
 You: Remember that the spare bicycle key is behind the green planter.
 Codex: Saved to Afternote.
 
-Later, in Claude Code:
+Later, in Claude Desktop:
 You: Where did I put the spare bicycle key?
 Claude: Behind the green planter. [Afternote note, revision 1]
 ```
@@ -61,15 +61,30 @@ Claude: Behind the green planter. [Afternote note, revision 1]
 The note is visible and editable in the native app. Edits create immutable revisions;
 Recall cites the exact note revision it used.
 
-Afternote currently supports the official signed native macOS builds of Codex and Claude
-Code. During setup it verifies the host's signing identity before changing that host's MCP
-configuration. npm-installed scripts, wrapper launchers, and repackaged binaries are not
-supported in this alpha because they cannot satisfy the native runtime identity check.
+Afternote currently supports the official signed native macOS builds of Codex, Claude Code,
+and Claude Desktop. During setup it verifies the host's signing identity before changing or
+opening that host's MCP setup. Claude Desktop uses a small local MCPB package and keeps its
+own install confirmation; Afternote never writes Claude's private extension configuration.
+npm-installed scripts, wrapper launchers, and repackaged binaries are not supported in this
+alpha because they cannot satisfy the native runtime identity check.
+
+### Connect Claude Desktop
+
+1. Install the official Claude Desktop app and open Afternote's **Connections** page.
+2. Choose **Connect Afternote** for Claude Desktop. Afternote verifies Claude's publisher,
+   creates a minimal local MCPB package, and opens it in Claude.
+3. Review the extension in Claude Desktop and approve **Install** there.
+4. Return to Afternote and choose **Check again**. The first Remember or Recall request asks
+   for the normal Afternote owner approval; later requests use the configured work-session
+   window.
+
+Disable or remove the connector from Claude Desktop's **Settings > Extensions**. Afternote
+does not edit Claude's private extension records directly.
 
 ## How it is put together
 
 ```text
-Codex / Claude Code
+Codex / Claude Code / Claude Desktop
         |
         v
   Afternote MCP command

@@ -199,7 +199,7 @@ function runProcess(command: string[], input?: Uint8Array): ProcessResult {
 
 function assertClientSigningTag(tag: string): void {
   if (
-    !/^dev\.afternote\.mcp-client\.(?:codex|claude)\.[A-Za-z0-9._:-]{1,180}$/.test(
+    !/^dev\.afternote\.mcp-client\.(?:codex|claude|claude-desktop)\.[A-Za-z0-9._:-]{1,180}$/.test(
       tag,
     )
   ) {

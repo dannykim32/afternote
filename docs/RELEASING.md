@@ -36,8 +36,9 @@ checksum, and final report to
    archive. Sign the final DMG and appcast with the dedicated `afternote-updates` EdDSA key.
    The release stops if the feed does not name the exact versioned HTTPS asset.
 10. Test fresh install, upgrade, rollback, uninstall, and reinstall on a clean macOS user.
-11. Run real Codex and Claude Code Remember/Recall acceptance loops against that installed
-    artifact.
+11. Run real Codex, Claude Code, and Claude Desktop Remember/Recall acceptance loops against that
+    installed artifact. For Claude Desktop, approve the MCPB in Claude, return to Afternote and
+    verify **Check again** reports healthy, then test lock, unlock, disable, re-enable, and removal.
 12. Create the exact GitHub Release tag `v<version>` (for example,
    `v2.0.0-alpha.12`) and upload the reviewed DMG and `SHA256SUMS`. Before publishing the
    feed, confirm the exact enclosure URL succeeds:

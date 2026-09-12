@@ -38,7 +38,7 @@ describe("local CLI process", () => {
   });
 
   it("routes connector identity rotation before host discovery and requires the packaged artifact", () => {
-    for (const integration of ["codex", "claude-code"] as const) {
+    for (const integration of ["codex", "claude-code", "claude-desktop"] as const) {
       const home = mkdtempSync(join(tmpdir(), "afternote-rotation-cli-"));
       try {
         const mainPath = join(import.meta.dir, "main.ts");

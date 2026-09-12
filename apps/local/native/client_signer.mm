@@ -24,6 +24,7 @@ bool HasAllowedTagPrefix(const std::string &tag) {
   static const char *prefixes[] = {
       "dev.afternote.mcp-client.codex.",
       "dev.afternote.mcp-client.claude.",
+      "dev.afternote.mcp-client.claude-desktop.",
   };
   bool prefix_matches = false;
   size_t suffix_offset = 0;

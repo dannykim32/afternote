@@ -283,10 +283,12 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('buttonWithTitle:@"Repair Afternote"');
     expect(nativeAppSource).toContain('@"Get Codex"');
     expect(nativeAppSource).toContain('@"Get Claude Code"');
+    expect(nativeAppSource).toContain('@"Get Claude Desktop"');
     expect(nativeAppSource).toContain('action:@selector(installIntegration:)');
     expect(nativeAppSource).toContain("AfternoteIntegrationDescriptor");
     expect(nativeAppSource).toContain('displayName:@"Codex"');
     expect(nativeAppSource).toContain('displayName:@"Claude Code"');
+    expect(nativeAppSource).toContain('displayName:@"Claude Desktop"');
     expect(nativeAppSource).toContain("connectorRowForCommandKind:");
     expect(nativeAppSource).toContain("toggleConnectorHistory:");
     expect(nativeAppSource).toContain("expandedConnectorKinds");

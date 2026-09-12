@@ -22,6 +22,14 @@ describe("integration host command deadline", () => {
       .toBe(MCP_HOST_CODE_REQUIREMENTS.codex);
     expect(INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Code"])
       .toBe(MCP_HOST_CODE_REQUIREMENTS.claude);
+    expect(INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"])
+      .toContain('identifier "com.anthropic.claudefordesktop"');
+    expect(INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"])
+      .toContain('certificate leaf[subject.OU] = "Q6L2SF6YDW"');
+    expect(MCP_HOST_CODE_REQUIREMENTS["claude-desktop"])
+      .toContain('identifier "disclaimer"');
+    expect(MCP_HOST_CODE_REQUIREMENTS["claude-desktop"])
+      .toContain('certificate leaf[subject.OU] = "Q6L2SF6YDW"');
     for (const requirement of Object.values(INTEGRATION_HOST_CODE_REQUIREMENTS)) {
       expect(requirement).toContain("1.2.840.113635.100.6.1.13");
       expect(requirement).toContain("1.2.840.113635.100.6.2.6");

@@ -95,6 +95,32 @@ claude_entry_present=0
 if [ -f "$claude_config" ] && grep -Eq '"afternote"[[:space:]]*:' "$claude_config"; then
   claude_entry_present=1
 fi
+
+claude_desktop_extension="$HOME/Library/Application Support/Claude/Claude Extensions/local.mcpb.danny-kim.afternote"
+if [ -e "$claude_desktop_extension" ] || [ -L "$claude_desktop_extension" ]; then
+  if [ -L "$management_binary" ] || [ ! -f "$management_binary" ] ||
+    [ ! -x "$management_binary" ]; then
+    printf 'Afternote cannot safely inspect connector ownership. No files were removed.\n' >&2
+    exit 1
+  fi
+  if claude_desktop_status=$(PATH="$bin_root:$PATH" \
+    AFTERNOTE_INSTALL_ROOT="$install_root" \
+    AFTERNOTE_BIN_ROOT="$bin_root" \
+    "$management_binary" claude-desktop status 2>/dev/null); then
+    case "$claude_desktop_status" in
+      *'"configHealthy": true'*)
+        printf 'Remove Afternote in Claude Desktop Settings > Extensions, then retry uninstall. No files were removed.\n' >&2
+        exit 1
+        ;;
+      *)
+        printf 'Claude Desktop contains an extension at Afternote’s local ID that this installation does not own; it was preserved.\n' >&2
+        ;;
+    esac
+  else
+    printf 'Claude Desktop connector status could not be inspected. No Afternote files were removed.\n' >&2
+    exit 1
+  fi
+fi
 if [ "$claude_entry_present" -eq 1 ]; then
   if [ -L "$management_binary" ] || [ ! -f "$management_binary" ] ||
     [ ! -x "$management_binary" ]; then

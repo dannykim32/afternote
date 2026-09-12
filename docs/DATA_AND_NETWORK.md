@@ -1,7 +1,7 @@
 # Data and network inventory
 
 This inventory describes the first public candidate: one Apple Silicon Mac, one local
-vault, and Codex and Claude Code connectors only.
+vault, and Codex, Claude Code, and Claude Desktop connectors only.
 
 ## Local files
 
@@ -17,6 +17,9 @@ vault, and Codex and Claude Code connectors only.
 | `~/.local/bin/afternote` | Link to the active command | Removed when Afternote owns it |
 | `~/.codex/config.toml` | One `mcp_servers.afternote` entry | Only the Afternote entry is removed |
 | `~/.claude.json` | One Afternote MCP entry | Only the Afternote entry is removed |
+| `~/.afternote/connectors/` | Versioned MCPB packages generated for Claude Desktop installation; no note content or credentials | Removed with the encrypted-data directory only if the user deletes `~/.afternote` |
+| `~/Library/Application Support/Claude/Claude Extensions/local.mcpb.danny-kim.afternote/` | The Claude-managed copy of Afternote's two-file MCPB launcher | Must be removed in Claude Desktop before Afternote can be uninstalled |
+| `~/Library/Application Support/Claude/Claude Extensions Settings/local.mcpb.danny-kim.afternote.json` | Claude's enabled/disabled state for the extension | Managed by Claude Desktop |
 
 Explicit JSON and Markdown exports are plaintext at the path the user selects. Diagnostics
 contain coarse allowlisted status fields, not notes or queries. Migration can retain a
@@ -25,7 +28,8 @@ filesystem unlinking, not a claim of forensic erasure on SSD storage or backups.
 
 The data-protection Keychain stores the per-vault key under the worker's exact access group.
 Secure Enclave-backed connector signing keys use tags beginning
-`dev.afternote.mcp-client.codex` or `dev.afternote.mcp-client.claude`. They contain no note
+`dev.afternote.mcp-client.codex`, `dev.afternote.mcp-client.claude`, or
+`dev.afternote.mcp-client.claude-desktop`. They contain no note
 content and remain across an ordinary uninstall so reinstall can recover the same local
 identity. Deleting `~/.afternote` alone does not delete Keychain items.
 
@@ -37,9 +41,11 @@ remaining session and signing requirements.
 
 The Uninstall action is therefore a runtime removal, not an identity or data wipe. It
 removes the Codex and Claude Code configuration entries so those tools cannot invoke
-Afternote, but preserves encrypted broker grants and their matching device-bound signing
-keys for an intentional reinstall. A future destructive erase flow must separately revoke
-those grants and delete both the vault and Keychain items.
+Afternote. If Claude Desktop still has Afternote installed, uninstall stops and asks the user
+to remove it in Claude first; it does not edit Claude's private extension database. Encrypted
+broker grants and their matching device-bound signing keys remain for an intentional reinstall.
+A future destructive erase flow must separately revoke those grants and delete both the vault
+and Keychain items.
 
 ## Permissions
 
@@ -67,7 +73,7 @@ fetches a fixed file set from `https://huggingface.co` at the pinned model revis
 file has a byte limit and SHA-256 digest and is verified before publication. The model and
 inference remain local after installation.
 
-Codex and Claude Code are separate products with their own network and retention behavior.
+Codex, Claude Code, and Claude Desktop are separate products with their own network and retention behavior.
 When one of those connectors calls Recall, Afternote returns the requested excerpts to that
 local host process. What the host sends to its model provider is governed by that provider,
 not by Afternote. Build and CI tooling separately queries `https://api.osv.dev` for dependency

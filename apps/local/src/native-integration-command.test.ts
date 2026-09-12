@@ -121,13 +121,14 @@ describeMacos("native integration command runner", () => {
     expect(performance.now() - startedAt).toBeLessThan(2_000);
   });
 
-  it("keeps concurrent Codex and Claude status generations independent", () => {
+  it("keeps concurrent connector status generations independent", () => {
     const smoke = Bun.spawnSync([
       runner,
       "--integration-generation-smoke",
     ], { stdout: "pipe", stderr: "pipe" });
     expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
     expect(JSON.parse(smoke.stdout.toString())).toEqual({
+      claudeDesktopStatusStayedCurrent: true,
       claudeStatusStayedCurrent: true,
       codexInstallStayedCurrent: true,
       codexStatusBecameStale: true,

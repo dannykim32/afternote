@@ -55,6 +55,6 @@ describe("production MCP broker path", () => {
       stderr: "pipe",
     });
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toString()).toContain("requires an installed Codex or Claude Code client identity");
+    expect(result.stderr.toString()).toContain("requires an installed connector identity");
   });
 });

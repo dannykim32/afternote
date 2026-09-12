@@ -33,12 +33,20 @@ int main(void) {
         @"toolAvailable" : @YES, @"installed" : @NO, @"healthy" : @NO,
         @"problemCode" : @"connector_missing",
       }, NO, NO),
+      Summary(@"approval", @{
+        @"toolAvailable" : @YES, @"installed" : @NO, @"healthy" : @NO,
+        @"approvalRequired" : @YES, @"problemCode" : @"connector_missing",
+      }, NO, NO),
       Summary(@"revoked", @{
         @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @YES,
       }, NO, YES),
       Summary(@"legacy", @{
         @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @NO,
         @"repairable" : @YES, @"problemCode" : @"connector_legacy",
+      }, NO, NO),
+      Summary(@"disabled", @{
+        @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @NO,
+        @"repairable" : @YES, @"problemCode" : @"connector_disabled",
       }, NO, NO),
       Summary(@"runtime", @{
         @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @NO,

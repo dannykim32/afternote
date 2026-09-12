@@ -75,6 +75,38 @@ describe("client signer helper boundary", () => {
     });
   });
 
+  it("accepts a distinct Claude Desktop signing-key namespace", () => {
+    const commands: string[][] = [];
+    const result = invokeClientSignerHelper(
+      "public-key",
+      "dev.afternote.mcp-client.claude-desktop.123",
+      undefined,
+      {
+        helperPath: "/tmp/signer",
+        codeRequirement: 'identifier "dev.afternote.client-signer"',
+        exists: () => true,
+        run(command) {
+          commands.push(command);
+          if (command[0] === "/usr/bin/codesign") {
+            return { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+          }
+          return {
+            exitCode: 0,
+            stdout: Buffer.from(JSON.stringify({
+              publicKeyRaw: rawPublicKey.toString("base64"),
+            })),
+            stderr: Buffer.alloc(0),
+          };
+        },
+      },
+    );
+    expect(result).toEqual({ publicKeyRaw: rawPublicKey.toString("base64") });
+    expect(commands.at(-1)?.slice(1)).toEqual([
+      "public-key",
+      "dev.afternote.mcp-client.claude-desktop.123",
+    ]);
+  });
+
   it("rejects malformed requests and helper output", () => {
     const dependencies = {
       helperPath: "/tmp/signer",

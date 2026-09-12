@@ -481,6 +481,7 @@ BOOL IsAuditPrincipal(NSDictionary *event) {
       [grantId isEqual:@"native-library"] || !IsNullableUUID(sessionId)) return NO;
   NSDictionary *labels = @{
     @"codex" : @"Codex", @"claude" : @"Claude Code",
+    @"claude-desktop" : @"Claude Desktop",
     @"local_ui" : @"Afternote Local",
   };
   return IsOneOf(kind, labels.allKeys) && [label isEqualToString:labels[kind]];
@@ -764,7 +765,7 @@ BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params)
     return ExactKeys(result, @[ @"revoked", @"kind", @"clientIds" ]) &&
         [result[@"revoked"] isEqual:@YES] &&
         IsOneOf(result[@"kind"], @[
-          @"codex", @"claude", @"local_ui"
+          @"codex", @"claude", @"claude-desktop", @"local_ui"
         ]) &&
         IsArrayOf(result[@"clientIds"], 256, ^BOOL(id item) { return IsUUID(item); });
   }
@@ -776,7 +777,7 @@ BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params)
       NSDictionary *summary = client[@"sessionSummary"];
       return ExactKeys(client, @[ @"clientId", @"kind", @"displayLabel", @"status", @"trust", @"pairedAt", @"revokedAt", @"lastActivityAt", @"authorityRevision", @"activeScopes", @"sessionSummary" ]) &&
           IsUUID(client[@"clientId"]) && IsOneOf(client[@"kind"], @[
-            @"codex", @"claude", @"local_ui"
+            @"codex", @"claude", @"claude-desktop", @"local_ui"
           ]) &&
           IsString(client[@"displayLabel"], 120, NO) &&
           IsOneOf(client[@"status"], @[ @"paired", @"active", @"revoked", @"expired" ]) &&
@@ -935,7 +936,7 @@ BOOL IsAdminResult(NSString *method, NSDictionary *result, NSDictionary *params)
           @"clientId"
         ]) &&
         [result[@"prepared"] isEqual:@YES] &&
-        IsOneOf(result[@"kind"], @[ @"codex", @"claude" ]) &&
+        IsOneOf(result[@"kind"], @[ @"codex", @"claude", @"claude-desktop" ]) &&
         [result[@"kind"] isEqual:params[@"kind"]] &&
         IsUUID(result[@"installIdentity"]) &&
         [result[@"installIdentity"] isEqual:params[@"installIdentity"]] &&
@@ -1083,7 +1084,7 @@ int RunAdminCommand(int argc, const char *argv[]) {
     NSString *kind = [NSString stringWithUTF8String:argv[2]];
     NSString *installIdentity = [NSString stringWithUTF8String:argv[3]];
     NSString *replacementInstallIdentity = [NSString stringWithUTF8String:argv[4]];
-    if (!IsOneOf(kind, @[ @"codex", @"claude" ]) ||
+    if (!IsOneOf(kind, @[ @"codex", @"claude", @"claude-desktop" ]) ||
         !IsUUID(installIdentity) || !IsUUID(replacementInstallIdentity) ||
         [installIdentity isEqualToString:replacementInstallIdentity]) {
       fputs("invalid client rotation arguments\n", stderr);
@@ -1548,6 +1549,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       [AfternoteIntegrationDescriptor commandKind:@"claude-code"
                                        brokerKind:@"claude"
                                       displayName:@"Claude Code"],
+      [AfternoteIntegrationDescriptor commandKind:@"claude-desktop"
+                                       brokerKind:@"claude-desktop"
+                                      displayName:@"Claude Desktop"],
     ];
   });
   return descriptors;
@@ -1717,6 +1721,12 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     @"runtimeHealthy" : @YES, @"repairable" : @NO, @"problemCode" : NSNull.null,
   };
   self.integrationStatuses[@"claude-code"] = @{
+    @"toolAvailable" : @YES,
+    @"installed" : @NO, @"healthy" : @NO, @"configHealthy" : @NO,
+    @"runtimeHealthy" : @NO, @"repairable" : @YES,
+    @"problemCode" : @"connector_missing",
+  };
+  self.integrationStatuses[@"claude-desktop"] = @{
     @"toolAvailable" : @YES,
     @"installed" : @NO, @"healthy" : @NO, @"configHealthy" : @NO,
     @"runtimeHealthy" : @NO, @"repairable" : @YES,
@@ -2399,7 +2409,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   (void)sender;
   NSAlert *confirmation = [[NSAlert alloc] init];
   confirmation.messageText = @"Uninstall Afternote?";
-  confirmation.informativeText = @"Afternote will remove its Codex and Claude Code configuration and background runtime. Your encrypted vault and connector authorization in ~/.afternote and Keychain are preserved for reinstall.";
+  confirmation.informativeText = @"Afternote will remove its Codex and Claude Code configuration and background runtime. If the Claude Desktop extension is still installed, Afternote will stop and ask you to remove it in Claude first. Your encrypted vault and connector authorization in ~/.afternote and Keychain are preserved for reinstall.";
   [confirmation addButtonWithTitle:@"Uninstall"];
   [confirmation addButtonWithTitle:@"Cancel"];
   [confirmation beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
@@ -2802,7 +2812,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (NSView *)buildSetupBanner {
   NSTextField *title = [self label:@"Set up Afternote where you work"
                                   size:14 weight:NSFontWeightSemibold];
-  NSTextField *detail = [self label:@"Connect Codex or Claude Code, then test saving and recalling a note."
+  NSTextField *detail = [self label:@"Connect Codex, Claude Code, or Claude Desktop, then test saving and recalling a note."
                                    size:12 weight:NSFontWeightRegular];
   detail.textColor = AfternoteMutedTextColor();
   detail.maximumNumberOfLines = 2;
@@ -5258,7 +5268,9 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)installIntegration:(NSButton *)sender {
   NSString *kind = sender.identifier;
-  if (![kind isEqualToString:@"codex"] && ![kind isEqualToString:@"claude-code"]) return;
+  if (![kind isEqualToString:@"codex"] &&
+      ![kind isEqualToString:@"claude-code"] &&
+      ![kind isEqualToString:@"claude-desktop"]) return;
   if ([self.integrationOperations containsObject:kind]) return;
   AdvanceIntegrationGeneration(self.integrationStatusGenerations, kind);
   [self.integrationOperations addObject:kind];
@@ -5273,6 +5285,13 @@ doCommandBySelector:(SEL)commandSelector {
     [self.integrationOperations removeObject:kind];
     if (result != nil) {
       self.integrationStatuses[kind] = result;
+      if ([result[@"approvalRequired"] boolValue]) {
+        NSAlert *approval = [[NSAlert alloc] init];
+        approval.messageText = @"Finish in Claude Desktop";
+        approval.informativeText = @"Claude opened an extension preview. Review it, choose Install, then return to Afternote and click Check again. Afternote does not bypass Claude’s approval step.";
+        [approval addButtonWithTitle:@"Got it"];
+        [approval beginSheetModalForWindow:self.window completionHandler:nil];
+      }
     } else {
       NSMutableDictionary *failed = [self.integrationStatuses[kind] mutableCopy]
           ?: [NSMutableDictionary dictionary];
@@ -5294,7 +5313,9 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)reconnectIntegration:(NSButton *)sender {
   NSString *kind = sender.identifier;
-  if (![kind isEqualToString:@"codex"] && ![kind isEqualToString:@"claude-code"]) return;
+  if (![kind isEqualToString:@"codex"] &&
+      ![kind isEqualToString:@"claude-code"] &&
+      ![kind isEqualToString:@"claude-desktop"]) return;
   if ([self.integrationOperations containsObject:kind]) return;
   AdvanceIntegrationGeneration(self.integrationStatusGenerations, kind);
   [self.integrationOperations addObject:kind];
@@ -5334,6 +5355,8 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)openIntegrationDownload:(NSButton *)sender {
   NSString *urlString = [sender.identifier isEqualToString:@"codex"]
       ? @"https://openai.com/codex/"
+      : [sender.identifier isEqualToString:@"claude-desktop"]
+      ? @"https://claude.ai/download"
       : @"https://docs.anthropic.com/en/docs/claude-code/getting-started";
   NSURL *url = [NSURL URLWithString:urlString];
   if (url != nil) [NSWorkspace.sharedWorkspace openURL:url];
@@ -5341,11 +5364,17 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)reviewIntegrationSetup:(NSButton *)sender {
   NSString *displayName = [self integrationDisplayNameForKind:sender.identifier];
+  NSDictionary *status = self.integrationStatuses[sender.identifier];
   NSAlert *alert = [[NSAlert alloc] init];
-  alert.messageText = @"Existing connector needs review";
-  alert.informativeText = [NSString stringWithFormat:
-      @"%@ already has an MCP connector named “afternote” that was not created by this Afternote installation. Afternote will not overwrite it. Remove or rename that entry in %@, then return here and check again.",
-      displayName, displayName];
+  if ([status[@"problemCode"] isEqualToString:@"connector_disabled"]) {
+    alert.messageText = @"Enable Afternote in Claude Desktop";
+    alert.informativeText = @"Open Claude Desktop Settings > Extensions, enable Afternote, then return here and click Check again.";
+  } else {
+    alert.messageText = @"Existing connector needs review";
+    alert.informativeText = [NSString stringWithFormat:
+        @"%@ already has an MCP connector named “afternote” that was not created by this Afternote installation. Afternote will not overwrite it. Remove or rename that entry in %@, then return here and check again.",
+        displayName, displayName];
+  }
   [alert addButtonWithTitle:@"Got it"];
   [alert beginSheetModalForWindow:self.window completionHandler:nil];
 }
@@ -5355,8 +5384,12 @@ doCommandBySelector:(SEL)commandSelector {
                            presentation:(AfternoteConnectorPresentation *)presentation {
   NSButton *button = nil;
   if (presentation.action == AfternoteConnectorActionGetTool) {
-    button = [AfternoteButton buttonWithTitle:
-        [kind isEqualToString:@"codex"] ? @"Get Codex" : @"Get Claude Code"
+    NSString *title = [kind isEqualToString:@"codex"]
+        ? @"Get Codex"
+        : [kind isEqualToString:@"claude-desktop"]
+        ? @"Get Claude Desktop"
+        : @"Get Claude Code";
+    button = [AfternoteButton buttonWithTitle:title
                                        target:self
                                        action:@selector(openIntegrationDownload:)];
   } else if (presentation.action == AfternoteConnectorActionConnect) {
@@ -5663,7 +5696,7 @@ doCommandBySelector:(SEL)commandSelector {
                                                         revokedDescriptor.displayName]
                            : integrationActive
                            ? @"Afternote is available in at least one of your local tools."
-                           : @"Choose Codex or Claude Code. Afternote configures the connection for you."
+                           : @"Choose Codex, Claude Code, or Claude Desktop. Afternote guides the connection for you."
                         badge:revokedDescriptor != nil ? @"Reconnect" : integrationActive ? @"Active" : @"Next"
                          tone:integrationActive && revokedDescriptor == nil ? @"success" : @"warning"
                        button:connectionsButton]];
@@ -6361,6 +6394,8 @@ int RunIntegrationGenerationSmoke() {
   NSMutableDictionary<NSString *, NSNumber *> *generations = [NSMutableDictionary dictionary];
   NSUInteger codexFirst = AdvanceIntegrationGeneration(generations, @"codex");
   NSUInteger claudeFirst = AdvanceIntegrationGeneration(generations, @"claude-code");
+  NSUInteger claudeDesktopFirst = AdvanceIntegrationGeneration(
+      generations, @"claude-desktop");
   NSUInteger codexInstall = AdvanceIntegrationGeneration(generations, @"codex");
   BOOL codexStatusBecameStale = !IntegrationGenerationIsCurrent(
       generations, @"codex", codexFirst);
@@ -6368,7 +6403,10 @@ int RunIntegrationGenerationSmoke() {
       generations, @"codex", codexInstall);
   BOOL claudeStatusStayedCurrent = IntegrationGenerationIsCurrent(
       generations, @"claude-code", claudeFirst);
+  BOOL claudeDesktopStatusStayedCurrent = IntegrationGenerationIsCurrent(
+      generations, @"claude-desktop", claudeDesktopFirst);
   NSDictionary *output = @{
+    @"claudeDesktopStatusStayedCurrent" : @(claudeDesktopStatusStayedCurrent),
     @"codexStatusBecameStale" : @(codexStatusBecameStale),
     @"codexInstallStayedCurrent" : @(codexInstallStayedCurrent),
     @"claudeStatusStayedCurrent" : @(claudeStatusStayedCurrent),
@@ -6377,7 +6415,7 @@ int RunIntegrationGenerationSmoke() {
   fwrite(data.bytes, 1, data.length, stdout);
   fputc('\n', stdout);
   return codexStatusBecameStale && codexInstallStayedCurrent &&
-      claudeStatusStayedCurrent ? 0 : 2;
+      claudeStatusStayedCurrent && claudeDesktopStatusStayedCurrent ? 0 : 2;
 }
 
 @interface BrokerRecoveryProbeConnection : NSObject <AfternoteOwnerBroker>

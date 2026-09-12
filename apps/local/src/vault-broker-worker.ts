@@ -1213,7 +1213,9 @@ export class VaultBrokerWorker {
     this.#activationTtls.delete(activationId);
     const activationClientKind = this.#authority().activationClientKind(activationId);
     if (
-      (activationClientKind === "codex" || activationClientKind === "claude") &&
+      (activationClientKind === "codex" ||
+        activationClientKind === "claude" ||
+        activationClientKind === "claude-desktop") &&
       this.#authority().canSilentlyActivateTrustedMcp(activationId)
     ) {
       const activated = this.#authority().approveTrustedMcpActivation({
@@ -1259,7 +1261,7 @@ export class VaultBrokerWorker {
     });
     return ownerPresenceChallenge(
       challengeId,
-      `Start a shared Afternote work session for ${formatSessionDuration(workSessionTtlMs)} with an inactivity limit of ${formatSessionDuration(workSessionTtlMs)}? During this work session, previously paired Codex and Claude Code apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, and Get. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
+      `Start a shared Afternote work session for ${formatSessionDuration(workSessionTtlMs)} with an inactivity limit of ${formatSessionDuration(workSessionTtlMs)}? During this work session, previously paired Codex, Claude Code, and Claude Desktop apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, and Get. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
       challengeExpiresAt,
     );
   }
@@ -3589,7 +3591,7 @@ function uuid(value: unknown, name: string): string {
 }
 
 function clientKind(value: unknown): BrokerClientKind {
-  if (value !== "codex" && value !== "claude") {
+  if (value !== "codex" && value !== "claude" && value !== "claude-desktop") {
     throw new BrokerProtocolError("invalid_request", "Broker client kind is invalid");
   }
   return value;
@@ -3601,6 +3603,8 @@ function fixedClientDisplayName(kind: BrokerClientKind): string {
       return "Codex";
     case "claude":
       return "Claude Code";
+    case "claude-desktop":
+      return "Claude Desktop";
     case "local_ui":
       return "Afternote";
   }
@@ -3611,9 +3615,9 @@ function ownerClientKind(value: unknown): BrokerClientKind {
   return clientKind(value);
 }
 
-function mcpClientKind(value: unknown): "codex" | "claude" {
+function mcpClientKind(value: unknown): "codex" | "claude" | "claude-desktop" {
   const kind = clientKind(value);
-  if (kind !== "codex" && kind !== "claude") {
+  if (kind !== "codex" && kind !== "claude" && kind !== "claude-desktop") {
     throw new BrokerProtocolError(
       "invalid_request",
       "MCP client identity kind is invalid",
@@ -4120,6 +4124,7 @@ const SAFE_UNTYPED_PEER_ERRORS = new Set([
   "Revoked MCP client public keys cannot be paired again",
   "Codex requires explicit reconnect preparation",
   "Claude Code requires explicit reconnect preparation",
+  "Claude Desktop requires explicit reconnect preparation",
   "Request signature is invalid",
   "Request was replayed",
   "Request transport does not match the active session",

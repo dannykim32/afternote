@@ -25,6 +25,22 @@ afterEach(() => {
 });
 
 describe("MCP development client identity rotation", () => {
+  it("supports a separate Claude Desktop identity", async () => {
+    const fixture = identityFixture("claude-desktop");
+    const replacementIdentity = "22222222-2222-4222-8222-222222222222";
+    const result = await rotateMcpClientIdentity("claude-desktop", {
+      statePath: fixture.statePath,
+      generateInstallIdentity: () => replacementIdentity,
+      now: () => new Date("2026-09-12T00:00:00.000Z"),
+      approve: (request) => ({ ...request, prepared: true, clientId: null }),
+    });
+    expect(result.kind).toBe("claude-desktop");
+    expect(JSON.parse(readFileSync(fixture.statePath, "utf8"))).toMatchObject({
+      kind: "claude-desktop",
+      installIdentity: replacementIdentity,
+    });
+  });
+
   it("repairs an inaccessible exact-build identity once, then verifies the replacement", async () => {
     const calls: string[] = [];
     let stale = true;
@@ -204,7 +220,7 @@ describe("MCP development client identity rotation", () => {
   });
 });
 
-function identityFixture(kind: "codex" | "claude") {
+function identityFixture(kind: "codex" | "claude" | "claude-desktop") {
   const directory = temporaryDirectory("afternote-mcp-identity-");
   const statePath = join(directory, `${kind}.json`);
   const installIdentity = "11111111-1111-4111-8111-111111111111";
@@ -214,7 +230,10 @@ function identityFixture(kind: "codex" | "claude") {
   return { directory, statePath, installIdentity, contents };
 }
 
-function identityContents(kind: "codex" | "claude", installIdentity: string): string {
+function identityContents(
+  kind: "codex" | "claude" | "claude-desktop",
+  installIdentity: string,
+): string {
   return `${JSON.stringify({
     format: "afternote-mcp-client",
     schemaVersion: 1,

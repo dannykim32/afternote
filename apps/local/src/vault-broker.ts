@@ -50,6 +50,7 @@ const BROKER_CAPABILITIES: readonly BrokerCapability[] = MEMORY_CAPABILITIES;
 export type BrokerClientKind =
   | "codex"
   | "claude"
+  | "claude-desktop"
   | "local_ui";
 export type ForgetPolicy = "never" | "confirm_each" | "session";
 export type AuditOutcome = "authorized" | "success" | "denied" | "error";
@@ -156,7 +157,7 @@ export type OwnerConnectorRevocationTarget = {
 
 export type OwnerClientRotationTarget = Omit<OwnerRevocationTarget, "clientId"> & {
   clientId: string | null;
-  kind: "codex" | "claude";
+  kind: "codex" | "claude" | "claude-desktop";
   installIdentity: string;
 };
 
@@ -1714,7 +1715,7 @@ export class VaultBrokerAuthorization {
   }
 
   clientRotationTarget(
-    kind: "codex" | "claude",
+    kind: "codex" | "claude" | "claude-desktop",
     installIdentity: string,
   ): OwnerClientRotationTarget {
     assertClientKind(kind);
@@ -1819,7 +1820,7 @@ export class VaultBrokerAuthorization {
   }
 
   revokedClientReplacementTarget(
-    kind: "codex" | "claude",
+    kind: "codex" | "claude" | "claude-desktop",
     installIdentity: string,
   ): OwnerClientRotationTarget {
     assertClientKind(kind);
@@ -2109,7 +2110,7 @@ export class VaultBrokerAuthorization {
   }
 
   #setConnectorReconnect(
-    kind: "codex" | "claude",
+    kind: "codex" | "claude" | "claude-desktop",
     status: "required" | "prepared",
     replacementInstallIdentity: string | null,
     now: string,
@@ -2841,13 +2842,17 @@ function brokerClientDisplayLabel(kind: BrokerClientKind): string {
       return "Codex";
     case "claude":
       return "Claude Code";
+    case "claude-desktop":
+      return "Claude Desktop";
     case "local_ui":
       return "Afternote Local";
   }
 }
 
-function isMcpClientKind(kind: BrokerClientKind): kind is "codex" | "claude" {
-  return kind === "codex" || kind === "claude";
+function isMcpClientKind(
+  kind: BrokerClientKind,
+): kind is "codex" | "claude" | "claude-desktop" {
+  return kind === "codex" || kind === "claude" || kind === "claude-desktop";
 }
 
 function parseAuditNoteRefs(value: string): Array<{ noteId: string; revision: number }> {
@@ -2886,7 +2891,7 @@ function operationCapability(operation: string): BrokerCapability {
 }
 
 function isTrustedMcpClient(client: ClientRow): boolean {
-  return client.kind === "codex" || client.kind === "claude";
+  return isMcpClientKind(client.kind);
 }
 
 function assertTrustedMcpCapabilities(row: ActivationRow): void {
@@ -2954,7 +2959,7 @@ function assertEnvelopeShape(envelope: BrokerRequestEnvelope): void {
 }
 
 function assertClientKind(value: string): asserts value is BrokerClientKind {
-  if (!( ["codex", "claude", "local_ui"] as string[]).includes(value)) {
+  if (!( ["codex", "claude", "claude-desktop", "local_ui"] as string[]).includes(value)) {
     throw new Error("Client kind is invalid");
   }
 }

@@ -7,7 +7,7 @@ approve it.
 ## Conditional recommendation
 
 Afternote should be approved only for notes the organization already permits in its configured
-Codex or Claude Code environment. IT also needs to accept three limits: this is alpha software,
+Codex, Claude Code, or Claude Desktop environment. IT also needs to accept three limits: this is alpha software,
 ordinary uninstall preserves encrypted user data and Keychain identity, and there is no current
 fleet-management or application-level secure-erase workflow.
 
@@ -17,8 +17,8 @@ If any of those are disqualifying, do not deploy it yet.
 
 Afternote installs entirely in the current macOS account. A per-user LaunchAgent named
 `dev.afternote.vault-broker` starts at login and keeps the native gateway available. The gateway
-launches a private worker when needed. The native app performs owner actions, and Codex or Claude
-Code launches the Afternote CLI over standard MCP input/output.
+launches a private worker when needed. The native app performs owner actions, and Codex, Claude
+Code, or Claude Desktop launches the Afternote CLI over standard MCP input/output.
 
 The gateway exposes local launchd Mach services, not a TCP listener. It authenticates peers with
 fixed Apple code-signing requirements. Its worker channel additionally requires the exact PID the
@@ -48,7 +48,11 @@ itself changes.
 The encrypted vault, connector records, optional model, and transactional recovery state live
 under `~/.afternote`. Runtime files live under `~/Library/Application Support/Afternote`; the CLI
 link is `~/.local/bin/afternote`; the LaunchAgent is in `~/Library/LaunchAgents`. Afternote modifies
-only its own Codex and Claude Code MCP entries.
+only its own Codex and Claude Code MCP entries. Claude Desktop installation goes through Claude's
+MCPB preview and explicit confirmation instead of a direct edit to Claude's private extension state.
+The generated MCPB is not independently signed at the MCPB package layer. It contains only a
+manifest and launcher for the signed Afternote CLI, but organizations that require centrally
+signed or administrator-distributed MCPB packages should not approve this connector in this alpha.
 
 The vault contains note text, revisions, metadata, local embeddings, grants, and a redacted audit
 ledger. Its random key is stored in the macOS data-protection Keychain and is available only to the
@@ -71,7 +75,7 @@ approval and must pass EdDSA archive and feed verification plus Apple code-signi
 The optional `afternote semantic install` action downloads a fixed, size-limited, SHA-256-pinned
 model file set from `https://huggingface.co`. After installation, inference is local.
 
-Recall returns selected note excerpts to the local Codex or Claude Code process. That host may
+Recall returns selected note excerpts to the local Codex, Claude Code, or Claude Desktop process. That host may
 send the excerpts to OpenAI or Anthropic under the organization's configuration and contract.
 Afternote cannot enforce either provider's retention policy, and it cannot cryptographically prove
 which natural-language instruction caused an authorized host to call Remember.
@@ -101,7 +105,8 @@ queries.
 An incident responder can revoke connector grants, lock Afternote, remove the Codex and Claude Code
 connections, and uninstall the runtime. Screen lock, sleep, user-session resignation, manual lock,
 broker restart, and revocation end live sessions. Uninstall now fails rather than reporting success
-if launchd still reports the broker active.
+if launchd still reports the broker active. Claude Desktop extensions must be removed through
+Claude before uninstall so Afternote does not mutate another application's private extension state.
 
 ## Uninstall and secure erasure
 
@@ -119,7 +124,7 @@ Keychain, plus the organization's normal device and backup sanitization process.
 ## Known limits and assurance level
 
 The threat model does not protect a macOS login already controlled by malware, a compromised
-authorized Codex or Claude Code host, malicious accessibility software, hardware attacks, or
+authorized Codex, Claude Code, or Claude Desktop host, malicious accessibility software, hardware attacks, or
 vulnerabilities in macOS and third-party runtimes. Same-login replacement of an older authentic
 vault can rewind vault-resident state. Known post-alpha hardening work also includes tighter
 resource quotas and eliminating remaining same-login verify/use races around the connector signer
