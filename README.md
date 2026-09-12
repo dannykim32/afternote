@@ -40,7 +40,7 @@ Apple toolchain that compiled them, and require a macOS 13.3 deployment target. 
 builds additionally require the exact reviewed Apple toolchain and byte-for-byte native output
 digests recorded in `scripts/native-release-inputs.json`.
 
-After work-laptop acceptance, the signed and notarized DMG will be published on the
+The signed and notarized DMG is published on the
 [GitHub Releases page](https://github.com/dannykim32/afternote/releases). Download the DMG
 and `SHA256SUMS` together, then follow [the verification steps](docs/VERIFY_RELEASE.md)
 before installing it.
