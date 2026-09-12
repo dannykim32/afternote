@@ -6,9 +6,40 @@ import {
   probeMcpClientIdentity,
   requestVaultBroker,
   VaultBrokerMemoryClient,
+  VaultBrokerTransportError,
 } from "./vault-broker-client";
 
 describe("vault broker MCP client", () => {
+  it("types restart-related native XPC failures for bounded recovery", () => {
+    for (const [message, code] of [
+      ["Broker XPC service is unavailable", "unavailable"],
+      ["Could not create the broker XPC connection", "unavailable"],
+      ["Broker XPC request timed out", "timed_out"],
+    ] as const) {
+      const failure = captureFailure(() => requestVaultBroker("health", {}, {
+        service: "dev.afternote.test-broker",
+        codeRequirement: "identifier dev.afternote.test-broker",
+        transport() {
+          throw new Error(message);
+        },
+      }));
+      expect(failure).toBeInstanceOf(VaultBrokerTransportError);
+      expect(failure).toMatchObject({ code, message });
+    }
+  });
+
+  it("does not classify malformed or policy-related XPC failures as recoverable", () => {
+    const original = new Error("Broker XPC response is invalid");
+    const failure = captureFailure(() => requestVaultBroker("health", {}, {
+      service: "dev.afternote.test-broker",
+      codeRequirement: "identifier dev.afternote.test-broker",
+      transport() {
+        throw original;
+      },
+    }));
+    expect(failure).toBe(original);
+  });
+
   it("publishes client state only after the durable signer proves readiness", () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-client-probe-"));
     const statePath = join(directory, "codex.json");
@@ -103,3 +134,13 @@ describe("vault broker MCP client", () => {
     }
   });
 });
+
+function captureFailure(operation: () => unknown): Error {
+  try {
+    operation();
+  } catch (error) {
+    if (error instanceof Error) return error;
+    throw new Error("Expected operation to throw an Error");
+  }
+  throw new Error("Expected operation to fail");
+}

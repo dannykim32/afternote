@@ -15,7 +15,10 @@ import {
   createAcceptanceTraceSink,
   DeferredVaultBrokerMemoryClient,
 } from "./mcp-broker-adapter";
-import { VaultBrokerRequestError } from "./vault-broker-client";
+import {
+  VaultBrokerRequestError,
+  VaultBrokerTransportError,
+} from "./vault-broker-client";
 
 describe("deferred MCP broker activation", () => {
   it("turns a revoked development key failure into connector-level recovery guidance", async () => {
@@ -384,6 +387,94 @@ describe("deferred MCP broker activation", () => {
     }
   });
 
+  it("reports the locked vault after a broker transport restart in one MCP process", async () => {
+    let activations = 0;
+    let recallAttempts = 0;
+    const trace: unknown[] = [];
+    const activatedVault: VaultContext = {
+      vaultId: "b".repeat(64),
+      deployment: "local",
+    };
+    const memory = new DeferredVaultBrokerMemoryClient(() => {
+      activations += 1;
+      if (activations === 2) {
+        throw new VaultBrokerRequestError(
+          "vault_locked",
+          "Afternote vault is locked",
+        );
+      }
+      return {
+        vault: activatedVault,
+        recall: async () => {
+          recallAttempts += 1;
+          throw unavailableBrokerTransportError();
+        },
+      } as unknown as Memory & { readonly vault: VaultContext };
+    }, { trace: (event) => trace.push(event) });
+
+    await expect(memory.recall(memory.vault, "fixture", 1)).rejects.toThrow(
+      "Afternote vault is locked",
+    );
+    expect(activations).toBe(2);
+    expect(recallAttempts).toBe(1);
+    expect(trace).toContainEqual(expect.objectContaining({
+      kind: "mcp-broker-operation",
+      operation: "recall",
+      attempt: 1,
+      outcome: "transport_restart",
+    }));
+  });
+
+  it("continues a read-only Recall after a broker transport restart", async () => {
+    let activations = 0;
+    let recallAttempts = 0;
+    const activatedVault: VaultContext = {
+      vaultId: "b".repeat(64),
+      deployment: "local",
+    };
+    const memory = new DeferredVaultBrokerMemoryClient(() => {
+      activations += 1;
+      const activation = activations;
+      return {
+        vault: activatedVault,
+        recall: async () => {
+          recallAttempts += 1;
+          if (activation === 1) throw unavailableBrokerTransportError();
+          return [];
+        },
+      } as unknown as Memory & { readonly vault: VaultContext };
+    });
+
+    await expect(memory.recall(memory.vault, "fixture", 1)).resolves.toEqual([]);
+    expect(activations).toBe(2);
+    expect(recallAttempts).toBe(2);
+  });
+
+  it("does not replay Remember after an ambiguous broker transport failure", async () => {
+    let activations = 0;
+    let rememberAttempts = 0;
+    const activatedVault: VaultContext = {
+      vaultId: "b".repeat(64),
+      deployment: "local",
+    };
+    const transportError = unavailableBrokerTransportError();
+    const memory = new DeferredVaultBrokerMemoryClient(() => {
+      activations += 1;
+      return {
+        vault: activatedVault,
+        remember: async () => {
+          rememberAttempts += 1;
+          throw transportError;
+        },
+      } as unknown as Memory & { readonly vault: VaultContext };
+    });
+
+    await expect(memory.remember(memory.vault, { content: "fixture" }))
+      .rejects.toBe(transportError);
+    expect(activations).toBe(1);
+    expect(rememberAttempts).toBe(1);
+  });
+
   it("does not reactivate a locked vault or an explicitly revoked client", async () => {
     const activatedVault: VaultContext = {
       vaultId: "c".repeat(64),
@@ -418,4 +509,13 @@ function queuedClock(values: number[]): () => number {
     if (value === undefined) throw new Error("Test clock was read too many times");
     return value;
   };
+}
+
+function unavailableBrokerTransportError(): VaultBrokerTransportError {
+  const nativeError = new Error("Broker XPC service is unavailable");
+  return new VaultBrokerTransportError(
+    "unavailable",
+    nativeError.message,
+    nativeError,
+  );
 }

@@ -62,6 +62,16 @@ export class VaultBrokerRequestError extends Error {
   }
 }
 
+export class VaultBrokerTransportError extends Error {
+  constructor(
+    readonly code: "unavailable" | "timed_out",
+    message: string,
+    cause: unknown,
+  ) {
+    super(message, { cause });
+  }
+}
+
 const REACTIVATABLE_SESSION_DENIALS = new Set([
   "Broker boot does not match",
   "Session was not found",
@@ -76,23 +86,39 @@ export function isRejectedStaleBrokerSession(error: unknown): boolean {
     REACTIVATABLE_SESSION_DENIALS.has(error.message);
 }
 
+export function isRecoverableBrokerTransportError(
+  error: unknown,
+): error is VaultBrokerTransportError {
+  return error instanceof VaultBrokerTransportError;
+}
+
 export function requestVaultBroker(
   method: string,
   params: Record<string, unknown>,
-  options?: { service?: string; timeoutMs?: number; codeRequirement?: string },
+  options?: {
+    service?: string;
+    timeoutMs?: number;
+    codeRequirement?: string;
+    transport?: typeof requestVaultBrokerXpc;
+  },
 ): unknown {
   const requestId = randomUUID();
-  const serialized = requestVaultBrokerXpc(
-    options?.service ?? packagedBrokerMachService(),
-    options?.codeRequirement ?? packagedBrokerCodeRequirement(),
-    JSON.stringify({
-      protocolVersion: VAULT_BROKER_PROTOCOL_VERSION,
-      requestId,
-      method,
-      params,
-    }),
-    options?.timeoutMs,
-  );
+  let serialized: string;
+  try {
+    serialized = (options?.transport ?? requestVaultBrokerXpc)(
+      options?.service ?? packagedBrokerMachService(),
+      options?.codeRequirement ?? packagedBrokerCodeRequirement(),
+      JSON.stringify({
+        protocolVersion: VAULT_BROKER_PROTOCOL_VERSION,
+        requestId,
+        method,
+        params,
+      }),
+      options?.timeoutMs,
+    );
+  } catch (error) {
+    throw typedBrokerTransportError(error) ?? error;
+  }
   let response: unknown;
   try {
     response = JSON.parse(serialized) as unknown;
@@ -120,6 +146,22 @@ export function requestVaultBroker(
     );
   }
   return record.result;
+}
+
+function typedBrokerTransportError(
+  error: unknown,
+): VaultBrokerTransportError | null {
+  if (!(error instanceof Error)) return null;
+  if (error.message === "Broker XPC request timed out") {
+    return new VaultBrokerTransportError("timed_out", error.message, error);
+  }
+  if (
+    error.message === "Broker XPC service is unavailable" ||
+    error.message === "Could not create the broker XPC connection"
+  ) {
+    return new VaultBrokerTransportError("unavailable", error.message, error);
+  }
+  return null;
 }
 
 export function vaultBrokerHealth(options?: {

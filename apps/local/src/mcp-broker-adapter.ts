@@ -22,6 +22,7 @@ import {
   type VaultContext,
 } from "@afternote/memory";
 import {
+  isRecoverableBrokerTransportError,
   isRejectedStaleBrokerSession,
   VaultBrokerRequestError,
   VaultBrokerMemoryClient,
@@ -53,7 +54,7 @@ export type McpBrokerAcceptanceTraceEvent = {
   operation: BrokerOperation;
   attempt: 1 | 2;
   reactivation: boolean;
-  outcome: "succeeded" | "failed" | "stale_session";
+  outcome: "succeeded" | "failed" | "stale_session" | "transport_restart";
   durationMs: number;
 };
 
@@ -168,7 +169,9 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
     try {
       return await this.#runOperation(operationName, 1, false, active, operation);
     } catch (error) {
-      if (!isRejectedStaleBrokerSession(error)) throw error;
+      const reactivatable = isRejectedStaleBrokerSession(error) ||
+        (operationName !== "remember" && isRecoverableBrokerTransportError(error));
+      if (!reactivatable) throw error;
       if (this.#delegate === active) this.#delegate = undefined;
       const reactivated = this.#activated(operationName, 2, true);
       return await this.#runOperation(operationName, 2, true, reactivated, operation);
@@ -200,7 +203,11 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
         operation: operationName,
         attempt,
         reactivation,
-        outcome: isRejectedStaleBrokerSession(error) ? "stale_session" : "failed",
+        outcome: isRejectedStaleBrokerSession(error)
+          ? "stale_session"
+          : isRecoverableBrokerTransportError(error)
+          ? "transport_restart"
+          : "failed",
         durationMs: this.#elapsed(startedAt),
       });
       throw this.#connectorAccessError(error);

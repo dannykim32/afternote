@@ -277,7 +277,10 @@ function validRecallTraceSequence(events: readonly McpBrokerAcceptanceTraceEvent
     operation.reactivation
   ) return false;
   if (events.length === 2) return operation.outcome === "succeeded";
-  return operation.outcome === "stale_session" &&
+  return (
+    operation.outcome === "stale_session" ||
+    operation.outcome === "transport_restart"
+  ) &&
     reactivation.kind === "mcp-broker-activation" &&
     reactivation.attempt === 2 &&
     reactivation.reactivation &&
@@ -339,7 +342,10 @@ function isBrokerTraceEvent(value: Record<string, unknown>): value is McpBrokerA
     (value.operation === "remember" || value.operation === "recall" || value.operation === "get_note") &&
     (value.attempt === 1 || value.attempt === 2) &&
     typeof value.reactivation === "boolean" &&
-    (value.outcome === "succeeded" || value.outcome === "failed" || value.outcome === "stale_session") &&
+    (value.outcome === "succeeded" ||
+      value.outcome === "failed" ||
+      value.outcome === "stale_session" ||
+      value.outcome === "transport_restart") &&
     validDuration(value.durationMs);
 }
 

@@ -69,6 +69,45 @@ describe("Codex Recall acceptance report", () => {
     });
   });
 
+  it("accepts transport-restart reactivation timing", () => {
+    const trace = successfulTraceLines();
+    trace.splice(1, 0,
+      acceptanceLine(145, {
+        kind: "mcp-broker-operation",
+        operation: "recall",
+        attempt: 1,
+        reactivation: false,
+        outcome: "transport_restart",
+        durationMs: 7,
+      }),
+      acceptanceLine(150, {
+        kind: "mcp-broker-activation",
+        operation: "recall",
+        attempt: 2,
+        reactivation: true,
+        outcome: "succeeded",
+        durationMs: 4,
+      }),
+    );
+    trace[3] = acceptanceLine(165, {
+      kind: "mcp-broker-operation",
+      operation: "recall",
+      attempt: 2,
+      reactivation: true,
+      outcome: "succeeded",
+      durationMs: 19,
+    });
+
+    expect(buildCodexRecallAcceptanceReport({
+      readiness: healthyReadiness(40),
+      codex: successfulCodexLines(),
+      trace,
+    })).toMatchObject({
+      accepted: true,
+      latency: { activationMs: 9, retrievalMs: 26 },
+    });
+  });
+
   it("accepts a single Recall trace read after the stdout completion event", () => {
     const trace = successfulTraceLines().map((line, index) => ({
       ...line,
