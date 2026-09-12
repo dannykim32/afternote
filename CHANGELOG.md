@@ -6,6 +6,16 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.13 - 2026-09-12
+
+### Fixed
+
+- Recall and Get Note now recover inside an existing Codex or Claude Code session when the
+  native broker restarts during an app upgrade. If the vault is locked, the connector reports
+  that state instead of exposing a stale XPC transport error.
+- Remember remains single-attempt across an ambiguous transport failure, preventing an automatic
+  retry from creating a duplicate note when the original save may have completed.
+
 ## 2.0.0-alpha.12 - 2026-09-10
 
 ### Added
