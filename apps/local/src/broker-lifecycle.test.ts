@@ -90,6 +90,30 @@ exit 1
   });
 });
 
+describe("package broker activation", () => {
+  it("rejects a healthy broker from the previous installed version", () => {
+    const fixture = lifecycleFixture("stale-broker");
+    const launchctl = join(fixture.directory, "launchctl");
+    const healthcheck = join(fixture.directory, "healthcheck");
+    writeExecutable(launchctl, "#!/bin/sh\nexit 0\n");
+    writeExecutable(healthcheck, `#!/bin/sh
+printf '%s\\n' '{"bootId":"11111111-1111-4111-8111-111111111111","protocolVersion":1,"publicMetadata":{"applicationVersion":"2.0.0-alpha.17","brokerIdentifier":"dev.afternote.vault-broker","transport":"launchd-mach-service"}}'
+`);
+
+    const result = runBrokerStart(
+      fixture,
+      launchctl,
+      healthcheck,
+      "2.0.0-alpha.18",
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(
+      "did not start the expected version",
+    );
+  });
+});
+
 function lifecycleFixture(name: string) {
   const directory = mkdtempSync(join(tmpdir(), `afternote-legacy-${name}-`));
   temporaryDirectories.push(directory);
@@ -148,6 +172,33 @@ function runBrokerBootout(
       HOME: fixture.home,
       AFTERNOTE_INSTALL_ROOT: fixture.installRoot,
       AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+}
+
+function runBrokerStart(
+  fixture: ReturnType<typeof lifecycleFixture>,
+  launchctl: string,
+  healthcheck: string,
+  expectedVersion: string,
+) {
+  return Bun.spawnSync([
+    "/bin/sh",
+    "-c",
+    'install_root="$AFTERNOTE_INSTALL_ROOT"; . "$1"; broker_start "$2"',
+    "afternote-broker-start",
+    lifecycleScript,
+    expectedVersion,
+  ], {
+    env: {
+      ...process.env,
+      HOME: fixture.home,
+      AFTERNOTE_INSTALL_ROOT: fixture.installRoot,
+      AFTERNOTE_LAUNCHCTL: launchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: healthcheck,
       AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
     },
     stdout: "pipe",

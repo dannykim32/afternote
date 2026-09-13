@@ -165,7 +165,8 @@ restore_uninstall() {
     ln -sfn "$previous_bin_link" "$bin_root/afternote" || restore_failed=1
   fi
   if [ -f "$launch_agent" ]; then
-    broker_start >/dev/null 2>&1 || restore_failed=1
+    previous_version=${previous_current#versions/}
+    broker_start "$previous_version" >/dev/null 2>&1 || restore_failed=1
   fi
   if [ "$codex_was_managed" -eq 1 ]; then
     PATH="$bin_root:$PATH" \

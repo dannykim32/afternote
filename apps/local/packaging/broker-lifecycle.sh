@@ -224,12 +224,26 @@ broker_bootout() {
   return 1
 }
 
+broker_health_matches_version() {
+  broker_expected_version=$1
+  case "$broker_expected_version" in
+    ""|*/*|*..*|*[!0-9A-Za-z.+-]*) return 1 ;;
+  esac
+  broker_health_output=$("$broker_healthcheck" broker-health 2>/dev/null) || return 1
+  broker_reported_version=$(
+    printf '%s' "$broker_health_output" |
+      /usr/bin/plutil -extract publicMetadata.applicationVersion raw -o - - 2>/dev/null
+  ) || return 1
+  [ "$broker_reported_version" = "$broker_expected_version" ]
+}
+
 broker_start() {
+  broker_expected_version=$1
   "$launchctl_bin" bootstrap "$launch_domain" "$launch_agent" &&
     "$launchctl_bin" kickstart -k "$launch_domain/$broker_label" || return 1
   broker_health_attempt=1
   while [ "$broker_health_attempt" -le "$broker_health_attempts" ]; do
-    if "$broker_healthcheck" broker-health >/dev/null 2>&1; then
+    if broker_health_matches_version "$broker_expected_version"; then
       return 0
     fi
     broker_health_attempt=$((broker_health_attempt + 1))
@@ -237,6 +251,8 @@ broker_start() {
       sleep 0.1
     fi
   done
+  printf 'Afternote broker did not start the expected version %s.\n' \
+    "$broker_expected_version" >&2
   return 1
 }
 

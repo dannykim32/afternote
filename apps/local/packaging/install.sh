@@ -145,6 +145,13 @@ if [ -d "$version_root" ] && [ ! -L "$version_root" ] &&
     exit 1
   fi
   ln -sfn "$install_root/current/afternote" "$bin_root/afternote"
+  if ! broker_health_matches_version "$version"; then
+    broker_bootout
+    if ! broker_start "$version"; then
+      printf 'Afternote could not restart the installed vault broker.\n' >&2
+      exit 1
+    fi
+  fi
   printf 'Repaired Afternote Local %s command link at %s\n' "$version" "$bin_root/afternote"
   exit 0
 fi
@@ -189,7 +196,8 @@ restore_switch() {
     rm -f "$launch_agent" || restore_failed=1
   fi
   if [ -n "$previous_current" ] && [ -n "$previous_launch_agent" ]; then
-    broker_start >/dev/null 2>&1 || restore_failed=1
+    previous_version=${previous_current#versions/}
+    broker_start "$previous_version" >/dev/null 2>&1 || restore_failed=1
   fi
   [ "$restore_failed" -eq 0 ]
 }
@@ -343,7 +351,7 @@ perform_switch() {
   verify_legacy_runtime_retired || return 1
   mv "$launch_agent_temp" "$launch_agent" || return 1
   launch_agent_temp=""
-  broker_start || return 1
+  broker_start "$version" || return 1
 }
 if ! perform_switch; then
   printf 'Afternote could not activate the new vault broker; the previous version will be restored.\n' >&2

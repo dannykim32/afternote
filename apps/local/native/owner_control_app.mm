@@ -7421,6 +7421,25 @@ int RunProtocolSmoke() {
   fputc('\n', stdout);
   return 0;
 }
+
+int RunDiagnosticContractSmoke(const char *path) {
+  NSData *data = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:path]];
+  if (data == nil) {
+    fputs("diagnostic fixture could not be read\n", stderr);
+    return 2;
+  }
+  NSError *error = nil;
+  id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+  if (error != nil || ![value isKindOfClass:[NSDictionary class]]) {
+    fputs("diagnostic fixture was not a JSON object\n", stderr);
+    return 2;
+  }
+  NSDictionary *output = @{ @"accepted" : @(IsDiagnosticResult(value)) };
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
+  fwrite(encoded.bytes, 1, encoded.length, stdout);
+  fputc('\n', stdout);
+  return 0;
+}
 #endif
 
 
@@ -7553,6 +7572,14 @@ int main(int argc, const char *argv[]) {
       return RunSaveDestinationSmoke();
 #else
       fputs("save destination smoke is unavailable in packaged builds\n", stderr);
+      return 64;
+#endif
+    }
+    if (argc == 3 && strcmp(argv[1], "--diagnostic-contract-smoke") == 0) {
+#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+      return RunDiagnosticContractSmoke(argv[2]);
+#else
+      fputs("diagnostic contract smoke is unavailable in packaged builds\n", stderr);
       return 64;
 #endif
     }

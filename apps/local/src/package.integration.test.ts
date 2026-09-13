@@ -154,7 +154,12 @@ describeMac("macOS package lifecycle", () => {
 if [ "\${1:-}" = print ]; then exit 1; fi
 exit 0
 `);
-    writeExecutable(healthcheck, "#!/bin/sh\nexit 0\n");
+    writeExecutable(healthcheck, `#!/bin/sh
+set -eu
+current=$(readlink "$AFTERNOTE_INSTALL_ROOT/current")
+version=\${current#versions/}
+printf '{"publicMetadata":{"applicationVersion":"%s"}}\\n' "$version"
+`);
     alphaZero = await buildLocalAlpha({
       outputDirectory: join(directory, "alpha-zero"),
       version: "2.0.0-alpha.0",
@@ -328,6 +333,48 @@ exit 0
       .toBe(join(installRoot, "current/afternote"));
     expect(readlinkSync(join(installRoot, "current")))
       .toBe("versions/2.0.0-alpha.0");
+  }, 30_000);
+
+  it("restarts a stale broker during same-version repair", () => {
+    const home = join(directory, "repair-stale-broker-home");
+    const installRoot = join(home, "Library/Application Support/Afternote");
+    const binRoot = join(home, ".local/bin");
+    const brokerVersionState = join(home, "broker-version");
+    const statefulLaunchctl = join(home, "launchctl");
+    const statefulHealthcheck = join(home, "healthcheck");
+    mkdirSync(home, { recursive: true });
+    writeExecutable(statefulLaunchctl, `#!/bin/sh
+set -eu
+if [ "\${1:-}" = print ]; then exit 1; fi
+if [ "\${1:-}" = kickstart ]; then
+  current=$(readlink "$AFTERNOTE_INSTALL_ROOT/current")
+  printf '%s\\n' "\${current#versions/}" > "$AFTERNOTE_TEST_BROKER_VERSION_STATE"
+fi
+exit 0
+`);
+    writeExecutable(statefulHealthcheck, `#!/bin/sh
+set -eu
+version=$(sed -n '1p' "$AFTERNOTE_TEST_BROKER_VERSION_STATE")
+printf '{"publicMetadata":{"applicationVersion":"%s"}}\\n' "$version"
+`);
+    const environment = {
+      ...baseEnvironment(),
+      HOME: home,
+      AFTERNOTE_INSTALL_ROOT: installRoot,
+      AFTERNOTE_BIN_ROOT: binRoot,
+      AFTERNOTE_LAUNCHCTL: statefulLaunchctl,
+      AFTERNOTE_BROKER_HEALTHCHECK: statefulHealthcheck,
+      AFTERNOTE_BROKER_HEALTH_ATTEMPTS: "1",
+      AFTERNOTE_TEST_BROKER_VERSION_STATE: brokerVersionState,
+    };
+
+    run([join(alphaOne.portableDirectory, "install.sh")], environment);
+    expect(readFileSync(brokerVersionState, "utf8")).toBe("2.0.0-alpha.1\n");
+    writeFileSync(brokerVersionState, "2.0.0-alpha.0\n");
+
+    run([join(alphaOne.portableDirectory, "install.sh")], environment);
+
+    expect(readFileSync(brokerVersionState, "utf8")).toBe("2.0.0-alpha.1\n");
   }, 30_000);
 
   it("removes a managed Codex entry when the host CLI is outside the sanitized PATH", async () => {

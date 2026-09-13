@@ -76,7 +76,8 @@ restore_rollback() {
   restore_failed=0
   broker_bootout
   ln -sfn "$previous_current" "$install_root/current" || restore_failed=1
-  broker_start >/dev/null 2>&1 || restore_failed=1
+  previous_version=${previous_current#versions/}
+  broker_start "$previous_version" >/dev/null 2>&1 || restore_failed=1
   [ "$restore_failed" -eq 0 ]
 }
 cleanup_rollback() {
@@ -99,7 +100,7 @@ perform_rollback() {
   ln -sfn "versions/$version" "$install_root/current" || return 1
   stop_legacy_runtime "$legacy_runtime_binary" || return 1
   verify_legacy_runtime_retired || return 1
-  broker_start || return 1
+  broker_start "$version" || return 1
 }
 if ! perform_rollback; then
   printf 'Afternote could not activate the rolled-back vault broker; the previous version will be restored.\n' >&2

@@ -7,6 +7,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { buildDiagnosticBundle } from "./diagnostics";
 
 const describeMacos = process.platform === "darwin" ? describe : describe.skip;
 
@@ -180,5 +181,44 @@ describeMacos("native integration command runner", () => {
       newPathAccepted: true,
       rejectionExplainsNoOverwrite: true,
     });
+  });
+
+  it("accepts the diagnostics object emitted by the broker", () => {
+    const zeroCounts = () => ({ authorized: 0, success: 0, denied: 0, error: 0 });
+    const fixture = buildDiagnosticBundle({
+      applicationVersion: "2.0.0-test",
+      standalone: true,
+      ownerPresenceMode: "required",
+      apiVersion: 7,
+      runtimeStatus: "running",
+      networkBoundary: "broker-only",
+      vault: {
+        schemaVersion: 10,
+        integrity: "ok",
+        noteCount: 12,
+        revisionCount: 15,
+        databaseBytes: 4096,
+      },
+      connectorActivity: (["codex", "claude", "claude-desktop"] as const).map(
+        (kind) => ({
+          kind,
+          attributedNoteCount: kind === "claude-desktop" ? 2 : 0,
+          operations: {
+            remember: zeroCounts(),
+            recall: zeroCounts(),
+            getNote: zeroCounts(),
+          },
+        }),
+      ),
+    });
+    const path = join(directory, "diagnostics.json");
+    writeFileSync(path, JSON.stringify(fixture), { mode: 0o600 });
+    const smoke = Bun.spawnSync([
+      runner,
+      "--diagnostic-contract-smoke",
+      path,
+    ], { stdout: "pipe", stderr: "pipe" });
+    expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
+    expect(JSON.parse(smoke.stdout.toString())).toEqual({ accepted: true });
   });
 });

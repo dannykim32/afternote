@@ -6,6 +6,21 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.19 - 2026-09-13
+
+### Fixed
+
+- Runtime activation now verifies that the broker reports the package version being installed.
+  A responding broker from the previous version is restarted instead of leaving the app and
+  broker on incompatible response contracts.
+- Reopening an already installed version repairs a stale broker as well as the public command
+  link, so an interrupted upgrade can recover without removing the Vault or its Keychain item.
+
+### Testing
+
+- The package suite now covers version-skewed broker activation, same-version repair, and the
+  exact diagnostics contract shared by the TypeScript broker and native CLI validator.
+
 ## 2.0.0-alpha.18 - 2026-09-13
 
 ### Added
