@@ -336,6 +336,15 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('@"Authenticate to view"');
   });
 
+  it("refreshes passive connector activity when Afternote returns to the foreground", () => {
+    const activation = nativeAppSource.slice(
+      nativeAppSource.indexOf("- (void)applicationDidBecomeActive:"),
+      nativeAppSource.indexOf("- (void)vaultDidLock:"),
+    );
+    expect(activation).toContain('isEqual:@"connections"');
+    expect(activation).toContain("[self refreshConnections:nil];");
+  });
+
   it("presents semantic recall from runtime truth while keeping exact search as the release default", () => {
     expect(nativeAppSource).toContain('@"Active · local 23 MB model"');
     expect(nativeAppSource).toContain(

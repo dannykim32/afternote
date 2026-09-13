@@ -1889,10 +1889,16 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
   (void)notification;
-  if (self.window == nil || self.broker == nil || self.libraryExpiresAt.length == 0 ||
+  if (self.window == nil || self.broker == nil ||
+      self.surfaceTabs.selectedTabViewItem == nil) return;
+  NSString *surface = self.surfaceTabs.selectedTabViewItem.identifier;
+  if ([surface isEqual:@"connections"]) {
+    [self refreshConnections:nil];
+    return;
+  }
+  if (self.libraryExpiresAt.length == 0 ||
       self.libraryMutationInFlight || self.libraryListInFlight ||
-      self.surfaceTabs.selectedTabViewItem == nil ||
-      ![self.surfaceTabs.selectedTabViewItem.identifier isEqual:@"library"]) return;
+      ![surface isEqual:@"library"]) return;
   if (self.libraryModeSelector.selectedSegment == AfternoteLibraryModeWrite) {
     self.libraryRefreshPending = YES;
     return;
@@ -7258,6 +7264,15 @@ int RunLibraryCleanupSmoke() {
 int RunProtocolSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 2;
+  NSDictionary *connectorOverview = nil;
+  NSDictionary *connectorOverviewError = nil;
+  if (![broker requestSynchronouslyMethod:@"owner.connector_overview" params:@{}
+                                   result:&connectorOverview
+                                    error:&connectorOverviewError] ||
+      connectorOverviewError != nil) {
+    fputs("connector overview failed\n", stderr);
+    return 2;
+  }
   __block NSDictionary *sessionResult = nil;
   __block NSDictionary *sessionError = nil;
   dispatch_semaphore_t first = dispatch_semaphore_create(0);
@@ -7355,6 +7370,7 @@ int RunProtocolSmoke() {
     return 2;
   }
   NSDictionary *output = @{
+    @"connectorOverview" : connectorOverview ?: @{},
     @"session" : sessionResult ?: @{},
     @"connections" : snapshot ?: @{},
     @"librarySession" : librarySession ?: @{},

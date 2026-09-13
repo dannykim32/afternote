@@ -1514,6 +1514,19 @@ describe("vault broker worker protocol", () => {
       session,
       paired,
     );
+    const initialOverview = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.connector_overview",
+      {},
+    );
+    expect(initialOverview).toEqual({
+      connectors: [expect.objectContaining({
+        kind: "claude-desktop",
+        savedCount: 0,
+        readCount: 0,
+      })],
+    });
     const body = {
       content: "Claude Desktop activity summary canary",
       source: { application: "Claude Desktop" },

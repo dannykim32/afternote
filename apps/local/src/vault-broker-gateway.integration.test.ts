@@ -101,6 +101,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/application_installation.mm"),
       join(import.meta.dir, "../native/owner_broker.mm"),
       join(import.meta.dir, "../native/product_surface_router.mm"),
+      join(import.meta.dir, "../native/software_update.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
       "-o",
       ownerControlPath,
@@ -418,6 +419,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
     });
     expect(ownerSmoke.exitCode, ownerSmoke.stderr.toString()).toBe(0);
     expect(JSON.parse(ownerSmoke.stdout.toString())).toMatchObject({
+      connectorOverview: { connectors: [] },
       session: {
         scopes: [
           "owner.inspect_clients",
@@ -584,6 +586,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/application_installation.mm"),
       join(import.meta.dir, "../native/owner_broker.mm"),
       join(import.meta.dir, "../native/product_surface_router.mm"),
+      join(import.meta.dir, "../native/software_update.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
       "-o",
       wrongOwnerPath,
@@ -690,6 +693,70 @@ describeMacos("launchd-owned vault broker gateway", () => {
       await client.close();
       await server.close();
     }
+
+    const claudeDurable = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    const claudeMemory = VaultBrokerMemoryClient.activate("claude-desktop", {
+      service,
+      clientStatePath: join(directory, "claude-desktop-client.json"),
+      signer: {
+        publicKey: claudeDurable.publicKey,
+        signingMode: "development-exact-build",
+        sign(message) {
+          return sign("sha256", Buffer.from(message), claudeDurable.privateKey)
+            .toString("base64url");
+        },
+      },
+      codeRequirement: gatewayCodeRequirement,
+    });
+    const claudeServer = await createAfternoteMcpServer(
+      claudeMemory,
+      claudeMemory.vault,
+      { sourceApplication: "Claude Desktop" },
+    );
+    const claudeClient = new Client({ name: "claude-desktop-shaped-test", version: "1.0.0" });
+    const [claudeClientTransport, claudeServerTransport] =
+      InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      claudeClient.connect(claudeClientTransport),
+      claudeServer.connect(claudeServerTransport),
+    ]);
+    try {
+      const remembered = await claudeClient.callTool({
+        name: "remember",
+        arguments: { content: "Claude Desktop activity canary: cedar-731." },
+      });
+      const noteId = (remembered.structuredContent as { note: { id: string } }).note.id;
+      await claudeClient.callTool({
+        name: "recall",
+        arguments: { query: "Which Claude Desktop activity canary used cedar?" },
+      });
+      expect(remembered.structuredContent).toMatchObject({
+        note: { id: noteId, source: { application: "Claude Desktop" } },
+      });
+    } finally {
+      await claudeClient.close();
+      await claudeServer.close();
+    }
+
+    const activitySmoke = Bun.spawnSync([ownerControlPath, "--protocol-smoke"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(activitySmoke.exitCode, activitySmoke.stderr.toString()).toBe(0);
+    expect(JSON.parse(activitySmoke.stdout.toString())).toMatchObject({
+      connectorOverview: {
+        connectors: expect.arrayContaining([expect.objectContaining({
+          kind: "claude-desktop",
+          savedCount: 1,
+          readCount: 1,
+          verifiedRoundTrip: true,
+        })]),
+      },
+    });
 
     const stdioClient = new Client({ name: "codex-stdio-trace", version: "1.0.0" });
     const testHostCodeRequirement = designatedRequirement(process.execPath);
