@@ -30,13 +30,44 @@ describe("deferred MCP broker activation", () => {
         checks.push(`parent:${requirement}`);
       },
       requireParentAndGrandparent(parent, grandparent) {
-        checks.push(`chain:${parent}:${grandparent}`);
+        checks.push(`two-level-chain:${parent}:${grandparent}`);
+        throw new Error("Claude Desktop uses an intervening disclaimer helper");
+      },
+      matchesAncestors(requirements) {
+        checks.push(`ancestor-chain:${requirements.join(":")}`);
+        return true;
       },
     });
 
     expect(kind).toBe("claude-desktop");
     expect(checks).toEqual([
-      `chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+      `ancestor-chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+        `${MCP_HOST_CODE_POLICIES["claude-desktop"].parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+    ]);
+  });
+
+  it("supports the verified bridge shape without the disclaimer helper", () => {
+    const checks: string[] = [];
+    const kind = authorizeMcpConnectorHost("claude", {
+      requireParent() {
+        throw new Error("Desktop bridges must not fall back to direct Code");
+      },
+      requireParentAndGrandparent() {
+        throw new Error("The bridge uses the generic ancestor verifier");
+      },
+      matchesAncestors(requirements) {
+        checks.push(`ancestor-chain:${requirements.join(":")}`);
+        return requirements.length === 2;
+      },
+    });
+
+    expect(kind).toBe("claude-desktop");
+    expect(checks).toEqual([
+      `ancestor-chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+        `${MCP_HOST_CODE_POLICIES["claude-desktop"].parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+      `ancestor-chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
         MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
     ]);
   });
@@ -48,14 +79,20 @@ describe("deferred MCP broker activation", () => {
         checks.push(`parent:${requirement}`);
       },
       requireParentAndGrandparent(parent, grandparent) {
-        checks.push(`chain:${parent}:${grandparent}`);
-        throw new Error("Grandparent does not match Claude Desktop");
+        checks.push(`two-level-chain:${parent}:${grandparent}`);
+      },
+      matchesAncestors(requirements) {
+        checks.push(`ancestor-chain:${requirements.join(":")}`);
+        return false;
       },
     });
 
     expect(kind).toBe("claude");
     expect(checks).toEqual([
-      `chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+      `ancestor-chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+        `${MCP_HOST_CODE_POLICIES["claude-desktop"].parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+      `ancestor-chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
         MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
       `parent:${MCP_HOST_CODE_POLICIES.claude.parent}`,
     ]);
@@ -69,6 +106,9 @@ describe("deferred MCP broker activation", () => {
       },
       requireParentAndGrandparent(parent, grandparent) {
         checks.push(`chain:${parent}:${grandparent}`);
+      },
+      matchesAncestors() {
+        throw new Error("Claude Desktop's own registration uses two levels");
       },
     });
 

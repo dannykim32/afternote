@@ -19,13 +19,14 @@ afterEach(() => {
 });
 
 describeOnMac("native process-chain code-signing authorization", () => {
-  it("accepts the exact parent and grandparent and rejects the wrong grandparent", () => {
+  it("accepts exact two- and three-level signed chains and rejects a wrong ancestor", () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-process-chain-"));
     temporaryDirectories.push(directory);
     const source = join(directory, "launcher.c");
     const unsignedLauncher = join(directory, "launcher");
     const parent = join(directory, "parent-launcher");
     const grandparent = join(directory, "grandparent-launcher");
+    const greatGrandparent = join(directory, "great-grandparent-launcher");
     writeFileSync(source, `
 #include <spawn.h>
 #include <sys/wait.h>
@@ -49,31 +50,51 @@ int main(int argc, char **argv) {
     ]).exitCode).toBe(0);
     copyFileSync(unsignedLauncher, parent);
     copyFileSync(unsignedLauncher, grandparent);
+    copyFileSync(unsignedLauncher, greatGrandparent);
     chmodSync(parent, 0o755);
     chmodSync(grandparent, 0o755);
+    chmodSync(greatGrandparent, 0o755);
     signFixture(parent, "dev.afternote.test.parent-launcher");
     signFixture(grandparent, "dev.afternote.test.grandparent-launcher");
+    signFixture(
+      greatGrandparent,
+      "dev.afternote.test.great-grandparent-launcher",
+    );
     const parentRequirement = designatedRequirement(parent);
     const grandparentRequirement = designatedRequirement(grandparent);
+    const greatGrandparentRequirement = designatedRequirement(greatGrandparent);
 
-    const accepted = runProbe(
-      grandparent,
-      parent,
-      parentRequirement,
-      grandparentRequirement,
+    const twoLevelAccepted = runProbe(
+      [grandparent, parent],
+      [parentRequirement, grandparentRequirement],
     );
-    expect(accepted.exitCode, accepted.stderr?.toString() ?? "").toBe(0);
-    expect(accepted.stdout?.toString()).toBe("verified\n");
+    expect(
+      twoLevelAccepted.exitCode,
+      twoLevelAccepted.stderr?.toString() ?? "",
+    ).toBe(0);
+    expect(twoLevelAccepted.stdout?.toString()).toBe("verified\n");
+
+    const threeLevelAccepted = runProbe(
+      [greatGrandparent, grandparent, parent],
+      [
+        parentRequirement,
+        grandparentRequirement,
+        greatGrandparentRequirement,
+      ],
+    );
+    expect(
+      threeLevelAccepted.exitCode,
+      threeLevelAccepted.stderr?.toString() ?? "",
+    ).toBe(0);
+    expect(threeLevelAccepted.stdout?.toString()).toBe("verified\n");
 
     const rejected = runProbe(
-      grandparent,
-      parent,
-      parentRequirement,
-      parentRequirement,
+      [greatGrandparent, grandparent, parent],
+      [parentRequirement, grandparentRequirement, parentRequirement],
     );
     expect(rejected.exitCode).not.toBe(0);
     expect(rejected.stderr?.toString()).toContain(
-      "Grandparent process does not satisfy the required code signature",
+      "Ancestor process does not satisfy the required code signature",
     );
   });
 });
@@ -106,22 +127,20 @@ function designatedRequirement(path: string): string {
 }
 
 function runProbe(
-  grandparent: string,
-  parent: string,
-  parentRequirement: string,
-  grandparentRequirement: string,
+  launchersFromOutermostToParent: string[],
+  requirementsFromParentToOutermost: string[],
 ): ReturnType<typeof Bun.spawnSync> {
   return Bun.spawnSync([
-    grandparent,
-    parent,
+    ...launchersFromOutermostToParent,
     process.execPath,
     "run",
     join(import.meta.dir, "process-chain-code-signing-probe-main.ts"),
   ], {
     env: {
       ...process.env,
-      AFTERNOTE_TEST_PARENT_CODE_REQUIREMENT: parentRequirement,
-      AFTERNOTE_TEST_GRANDPARENT_CODE_REQUIREMENT: grandparentRequirement,
+      AFTERNOTE_TEST_ANCESTOR_CODE_REQUIREMENTS: JSON.stringify(
+        requirementsFromParentToOutermost,
+      ),
     },
     stdout: "pipe",
     stderr: "pipe",

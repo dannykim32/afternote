@@ -22,6 +22,7 @@
 #include <limits>
 #include <mutex>
 #include <string>
+#include <vector>
 
 extern "C" int sqlite3_key_v2(sqlite3 *, const char *, const void *, int);
 
@@ -1016,6 +1017,76 @@ napi_value RequireParentAndGrandparentCodeSigningRequirements(
   return Undefined(environment);
 }
 
+napi_value MatchesAncestorCodeSigningRequirements(
+    napi_env environment, napi_callback_info information) {
+  size_t count = 1;
+  napi_value arguments[1];
+  napi_get_cb_info(environment, information, &count, arguments, nullptr,
+                   nullptr);
+  bool is_array = false;
+  if (count != 1 ||
+      napi_is_array(environment, arguments[0], &is_array) != napi_ok ||
+      !is_array) {
+    return Throw(environment,
+                 "Ancestor code-signing requirements must be an array");
+  }
+  uint32_t length = 0;
+  napi_get_array_length(environment, arguments[0], &length);
+  if (length < 1 || length > 8) {
+    return Throw(environment,
+                 "Ancestor code-signing chain must contain 1 to 8 requirements");
+  }
+  std::vector<std::string> requirements;
+  requirements.reserve(length);
+  for (uint32_t offset = 0; offset < length; ++offset) {
+    napi_value value;
+    std::string requirement;
+    napi_get_element(environment, arguments[0], offset, &value);
+    if (!StringValue(environment, value, &requirement) ||
+        !IsValidCodeRequirement(requirement)) {
+      return Throw(environment,
+                   "Ancestor code-signing requirement is invalid");
+    }
+    requirements.push_back(requirement);
+  }
+
+  std::vector<pid_t> process_ids;
+  process_ids.reserve(length);
+  pid_t process_pid = getppid();
+  for (uint32_t offset = 0; offset < length; ++offset) {
+    if (process_pid <= 1) {
+      return Throw(environment,
+                   "Authorized ancestor process chain is unavailable");
+    }
+    process_ids.push_back(process_pid);
+    process_pid = ParentProcessIdentifier(process_pid);
+  }
+  for (uint32_t offset = 0; offset < length; ++offset) {
+    const ProcessCodeValidation validation =
+        ValidateProcessCode(process_ids[offset], requirements[offset]);
+    if (validation == ProcessCodeValidation::kUnavailable) {
+      return Throw(environment,
+                   "Could not identify an authorized ancestor process");
+    }
+    if (validation == ProcessCodeValidation::kMismatch) {
+      napi_value matches;
+      napi_get_boolean(environment, false, &matches);
+      return matches;
+    }
+  }
+  process_pid = getppid();
+  for (uint32_t offset = 0; offset < length; ++offset) {
+    if (process_pid != process_ids[offset]) {
+      return Throw(environment,
+                   "Authorized ancestor process chain changed during verification");
+    }
+    process_pid = ParentProcessIdentifier(process_pid);
+  }
+  napi_value matches;
+  napi_get_boolean(environment, true, &matches);
+  return matches;
+}
+
 CFDataRef SigningKeyTag(const std::string &tag) {
   return CFDataCreate(kCFAllocatorDefault,
                       reinterpret_cast<const UInt8 *>(tag.data()),
@@ -1978,6 +2049,7 @@ napi_value Init(napi_env environment, napi_value exports) {
     {"xpcBrokerRequest", nullptr, XpcBrokerRequest, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"requireParentCodeSigningRequirement", nullptr, RequireParentCodeSigningRequirement, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"requireParentAndGrandparentCodeSigningRequirements", nullptr, RequireParentAndGrandparentCodeSigningRequirements, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"matchesAncestorCodeSigningRequirements", nullptr, MatchesAncestorCodeSigningRequirements, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"clientSigningPublicKey", nullptr, ClientSigningPublicKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"signWithClientKey", nullptr, SignWithClientKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"deleteClientSigningKey", nullptr, DeleteClientSigningKey, nullptr, nullptr, nullptr, napi_default, nullptr},

@@ -57,6 +57,7 @@ type NativeAddon = {
     parentRequirement: string,
     grandparentRequirement: string,
   ): void;
+  matchesAncestorCodeSigningRequirements(requirements: string[]): boolean;
   clientSigningPublicKey(tag: string): Uint8Array;
   signWithClientKey(tag: string, message: Uint8Array): Uint8Array;
   deleteClientSigningKey(tag: string): void;
@@ -252,6 +253,18 @@ export function requireParentAndGrandparentCodeSigningRequirements(
     parentRequirement,
     grandparentRequirement,
   );
+}
+
+export function matchesAncestorCodeSigningRequirements(
+  requirements: readonly string[],
+): boolean {
+  if (requirements.length < 1 || requirements.length > 8) {
+    throw new Error("Ancestor code-signing chain must contain 1 to 8 requirements");
+  }
+  requirements.forEach((requirement, index) =>
+    assertCodeSigningRequirement(requirement, `Ancestor ${index + 1}`)
+  );
+  return loadAddon().matchesAncestorCodeSigningRequirements([...requirements]);
 }
 
 export function getOrCreateClientSigningPublicKey(tag: string): string {

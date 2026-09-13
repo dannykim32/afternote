@@ -42,6 +42,7 @@ describe("production MCP broker path", () => {
     expect(adapter).toContain("requireParentCodeSigningRequirement");
     expect(adapter)
       .toContain("requireParentAndGrandparentCodeSigningRequirements");
+    expect(adapter).toContain("matchesAncestorCodeSigningRequirements");
     const nativeAddon = readFileSync(
       join(sourceDirectory, "../native/sqlcipher_addon.cc"),
       "utf8",
@@ -49,6 +50,7 @@ describe("production MCP broker path", () => {
     expect(nativeAddon).toContain("ParentProcessIdentifier");
     expect(nativeAddon)
       .toContain("Grandparent process does not satisfy the required code signature");
+    expect(nativeAddon).toContain("MatchesAncestorCodeSigningRequirements");
   });
 
   it("rejects generic MCP invocation before creating legacy runtime authority", () => {

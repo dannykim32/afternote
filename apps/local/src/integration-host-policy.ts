@@ -16,7 +16,20 @@ export const INTEGRATION_HOST_CODE_REQUIREMENTS = {
 
 export const MCP_HOST_CODE_POLICIES = {
   codex: { parent: MCP_HOST_CODE_REQUIREMENTS.codex },
-  claude: { parent: MCP_HOST_CODE_REQUIREMENTS.claude },
+  claude: {
+    parent: MCP_HOST_CODE_REQUIREMENTS.claude,
+    desktopBridgeAncestorChains: [
+      [
+        MCP_HOST_CODE_REQUIREMENTS.claude,
+        MCP_HOST_CODE_REQUIREMENTS["claude-desktop"],
+        INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"],
+      ],
+      [
+        MCP_HOST_CODE_REQUIREMENTS.claude,
+        INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"],
+      ],
+    ],
+  },
   "claude-desktop": {
     parent: MCP_HOST_CODE_REQUIREMENTS["claude-desktop"],
     grandparent: INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"],

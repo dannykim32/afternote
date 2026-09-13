@@ -29,6 +29,7 @@ import {
   type McpBrokerClientKind,
 } from "./vault-broker-client";
 import {
+  matchesAncestorCodeSigningRequirements,
   requireParentAndGrandparentCodeSigningRequirements,
   requireParentCodeSigningRequirement,
   type DurableClientSigner,
@@ -294,12 +295,14 @@ type McpConnectorHostAuthorization = {
     parentRequirement: string,
     grandparentRequirement: string,
   ): void;
+  matchesAncestors(requirements: readonly string[]): boolean;
 };
 
 const nativeMcpConnectorHostAuthorization: McpConnectorHostAuthorization = {
   requireParent: requireParentCodeSigningRequirement,
   requireParentAndGrandparent:
     requireParentAndGrandparentCodeSigningRequirements,
+  matchesAncestors: matchesAncestorCodeSigningRequirements,
 };
 
 export function authorizeMcpConnectorHost(
@@ -311,16 +314,21 @@ export function authorizeMcpConnectorHost(
   const requestedPolicy = MCP_HOST_CODE_POLICIES[requestedKind];
   const parentRequirement = parentRequirementOverride ?? requestedPolicy.parent;
   if (requestedKind === "claude") {
-    try {
-      authorization.requireParentAndGrandparent(
-        parentRequirement,
-        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
-      );
-      return "claude-desktop";
-    } catch {
-      authorization.requireParent(parentRequirement);
-      return "claude";
+    for (
+      const chain of MCP_HOST_CODE_POLICIES.claude
+        .desktopBridgeAncestorChains
+    ) {
+      if (
+        authorization.matchesAncestors([
+          parentRequirement,
+          ...chain.slice(1),
+        ])
+      ) {
+        return "claude-desktop";
+      }
     }
+    authorization.requireParent(parentRequirement);
+    return "claude";
   }
   if (requestedKind === "claude-desktop") {
     authorization.requireParentAndGrandparent(

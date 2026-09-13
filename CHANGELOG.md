@@ -6,13 +6,28 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.22 - 2026-09-13
+
+### Fixed
+
+- Claude Desktop activity remains attributed to Claude Desktop when its tool selector routes
+  through the bundled Claude Code process and intervening signed `disclaimer` helper.
+- Claude Desktop bridge detection supports both verified two-level and three-level launch
+  layouts without depending on usernames, installation paths, process IDs, or Mac models.
+
+### Security
+
+- Cross-surface attribution now uses a bounded native ancestor-chain verifier. Every process in
+  an accepted layout must satisfy its exact Anthropic code-signing requirement, and the chain is
+  rechecked after validation to reject process changes during authorization.
+
 ## 2.0.0-alpha.21 - 2026-09-13
 
 ### Fixed
 
-- Claude Desktop activity is attributed to Claude Desktop even when its tool selector invokes
-  the user-scoped Claude Code MCP registration. Afternote now resolves the effective connector
-  from the verified signed process chain instead of trusting the registration argument alone.
+- Added signed host-chain attribution for Claude Desktop requests that arrive through the
+  user-scoped Claude Code MCP registration. This release modeled a two-level bridge; Alpha 22
+  extends it to Claude Desktop's observed intervening-helper layout.
 - A repairable connector now keeps its **Repair Afternote** action visible when an older broker
   connection still has active authority; revocation remains available as a separate action.
 

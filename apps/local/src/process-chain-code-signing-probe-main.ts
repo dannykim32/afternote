@@ -1,13 +1,16 @@
-import { requireParentAndGrandparentCodeSigningRequirements } from "./sqlcipher-database";
+import { matchesAncestorCodeSigningRequirements } from "./sqlcipher-database";
 
-const parentRequirement = process.env.AFTERNOTE_TEST_PARENT_CODE_REQUIREMENT;
-const grandparentRequirement = process.env.AFTERNOTE_TEST_GRANDPARENT_CODE_REQUIREMENT;
-if (!parentRequirement || !grandparentRequirement) {
+const serializedRequirements = process.env.AFTERNOTE_TEST_ANCESTOR_CODE_REQUIREMENTS;
+if (!serializedRequirements) {
   throw new Error("Process-chain probe configuration is incomplete");
 }
 
-requireParentAndGrandparentCodeSigningRequirements(
-  parentRequirement,
-  grandparentRequirement,
-);
+const requirements: unknown = JSON.parse(serializedRequirements);
+if (!Array.isArray(requirements) ||
+  !requirements.every((requirement) => typeof requirement === "string")) {
+  throw new Error("Process-chain probe requirements are invalid");
+}
+if (!matchesAncestorCodeSigningRequirements(requirements)) {
+  throw new Error("Ancestor process does not satisfy the required code signature");
+}
 process.stdout.write("verified\n");
