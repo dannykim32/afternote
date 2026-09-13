@@ -59,7 +59,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('doCommandBySelector:(SEL)commandSelector');
     expect(nativeAppSource).toContain('@"Semantic recall"');
     expect(nativeAppSource).toContain("libraryAuthenticateButton.hidden");
-    expect(nativeAppSource).toContain('authenticated ? @"Refresh" : @"Authenticate"');
+    expect(nativeAppSource).toContain('self.authenticateButton.title = @"Refresh"');
     expect(nativeAppSource).not.toContain("VisibleNoteMetadata");
     expect(nativeAppSource).not.toContain("NSAppearanceNameAqua");
   });
@@ -219,6 +219,8 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("vaultStatusCheckInFlight");
     expect(nativeAppSource).toContain('@"owner.routine_authentication"');
     expect(nativeAppSource).toContain('@"owner.set_routine_authentication"');
+    expect(nativeAppSource).toContain("Changing this setting applies to every connector.");
+    expect(nativeAppSource).toContain("Claude Desktop connections");
     expect(nativeAppSource).toContain("clearLibraryPlaintext:");
   });
 
@@ -316,22 +318,22 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain(
       '@"Previous access was revoked and cannot be reused."',
     );
-    expect(surfaceSwitch).toContain(
-      "if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];",
-    );
-    expect(surfaceSwitch).toContain("else [self authenticate:nil];");
+    expect(surfaceSwitch).toContain("[self refreshConnections:nil];");
+    expect(surfaceSwitch).not.toContain("[self authenticate:nil]");
     expect(nativeAppSource).not.toContain(
       'Connect from Terminal with `afternote codex install` or `afternote claude-code install`.',
     );
   });
 
-  it("refreshes connector installation truth from the Connections refresh action", () => {
+  it("refreshes connector status and share-safe activity without owner presence", () => {
     const refreshAction = nativeAppSource.slice(
-      nativeAppSource.indexOf("- (void)authenticate:"),
-      nativeAppSource.indexOf("- (void)applyOwnerSessionResult:"),
+      nativeAppSource.indexOf("- (void)refreshConnections:"),
+      nativeAppSource.indexOf("- (void)installIntegration:"),
     );
     expect(refreshAction).toContain("[self refreshIntegrationStatuses];");
-    expect(refreshAction).toContain('requestMethod:@"owner.session.begin"');
+    expect(refreshAction).toContain('requestMethod:@"owner.connector_overview"');
+    expect(refreshAction).not.toContain('requestMethod:@"owner.session.begin"');
+    expect(nativeAppSource).toContain('@"Authenticate to view"');
   });
 
   it("presents semantic recall from runtime truth while keeping exact search as the release default", () => {
@@ -503,6 +505,8 @@ describe("native Library production boundary", () => {
       "if (resolved == AfternoteProductSurfaceRecovery)",
     );
     expect(setupConnections).toContain("[self refreshRecovery:nil]");
+    expect(setupConnections).toContain("[self refreshConnections:nil]");
+    expect(setupConnections).not.toContain("[self authenticate:nil]");
   });
 
   it("recovers bounded broker interruptions without replaying note operations", () => {

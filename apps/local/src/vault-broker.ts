@@ -55,6 +55,20 @@ export type BrokerClientKind =
 export type ForgetPolicy = "never" | "confirm_each" | "session";
 export type AuditOutcome = "authorized" | "success" | "denied" | "error";
 
+export type ConnectorOverviewItem = {
+  kind: BrokerClientKind;
+  status: "paired" | "active" | "revoked" | "expired";
+  activeScopes: BrokerCapability[];
+  lastActivityAt: string | null;
+  savedCount: number;
+  readCount: number;
+  verifiedRoundTrip: boolean;
+};
+
+export type ConnectorOverview = {
+  connectors: ConnectorOverviewItem[];
+};
+
 export class NativeLibraryAuditCommitError extends Error {
   constructor(options?: { cause?: unknown }) {
     super("Native Library mutation audit could not commit", options);
@@ -247,6 +261,7 @@ export class VaultBrokerAuthorization {
     this.#ensureTransportBindingColumns();
     this.#ensureOwnerControlColumns();
     this.#invalidatePriorBootSessions();
+    this.#restoreTrustedMcpWorkSession();
     const expirySweepIntervalMs = options.expirySweepIntervalMs ?? 30_000;
     if (!Number.isInteger(expirySweepIntervalMs) || expirySweepIntervalMs < 1) {
       if (this.#ownsDatabase) this.#database.close();
@@ -703,7 +718,7 @@ export class VaultBrokerAuthorization {
         workSession &&
         this.#trustedMcpWorkSession?.id === workSession.id
       ) {
-        this.#trustedMcpWorkSession = undefined;
+        this.#clearTrustedMcpWorkSession();
       }
       throw error;
     }
@@ -776,6 +791,9 @@ export class VaultBrokerAuthorization {
       Date.parse(row.expires_at),
       workSession?.expiresAt ?? Number.POSITIVE_INFINITY,
     )).toISOString();
+    const nextWorkSessionObservedAt = workSession
+      ? Math.max(workSession.lastObservedAt, currentTime)
+      : undefined;
     this.#database.transaction(() => {
       const changed = this.#database.query(`
         update broker_sessions
@@ -795,8 +813,24 @@ export class VaultBrokerAuthorization {
         errorCode: null,
         noteRefs: [],
       });
+      if (workSession) {
+        const touched = this.#database.query(`
+          update broker_trusted_work_sessions
+          set last_activity_at = ?, last_observed_at = ?
+          where vault_id = ? and id = ?
+        `).run(
+          currentTime,
+          nextWorkSessionObservedAt!,
+          this.#vaultId,
+          workSession.id,
+        ).changes;
+        if (touched !== 1) throw new Error("Trusted work session is unavailable");
+      }
     })();
-    if (workSession) this.#touchTrustedMcpWorkSession(workSession, currentTime);
+    if (workSession) {
+      workSession.lastActivityAt = currentTime;
+      workSession.lastObservedAt = nextWorkSessionObservedAt!;
+    }
     return {
       sessionId: row.id,
       clientId: row.client_id,
@@ -1174,9 +1208,6 @@ export class VaultBrokerAuthorization {
         errorCode: null,
         noteRefs: [],
       });
-      if (trustedWorkSession) {
-        this.#touchTrustedMcpWorkSession(trustedWorkSession, this.#now());
-      }
       return authorization;
     } catch (error) {
       if (this.#knownClient(envelope.clientId)) {
@@ -1587,6 +1618,124 @@ export class VaultBrokerAuthorization {
       lastActivityAt: row.last_seen_at,
     }));
     return { clients, grants, sessions };
+  }
+
+  connectorOverview(trust: OwnerTrustPath): ConnectorOverview {
+    this.#assertOpen();
+    if (trust !== "production-signed" && trust !== "development-only") {
+      throw new Error("Owner trust path is invalid");
+    }
+    this.#liveTrustedMcpWorkSession();
+    const now = new Date(this.#now()).toISOString();
+    const currentClients = this.#database.query<{
+      kind: BrokerClientKind;
+      stored_status: "paired" | "revoked";
+      live_sessions: number;
+      live_grants: number;
+      last_activity_at: string | null;
+      active_capabilities: string;
+    }, [string, string, string, string]>(`
+      with client_state as (
+        select c.id, c.kind, c.status as stored_status, c.paired_at,
+               (select count(*) from broker_sessions s
+                 where s.client_id = c.id and s.status = 'active'
+                   and s.expires_at > ?) as live_sessions,
+               (select count(*) from broker_grants g
+                 where g.client_id = c.id and g.status = 'active'
+                   and (g.expires_at is null or g.expires_at > ?)) as live_grants,
+               (select max(s.last_seen_at) from broker_sessions s
+                 where s.client_id = c.id) as last_activity_at,
+               (select json_group_array(g.capabilities) from broker_grants g
+                 where g.client_id = c.id and g.status = 'active'
+                   and (g.expires_at is null or g.expires_at > ?))
+                 as active_capabilities
+        from broker_clients c
+        where c.vault_id = ?
+      ), ranked as (
+        select *, row_number() over (
+          partition by kind
+          order by case
+            when stored_status = 'paired' and (live_sessions > 0 or live_grants > 0)
+              then 0 else 1
+          end, paired_at desc, id desc
+        ) as position
+        from client_state
+      )
+      select kind, stored_status, live_sessions, live_grants,
+             last_activity_at, active_capabilities
+      from ranked where position = 1
+    `).all(now, now, now, this.#vaultId);
+    const activity = new Map(this.#database.query<{
+      kind: BrokerClientKind;
+      saved_count: number;
+      read_count: number;
+      last_activity_at: string | null;
+      verified_round_trip: number;
+    }, [string]>(`
+      with relevant as (
+        select c.kind, e.client_id, e.operation, e.occurred_at, e.note_refs
+        from broker_clients c
+        left join broker_audit_events e
+          on e.client_id = c.id
+         and e.outcome = 'success'
+         and e.operation in ('memory.remember', 'memory.recall', 'memory.get_note')
+        where c.vault_id = ?
+      ), activity as (
+        select kind,
+               sum(case when operation = 'memory.remember' then 1 else 0 end)
+                 as saved_count,
+               sum(case when operation in ('memory.recall', 'memory.get_note') then 1 else 0 end)
+                 as read_count,
+               max(occurred_at) as last_activity_at
+        from relevant group by kind
+      ), note_refs as (
+        select kind, client_id, operation, occurred_at,
+               json_extract(reference.value, '$.noteId') as note_id
+        from relevant
+        join json_each(relevant.note_refs) reference
+        where operation in ('memory.remember', 'memory.recall')
+      ), verified as (
+        select kind
+        from note_refs
+        group by kind, client_id, note_id
+        having max(case when operation = 'memory.recall' then occurred_at end)
+          >= min(case when operation = 'memory.remember' then occurred_at end)
+      )
+      select activity.*,
+             exists(select 1 from verified where verified.kind = activity.kind)
+               as verified_round_trip
+      from activity
+    `).all(this.#vaultId).map((row) => [row.kind, row] as const));
+    return {
+      connectors: currentClients.map((current) => {
+        const kind = current.kind;
+        const counts = activity.get(kind);
+        const capabilitySets = JSON.parse(current.active_capabilities) as unknown;
+        if (!Array.isArray(capabilitySets) || capabilitySets.some(
+          (value) => typeof value !== "string",
+        )) throw new Error("Stored connector capabilities are invalid");
+        const activeScopes = capabilitySets.length === 0
+          ? []
+          : normalizeCapabilities(capabilitySets.flatMap((value) =>
+              parseCapabilities(value as string)
+            ));
+        return {
+          kind,
+          status: current.stored_status === "revoked"
+            ? "revoked" as const
+            : current.live_sessions > 0
+            ? "active" as const
+            : current.live_grants > 0
+            ? "paired" as const
+            : "expired" as const,
+          activeScopes,
+          lastActivityAt: counts?.last_activity_at ?? current.last_activity_at,
+          savedCount: counts?.saved_count ?? 0,
+          readCount: counts?.read_count ?? 0,
+          verifiedRoundTrip: counts?.verified_round_trip === 1,
+        };
+      }),
+    };
   }
 
   inspectAudit(input: { pageSize?: number; cursor?: string }): {
@@ -2160,7 +2309,7 @@ export class VaultBrokerAuthorization {
 
   invalidateEphemeralAuthorityForLock(): void {
     this.#assertOpen();
-    this.#trustedMcpWorkSession = undefined;
+    this.#clearTrustedMcpWorkSession();
     const now = new Date(this.#now()).toISOString();
     this.#database.query(
       "update broker_sessions set status = 'disconnected', nonce = '' where status in ('pending', 'active')",
@@ -2341,8 +2490,70 @@ export class VaultBrokerAuthorization {
       lastActivityAt: now,
       lastObservedAt: now,
     };
+    this.#database.query(`
+      insert into broker_trusted_work_sessions (
+        vault_id, id, started_at, expires_at, last_activity_at, last_observed_at
+      ) values (?, ?, ?, ?, ?, ?)
+      on conflict(vault_id) do update set
+        id = excluded.id,
+        started_at = excluded.started_at,
+        expires_at = excluded.expires_at,
+        last_activity_at = excluded.last_activity_at,
+        last_observed_at = excluded.last_observed_at
+    `).run(
+      this.#vaultId,
+      workSession.id,
+      workSession.startedAt,
+      workSession.expiresAt,
+      workSession.lastActivityAt,
+      workSession.lastObservedAt,
+    );
     this.#trustedMcpWorkSession = workSession;
     return workSession;
+  }
+
+  #restoreTrustedMcpWorkSession(): void {
+    const row = this.#database.query<{
+      id: string;
+      started_at: number;
+      expires_at: number;
+      last_activity_at: number;
+      last_observed_at: number;
+    }, [string]>(`
+      select id, started_at, expires_at, last_activity_at, last_observed_at
+      from broker_trusted_work_sessions where vault_id = ?
+    `).get(this.#vaultId);
+    if (!row) return;
+    const ttlMs = this.routineAuthenticationTtlMilliseconds();
+    const values = [
+      row.started_at,
+      row.expires_at,
+      row.last_activity_at,
+      row.last_observed_at,
+    ];
+    if (
+      typeof row.id !== "string" ||
+      !/^[A-Za-z0-9._:-]{1,128}$/.test(row.id) ||
+      values.some((value) => !Number.isSafeInteger(value) || value < 0) ||
+      row.expires_at <= row.started_at ||
+      row.expires_at - row.started_at > ttlMs ||
+      row.last_activity_at < row.started_at ||
+      row.last_activity_at > row.expires_at ||
+      row.last_observed_at < row.started_at
+    ) {
+      this.#database.query(
+        "delete from broker_trusted_work_sessions where vault_id = ?",
+      ).run(this.#vaultId);
+      return;
+    }
+    this.#trustedMcpWorkSession = {
+      id: row.id,
+      startedAt: row.started_at,
+      expiresAt: row.expires_at,
+      lastActivityAt: row.last_activity_at,
+      lastObservedAt: row.last_observed_at,
+    };
+    this.#liveTrustedMcpWorkSession();
   }
 
   #liveTrustedMcpWorkSession(): TrustedMcpWorkSession | undefined {
@@ -2366,24 +2577,24 @@ export class VaultBrokerAuthorization {
       );
       return undefined;
     }
+    this.#database.query(`
+      update broker_trusted_work_sessions set last_observed_at = ?
+      where vault_id = ? and id = ?
+    `).run(workSession.lastObservedAt, this.#vaultId, workSession.id);
     return workSession;
   }
 
-  #touchTrustedMcpWorkSession(
-    workSession: TrustedMcpWorkSession,
-    now: number,
-  ): void {
-    if (this.#trustedMcpWorkSession?.id !== workSession.id) {
-      throw new Error("Trusted work session is expired");
-    }
-    workSession.lastActivityAt = now;
-    workSession.lastObservedAt = Math.max(workSession.lastObservedAt, now);
+  #clearTrustedMcpWorkSession(): void {
+    this.#trustedMcpWorkSession = undefined;
+    this.#database.query(
+      "delete from broker_trusted_work_sessions where vault_id = ?",
+    ).run(this.#vaultId);
   }
 
   #expireTrustedMcpWorkSession(errorCode: string): void {
     const workSession = this.#trustedMcpWorkSession;
     if (!workSession) return;
-    this.#trustedMcpWorkSession = undefined;
+    this.#clearTrustedMcpWorkSession();
     const sessions = this.#database.query<{
       id: string;
       client_id: string;
@@ -3115,4 +3326,14 @@ const BROKER_SCHEMA = `
   );
   create index if not exists broker_audit_occurred_at
     on broker_audit_events(occurred_at, event_id);
+  create index if not exists broker_audit_client_operation
+    on broker_audit_events(client_id, outcome, operation, occurred_at);
+  create table if not exists broker_trusted_work_sessions (
+    vault_id text primary key,
+    id text not null unique,
+    started_at integer not null,
+    expires_at integer not null,
+    last_activity_at integer not null,
+    last_observed_at integer not null
+  );
 `;

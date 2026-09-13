@@ -899,6 +899,9 @@ export class VaultBrokerWorker {
       case "owner.set_routine_authentication":
         assertPeerRole(peerRole, "owner-control");
         return this.#setRoutineAuthentication(request);
+      case "owner.connector_overview":
+        assertPeerRole(peerRole, "owner-control");
+        return this.#connectorOverview(request);
       case "owner.inspect_connections":
         assertPeerRole(peerRole, "owner-control");
         return this.#inspectConnections(request, transportBinding);
@@ -2971,6 +2974,14 @@ export class VaultBrokerWorker {
       }
     }
     return success(request.requestId, { ttlMs });
+  }
+
+  #connectorOverview(request: BrokerRequest): string {
+    assertExactObject(request.params, []);
+    return success(
+      request.requestId,
+      this.#authority().connectorOverview(this.#trustPath),
+    );
   }
 
   #inspectConnections(

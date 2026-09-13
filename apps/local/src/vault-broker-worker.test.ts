@@ -975,7 +975,13 @@ describe("vault broker worker protocol", () => {
 
     const rememberBody = {
       content: "The broker-only integration canary is cedar-7823.",
-      source: { application: "codex" },
+      source: {
+        application: "Codex",
+        url: "https://chatgpt.com/codex/tasks/example",
+        author: "Danny Kim",
+        timestamp: "2026-08-29T16:00:00.000Z",
+        label: "Broker metadata regression",
+      },
     };
     const rememberEnvelope = envelope(
       fixture,
@@ -991,6 +997,7 @@ describe("vault broker worker protocol", () => {
     expect(remembered.note).toMatchObject({
       content: rememberBody.content,
       revision: 1,
+      source: rememberBody.source,
     });
 
     const recallBody = { query: "Which integration canary used cedar?", limit: 5 };
@@ -1280,6 +1287,276 @@ describe("vault broker worker protocol", () => {
       outcome: "success",
       errorCode: "work_session_expired",
     }));
+  });
+
+  it("silently reactivates a reconnected Claude Desktop process within the work session", async () => {
+    let now = Date.parse("2026-09-12T16:00:00.000Z");
+    const fixture = workerFixture({ now: () => now });
+    const firstConnection = { connectionId: randomUUID(), peerPid: 41131 };
+    const installIdentity = randomUUID();
+    const durable = p256();
+    const capabilities: MemoryCapability[] = [
+      "memory.remember",
+      "memory.recall",
+      "memory.get_note",
+    ];
+    const begun = await request(fixture.worker, firstConnection, "client.begin", {
+      kind: "claude-desktop",
+      displayName: "Claude Desktop",
+      installIdentity,
+      publicKey: durable.publicKey,
+      signingMode: "development-exact-build",
+      requestedCapabilities: capabilities,
+      forgetPolicy: "never",
+    });
+    const paired = await request(
+      fixture.worker,
+      firstConnection,
+      "client.complete_pairing",
+      {
+        requestId: begun.requestId,
+        clientSignature: signature(begun.clientProofTranscript, durable.privateKey),
+      },
+      true,
+    );
+    const firstSession = p256();
+    const firstActivation = await beginActivation(
+      fixture,
+      firstConnection,
+      paired,
+      firstSession,
+      capabilities,
+    );
+    await request(
+      fixture.worker,
+      firstConnection,
+      "session.complete",
+      activationProofs(firstActivation, durable, firstSession),
+      true,
+    );
+    await fixture.worker.handleSerialized(JSON.stringify({
+      kind: "connection-closed",
+      peerRole: "memory-client",
+      ...firstConnection,
+      payload: {},
+    }));
+    expect(await ownerRequest(
+      fixture.worker,
+      { connectionId: randomUUID(), peerPid: 41133 },
+      "owner.connector_overview",
+      {},
+    )).toMatchObject({
+      connectors: [{ kind: "claude-desktop", status: "paired" }],
+    });
+
+    now += 15 * 60 * 1_000 + 1;
+    const replacementConnection = { connectionId: randomUUID(), peerPid: 41132 };
+    const reconnected = await request(
+      fixture.worker,
+      replacementConnection,
+      "client.begin",
+      {
+        kind: "claude-desktop",
+        displayName: "Claude Desktop",
+        installIdentity,
+        publicKey: durable.publicKey,
+        signingMode: "development-exact-build",
+        requestedCapabilities: capabilities,
+        forgetPolicy: "never",
+      },
+    );
+    expect(reconnected).toMatchObject({
+      state: "paired",
+      clientId: paired.clientId,
+      grantId: paired.grantId,
+    });
+    const replacementSession = p256();
+    const replacementActivation = await beginActivation(
+      fixture,
+      replacementConnection,
+      reconnected,
+      replacementSession,
+      capabilities,
+    );
+    const reactivated = await beginMemoryClientRequest(
+      fixture.worker,
+      replacementConnection,
+      "session.complete",
+      activationProofs(replacementActivation, durable, replacementSession),
+    );
+    expect(reactivated.ownerPresenceChallenge).toBeUndefined();
+    expect(reactivated).toMatchObject({
+      ok: true,
+      result: {
+        clientId: paired.clientId,
+        grantId: paired.grantId,
+        expiresAt: new Date(now + 15 * 60 * 1_000).toISOString(),
+      },
+    });
+  });
+
+  it("applies a changed routine-authentication window to every connector work session", async () => {
+    let now = Date.parse("2026-09-12T18:00:00.000Z");
+    const fixture = workerFixture({ now: () => now });
+    const owner = { connectionId: randomUUID(), peerPid: 41135 };
+    const fourHours = 4 * 60 * 60 * 1_000;
+    expect(await ownerRequest(
+      fixture.worker,
+      owner,
+      "owner.set_routine_authentication",
+      { ttlMs: fourHours },
+    )).toEqual({ ttlMs: fourHours });
+
+    const firstConnection = { connectionId: randomUUID(), peerPid: 41136 };
+    const durable = p256();
+    const capabilities: MemoryCapability[] = ["memory.recall"];
+    const paired = await pairClient(
+      fixture,
+      firstConnection,
+      "codex",
+      durable,
+      capabilities,
+    );
+    const firstSession = p256();
+    const firstActivation = await beginActivation(
+      fixture,
+      firstConnection,
+      paired,
+      firstSession,
+      capabilities,
+    );
+    const firstPending = await beginMemoryClientRequest(
+      fixture.worker,
+      firstConnection,
+      "session.complete",
+      activationProofs(firstActivation, durable, firstSession),
+    );
+    expect(firstPending.ownerPresenceChallenge.reason).toContain(
+      "work session for 4 hours",
+    );
+    await completeMemoryOwnerPresence(
+      fixture.worker,
+      firstConnection,
+      firstPending.ownerPresenceChallenge.challengeId,
+      "approved",
+    );
+
+    now += 15 * 60 * 1_000 + 1;
+    const secondConnection = { connectionId: randomUUID(), peerPid: 41137 };
+    const claudeDurable = p256();
+    const claudePaired = await pairClient(
+      fixture,
+      secondConnection,
+      "claude-desktop",
+      claudeDurable,
+      capabilities,
+    );
+    const secondSession = p256();
+    const secondActivation = await beginActivation(
+      fixture,
+      secondConnection,
+      claudePaired,
+      secondSession,
+      capabilities,
+    );
+    const silent = await beginMemoryClientRequest(
+      fixture.worker,
+      secondConnection,
+      "session.complete",
+      activationProofs(secondActivation, claudeDurable, secondSession),
+    );
+    expect(silent.ownerPresenceChallenge).toBeUndefined();
+    expect(silent.ok).toBe(true);
+
+    const daily = 24 * 60 * 60 * 1_000;
+    await ownerRequest(
+      fixture.worker,
+      owner,
+      "owner.set_routine_authentication",
+      { ttlMs: daily },
+    );
+    const thirdSession = p256();
+    const thirdActivation = await beginActivation(
+      fixture,
+      secondConnection,
+      claudePaired,
+      thirdSession,
+      capabilities,
+    );
+    const changedPolicy = await beginMemoryClientRequest(
+      fixture.worker,
+      secondConnection,
+      "session.complete",
+      activationProofs(thirdActivation, claudeDurable, thirdSession),
+    );
+    expect(changedPolicy.ownerPresenceChallenge.reason).toContain(
+      "work session for 24 hours",
+    );
+  });
+
+  it("returns share-safe connector activity without starting an owner session", async () => {
+    const fixture = workerFixture();
+    const connection = { connectionId: randomUUID(), peerPid: 41141 };
+    const ownerConnection = { connectionId: randomUUID(), peerPid: 41142 };
+    const durable = p256();
+    const session = p256();
+    const paired = await pairClient(
+      fixture,
+      connection,
+      "claude-desktop",
+      durable,
+      ["memory.remember", "memory.recall", "memory.get_note"],
+    );
+    const activated = await activateExisting(
+      fixture,
+      connection,
+      durable,
+      session,
+      paired,
+    );
+    const body = {
+      content: "Claude Desktop activity summary canary",
+      source: { application: "Claude Desktop" },
+    };
+    await memoryRequest(
+      fixture,
+      connection,
+      activated,
+      "memory.remember",
+      body,
+      session.privateKey,
+    );
+    await memoryRequest(
+      fixture,
+      connection,
+      activated,
+      "memory.recall",
+      { query: "activity summary canary", limit: 5 },
+      session.privateKey,
+    );
+
+    const overview = await ownerRequest(
+      fixture.worker,
+      ownerConnection,
+      "owner.connector_overview",
+      {},
+    );
+    expect(overview).toEqual({
+      connectors: [
+        {
+          kind: "claude-desktop",
+          status: "active",
+          activeScopes: ["memory.remember", "memory.recall", "memory.get_note"],
+          lastActivityAt: expect.any(String),
+          savedCount: 1,
+          readCount: 1,
+          verifiedRoundTrip: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(overview)).not.toMatch(
+      /clientId|grantId|sessionId|noteRefs|activity summary canary/i,
+    );
   });
 
   it("does not open trusted work authority when activation audit fails", async () => {
@@ -1810,13 +2087,18 @@ describe("vault broker worker protocol", () => {
         ttlMs: 15 * 60 * 1_000,
       },
     );
-    const restartPending = await beginMemoryClientRequest(
+    const restartCompleted = await beginMemoryClientRequest(
       restarted,
       otherConnection,
       "session.complete",
       activationProofs(restartActivation, otherDurable, restartSession),
     );
-    expect(restartPending.ownerPresenceChallenge).toBeDefined();
+    expect(restartCompleted.ownerPresenceChallenge).toBeUndefined();
+    expect(restartCompleted.result).toMatchObject({
+      clientId: active.clientId,
+      grantId: active.grantId,
+      capabilities: ["memory.remember"],
+    });
   });
 
   it("upgrades an alpha.8 vault to alpha.9 without losing revisions, identities, or grants", async () => {

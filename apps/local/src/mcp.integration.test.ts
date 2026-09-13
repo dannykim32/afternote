@@ -11,7 +11,7 @@ type RememberResult = {
   note: {
     id: string;
     content: string;
-    source: { timestamp?: string } | null;
+    source: { application?: string; timestamp?: string } | null;
   };
 };
 
@@ -56,6 +56,7 @@ afterEach(() => {
 async function openMcpClient(
   databasePath: string,
   capabilities?: MemoryCapability[],
+  sourceApplication?: string,
 ) {
   const memory = new SqliteMemory(databasePath, localVault);
   const scopedMemory = capabilities
@@ -69,7 +70,11 @@ async function openMcpClient(
         },
       }) as Memory
     : memory;
-  const server = await createAfternoteMcpServer(scopedMemory, localVault);
+  const server = await createAfternoteMcpServer(
+    scopedMemory,
+    localVault,
+    sourceApplication ? { sourceApplication } : undefined,
+  );
   const client = new Client({ name: "afternote-test", version: "2.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -229,6 +234,48 @@ describe("Afternote Local MCP", () => {
     await secondSession.close();
 
     expect(retrieved.note.content).toBe(original);
+  });
+
+  it("attributes connector saves independently of model-supplied metadata", async () => {
+    const session = await openMcpClient(
+      ":memory:",
+      undefined,
+      "Claude Desktop",
+    );
+    try {
+      const withoutMetadata = structuredContent<RememberResult>(
+        await session.client.callTool({
+          name: "remember",
+          arguments: { content: "Connector-owned attribution" },
+        }),
+      );
+      const withClaimedApplication = structuredContent<RememberResult>(
+        await session.client.callTool({
+          name: "remember",
+          arguments: {
+            content: "Connector attribution cannot be spoofed",
+            source: {
+              application: "Untrusted model claim",
+              url: { nested: "not a URL string" },
+              author: null,
+              timestamp: "last Friday",
+              label: "x".repeat(10_000),
+            },
+          },
+        }),
+      );
+      expect(withoutMetadata.note.source).toMatchObject({
+        application: "Claude Desktop",
+      });
+      expect(withClaimedApplication.note.source).toMatchObject({
+        application: "Claude Desktop",
+      });
+      expect(withClaimedApplication.note.source).toEqual({
+        application: "Claude Desktop",
+      });
+    } finally {
+      await session.close();
+    }
   });
 
   it("normalizes connector timestamps at the MCP boundary", async () => {

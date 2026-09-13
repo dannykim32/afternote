@@ -440,8 +440,9 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
           "-Wl,-rpath,@executable_path/../Frameworks",
         ]
       : []),
-    join(repositoryRoot, "apps/local/native/connector_presentation.mm"),
     join(repositoryRoot, "apps/local/native/broker_recovery_state.mm"),
+    join(repositoryRoot, "apps/local/native/connector_overview.mm"),
+    join(repositoryRoot, "apps/local/native/connector_presentation.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_state.mm"),
     join(repositoryRoot, "apps/local/native/setup_guide_state.mm"),
     join(repositoryRoot, "apps/local/native/plain_text_list_formatting.mm"),

@@ -801,6 +801,34 @@ describe("VaultBrokerAuthorization", () => {
     expect(decoded).not.toContain(String(process.pid));
   });
 
+  it("builds the passive connector overview linearly across 10,000 audit events", () => {
+    const fixture = brokerFixture();
+    const client = p256();
+    const paired = pair(fixture.broker, fixture.owner.privateKey, client.privateKey, {
+      kind: "claude-desktop",
+      displayName: "Claude Desktop",
+      publicKey: client.publicKey,
+      requestedCapabilities: ["memory.remember", "memory.recall"],
+      forgetPolicy: "never",
+    });
+    fixture.seedConnectorAuditEvents(paired.clientId, 10_000);
+
+    const startedAt = performance.now();
+    const overview = fixture.broker.connectorOverview("development-only");
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(overview).toEqual({
+      connectors: [expect.objectContaining({
+        kind: "claude-desktop",
+        status: "paired",
+        savedCount: 5_000,
+        readCount: 5_000,
+        verifiedRoundTrip: true,
+      })],
+    });
+    expect(elapsedMs).toBeLessThan(1_000);
+  });
+
   it("paginates a fixed redacted audit snapshot without duplicates during inserts", () => {
     const fixture = brokerFixture();
     fixture.seedAuditEvents(5, "2026-08-28T12:00:00.000Z");
@@ -936,6 +964,203 @@ describe("VaultBrokerAuthorization", () => {
       outcome: "success",
       errorCode: "work_session_expired",
     }));
+  });
+
+  it("preserves owner-approved trusted work across a broker process restart", () => {
+    const fixture = brokerFixture();
+    const client = p256();
+    const firstSession = p256();
+    const paired = pair(fixture.broker, fixture.owner.privateKey, client.privateKey, {
+      kind: "claude-desktop",
+      displayName: "Claude Desktop",
+      publicKey: client.publicKey,
+      requestedCapabilities: ["memory.remember", "memory.recall", "memory.get_note"],
+      forgetPolicy: "never",
+    });
+    const firstActivated = activate(
+      fixture.broker,
+      fixture.owner.privateKey,
+      client.privateKey,
+      firstSession.privateKey,
+      firstSession.publicKey,
+      paired,
+      ["memory.remember", "memory.recall", "memory.get_note"],
+    );
+    const oldBody = Buffer.from(JSON.stringify({ query: "old connection", limit: 5 }));
+    const oldEnvelope = envelope(
+      fixture.broker,
+      firstActivated,
+      "memory.recall",
+      oldBody,
+      firstSession.privateKey,
+    );
+    fixture.broker.close();
+
+    const restarted = fixture.reopen("boot-two");
+    const secondSession = p256();
+    const requested = restarted.requestActivation({
+      ...paired,
+      sessionPublicKey: secondSession.publicKey,
+      requestedCapabilities: ["memory.remember", "memory.recall", "memory.get_note"],
+      ttlMs: 15 * 60 * 1_000,
+    });
+
+    expect(restarted.canSilentlyActivateTrustedMcp(requested.activationId)).toBe(true);
+    expect(restarted.approveTrustedMcpActivation({
+      activationId: requested.activationId,
+      clientSignature: signature(requested.clientProofTranscript, client.privateKey),
+      sessionSignature: signature(requested.sessionProofTranscript, secondSession.privateKey),
+    })).toMatchObject({ ...paired });
+    expect(() => restarted.authorize(oldEnvelope, oldBody)).toThrow("Broker boot");
+
+    restarted.invalidateEphemeralAuthorityForLock();
+    restarted.close();
+    const afterLock = fixture.reopen("boot-three");
+    const afterLockSession = p256();
+    const afterLockActivation = afterLock.requestActivation({
+      ...paired,
+      sessionPublicKey: afterLockSession.publicKey,
+      requestedCapabilities: ["memory.recall"],
+      ttlMs: 15 * 60 * 1_000,
+    });
+    expect(afterLock.canSilentlyActivateTrustedMcp(afterLockActivation.activationId))
+      .toBe(false);
+  });
+
+  it("rolls back silent activation when persisted work-session touch fails", () => {
+    const fixture = brokerFixture();
+    const client = p256();
+    const firstSession = p256();
+    const paired = pair(fixture.broker, fixture.owner.privateKey, client.privateKey, {
+      kind: "claude-desktop",
+      displayName: "Claude Desktop",
+      publicKey: client.publicKey,
+      requestedCapabilities: ["memory.recall"],
+      forgetPolicy: "never",
+    });
+    activate(
+      fixture.broker,
+      fixture.owner.privateKey,
+      client.privateKey,
+      firstSession.privateKey,
+      firstSession.publicKey,
+      paired,
+      ["memory.recall"],
+    );
+    fixture.advanceTime(1);
+    const secondSession = p256();
+    const requested = fixture.broker.requestActivation({
+      ...paired,
+      sessionPublicKey: secondSession.publicKey,
+      requestedCapabilities: ["memory.recall"],
+      ttlMs: 15 * 60 * 1_000,
+    });
+    const database = new SqlcipherDatabase(fixture.path, { key: fixture.key });
+    database.exec(`
+      create trigger reject_work_session_touch
+      before update on broker_trusted_work_sessions
+      when new.last_activity_at <> old.last_activity_at
+      begin
+        select raise(abort, 'injected work-session touch failure');
+      end;
+    `);
+    database.close();
+
+    expect(() => fixture.broker.approveTrustedMcpActivation({
+      activationId: requested.activationId,
+      clientSignature: signature(requested.clientProofTranscript, client.privateKey),
+      sessionSignature: signature(requested.sessionProofTranscript, secondSession.privateKey),
+    })).toThrow("work-session touch failure");
+
+    const verification = new SqlcipherDatabase(fixture.path, {
+      key: fixture.key,
+      readonly: true,
+    });
+    expect(verification.query<{ status: string }, [string]>(
+      "select status from broker_sessions where id = ?",
+    ).get(requested.activationId)?.status).toBe("pending");
+    verification.close();
+    expect(fixture.broker.readAuditForTest()).not.toContainEqual(
+      expect.objectContaining({
+        sessionId: requested.activationId,
+        operation: "session.activate",
+        outcome: "success",
+      }),
+    );
+  });
+
+  it("rejects expired, clock-rolled-back, malformed, and policy-stale persisted work", () => {
+    const cases = [
+      {
+        name: "expired",
+        configure: (_broker: VaultBrokerAuthorization) => {},
+        times: (now: number) => ({
+          startedAt: now - 24 * 60 * 60 * 1_000,
+          expiresAt: now - 1,
+          lastActivityAt: now - 60_000,
+          lastObservedAt: now - 60_000,
+        }),
+        id: randomUUID(),
+      },
+      {
+        name: "clock rollback",
+        configure: (_broker: VaultBrokerAuthorization) => {},
+        times: (now: number) => ({
+          startedAt: now - 60_000,
+          expiresAt: now + 60 * 60 * 1_000,
+          lastActivityAt: now - 30_000,
+          lastObservedAt: now + 1,
+        }),
+        id: randomUUID(),
+      },
+      {
+        name: "malformed identifier",
+        configure: (_broker: VaultBrokerAuthorization) => {},
+        times: (now: number) => ({
+          startedAt: now - 60_000,
+          expiresAt: now + 60 * 60 * 1_000,
+          lastActivityAt: now - 30_000,
+          lastObservedAt: now,
+        }),
+        id: "not a valid identifier",
+      },
+      {
+        name: "changed policy",
+        configure: (broker: VaultBrokerAuthorization) => {
+          broker.configureRoutineAuthentication(4 * 60 * 60 * 1_000);
+        },
+        times: (now: number) => ({
+          startedAt: now - 60_000,
+          expiresAt: now + 23 * 60 * 60 * 1_000,
+          lastActivityAt: now - 30_000,
+          lastObservedAt: now,
+        }),
+        id: randomUUID(),
+      },
+    ];
+    for (const testCase of cases) {
+      const fixture = brokerFixture();
+      testCase.configure(fixture.broker);
+      fixture.broker.close();
+      const database = new SqlcipherDatabase(fixture.path, { key: fixture.key });
+      const times = testCase.times(fixture.now());
+      database.query(`
+        insert into broker_trusted_work_sessions (
+          vault_id, id, started_at, expires_at, last_activity_at, last_observed_at
+        ) values (?, ?, ?, ?, ?, ?)
+      `).run(
+        vaultId,
+        testCase.id,
+        times.startedAt,
+        times.expiresAt,
+        times.lastActivityAt,
+        times.lastObservedAt,
+      );
+      database.close();
+
+      fixture.reopen(`reopen-${testCase.name}`);
+      expect(fixture.workSessionCount(), testCase.name).toBe(0);
+    }
   });
 
   it("persists the user-selected routine authentication window", () => {
@@ -1123,6 +1348,9 @@ function brokerFixture(options: { expirySweepIntervalMs?: number } = {}) {
     advanceTime(milliseconds: number) {
       now += milliseconds;
     },
+    now() {
+      return now;
+    },
     seedNote(noteId: string, revision: number) {
       const database = new SqlcipherDatabase(path, { key });
       database.query("insert into notes (id, current_revision) values (?, ?)").run(noteId, revision);
@@ -1149,6 +1377,14 @@ function brokerFixture(options: { expirySweepIntervalMs?: number } = {}) {
       database.close();
       return count;
     },
+    workSessionCount(): number {
+      const database = new SqlcipherDatabase(path, { key, readonly: true });
+      const count = database.query<{ count: number }, []>(
+        "select count(*) as count from broker_trusted_work_sessions",
+      ).get()?.count ?? 0;
+      database.close();
+      return count;
+    },
     path,
     key,
     seedAuditEvents(count: number, occurredAt: string, prefix = "seed") {
@@ -1167,6 +1403,32 @@ function brokerFixture(options: { expirySweepIntervalMs?: number } = {}) {
       insert.close();
       database.close();
     },
+    seedConnectorAuditEvents(clientId: string, count: number) {
+      const database = new SqlcipherDatabase(path, { key });
+      const insert = database.query(`
+        insert into broker_audit_events (
+          event_id, occurred_at, client_id, grant_id, session_id, operation,
+          outcome, error_code, note_refs
+        ) values (?, ?, ?, null, null, ?, 'success', null, ?)
+      `);
+      database.transaction(() => {
+        for (let index = 0; index < count; index += 1) {
+          const pairIndex = Math.floor(index / 2);
+          insert.run(
+            `connector-${index.toString().padStart(5, "0")}`,
+            new Date(now + index).toISOString(),
+            clientId,
+            index % 2 === 0 ? "memory.remember" : "memory.recall",
+            JSON.stringify([{
+              noteId: `note-${pairIndex.toString().padStart(5, "0")}`,
+              revision: 1,
+            }]),
+          );
+        }
+      })();
+      insert.close();
+      database.close();
+    },
     reopen(bootId: string) {
       const reopened = new VaultBrokerAuthorization({
         path,
@@ -1174,6 +1436,7 @@ function brokerFixture(options: { expirySweepIntervalMs?: number } = {}) {
         vaultId,
         bootId,
         ownerPublicKey: owner.publicKey,
+        now: () => now,
       });
       brokers.push(reopened);
       return reopened;

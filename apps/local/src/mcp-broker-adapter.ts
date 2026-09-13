@@ -283,12 +283,22 @@ export async function runBrokerMcpAdapter(
     () => VaultBrokerMemoryClient.activate(kind, options),
     { connectorKind: kind, trace: acceptanceTraceSink() },
   );
-  const server = await createAfternoteMcpServer(memory, memory.vault);
+  const server = await createAfternoteMcpServer(memory, memory.vault, {
+    sourceApplication: connectorSourceApplication(kind),
+  });
   await serveStdio(() => server, {
     onerror(error) {
       console.error("Afternote Local MCP error:", error);
     },
   });
+}
+
+function connectorSourceApplication(kind: McpBrokerClientKind): string {
+  return kind === "codex"
+    ? "Codex"
+    : kind === "claude"
+    ? "Claude Code"
+    : "Claude Desktop";
 }
 
 function connectorNeedsReconnect(error: unknown): boolean {

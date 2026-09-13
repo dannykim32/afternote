@@ -7,6 +7,7 @@
 
 #import "plain_text_list_formatting.h"
 #import "broker_recovery_state.h"
+#import "connector_overview.h"
 #import "connector_presentation.h"
 #import "note_editor_state.h"
 #import "owner_broker.h"
@@ -586,18 +587,6 @@ NSArray<NSDictionary *> *SearchResultsByApplyingPage(
   return combined;
 }
 
-NSDictionary *ConnectorActivitySummary(NSArray<NSDictionary *> *events) {
-  NSUInteger reads = 0;
-  NSUInteger saves = 0;
-  for (NSDictionary *event in events) {
-    NSString *operation = StringValue(event[@"operation"]);
-    if ([operation isEqualToString:@"memory.recall"] ||
-        [operation isEqualToString:@"memory.get_note"]) reads += 1;
-    if ([operation isEqualToString:@"memory.remember"]) saves += 1;
-  }
-  return @{ @"reads" : @(reads), @"saves" : @(saves) };
-}
-
 BOOL ConnectorHasCurrentAuthority(NSDictionary *client) {
   NSString *status = StringValue(client[@"status"]);
   return [status isEqualToString:@"active"] || [status isEqualToString:@"paired"];
@@ -739,6 +728,9 @@ BOOL IsLibraryResult(NSString *method, NSDictionary *result) {
 }
 
 BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params) {
+  if ([method isEqualToString:@"owner.connector_overview"]) {
+    return AfternoteConnectorOverviewByKind(result) != nil;
+  }
   if ([method isEqualToString:@"owner.routine_authentication"] ||
       [method isEqualToString:@"owner.set_routine_authentication"]) {
     if (!ExactKeys(result, @[ @"ttlMs" ]) ||
@@ -1586,6 +1578,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL brokerRecoveryInFlight;
 @property(nonatomic, strong) id<AfternoteOwnerBroker> broker;
 @property(nonatomic, strong) NSDictionary *connections;
+@property(nonatomic, strong) NSDictionary<NSString *, AfternoteConnectorOverviewItem *> *connectorOverviewByKind;
+@property(nonatomic) NSUInteger connectorOverviewGeneration;
 @property(nonatomic, strong) NSMutableArray *auditEvents;
 @property(nonatomic, copy) NSString *auditCursor;
 @property(nonatomic, copy) NSString *ownerExpiresAt;
@@ -1678,6 +1672,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
   (void)notification;
   self.auditEvents = [NSMutableArray array];
+  self.connectorOverviewByKind = @{};
   self.revocationTargets = [NSMutableDictionary dictionary];
   self.integrationStatuses = [NSMutableDictionary dictionary];
   self.integrationOperations = [NSMutableSet set];
@@ -1887,7 +1882,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     });
   }
 #else
-  [self refreshIntegrationStatuses];
+  [self refreshConnections:nil];
   [self refreshRecoveryStatusAndContinue:YES];
 #endif
 }
@@ -1908,6 +1903,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)vaultDidLock:(NSNotification *)notification {
   (void)notification;
   self.lifecycleStatusRequestSequence += 1;
+  self.connectorOverviewGeneration += 1;
+  self.connectorOverviewByKind = @{};
   self.vaultLocked = YES;
   self.vaultStatusCheckInFlight = NO;
   self.libraryAuthenticateButton.title = @"Unlock vault";
@@ -2359,7 +2356,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self settingsRowWithTitle:@"Export & diagnostics" detail:@"Lossless export and share-safe diagnostics run through owner-approved native broker actions." control:exportControls],
     securityHeading,
     [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
-    [self settingsRowWithTitle:@"Routine authentication" detail:@"Used for Notes, Connections, Codex, and Claude Code while Afternote stays open. Export, deletion, recovery, lock, and unlock still require fresh approval." control:self.routineAuthenticationMenu],
+    [self settingsRowWithTitle:@"Routine authentication" detail:@"Used for Notes and for Codex, Claude Code, and Claude Desktop connections. Changing this setting applies to every connector. Export, deletion, recovery, lock, and unlock still require fresh approval." control:self.routineAuthenticationMenu],
     [self settingsRowWithTitle:@"Connector identities" detail:@"Rotation and exact revocation remain scoped to one local connector." control:identityState],
     [self settingsRowWithTitle:@"Build policy" detail:@"Development convenience is isolated from release builds." control:developmentState],
     productHeading,
@@ -2694,13 +2691,13 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.progress.style = NSProgressIndicatorStyleSpinning;
   self.progress.controlSize = NSControlSizeSmall;
   [self.progress startAnimation:nil];
-  self.authenticateButton = [AfternoteButton buttonWithTitle:@"Authenticate & Refresh"
+  self.authenticateButton = [AfternoteButton buttonWithTitle:@"Refresh"
                                                target:self
-                                               action:@selector(authenticate:)];
-  [self stylePrimaryButton:self.authenticateButton];
+                                               action:@selector(refreshConnections:)];
+  [self styleSecondaryButton:self.authenticateButton];
   self.authenticateButton.keyEquivalent = @"r";
   self.authenticateButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
-  self.authenticateButton.accessibilityLabel = @"Authenticate and refresh connections";
+  self.authenticateButton.accessibilityLabel = @"Refresh connections";
 
   NSStackView *statusRow = [NSStackView stackViewWithViews:@[
     self.progress, self.statusLabel, [NSView new], self.authenticateButton
@@ -3312,8 +3309,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     } else [self refreshVisibleLibraryNotes:nil];
     return;
   }
-  if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];
-  else [self authenticate:nil];
+  [self refreshConnections:nil];
 }
 
 - (void)openSettings:(id)sender {
@@ -3495,10 +3491,12 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                            message:(NSString *)message {
   self.lifecycleStatusRequestSequence += 1;
   self.ownerSessionGeneration += 1;
+  self.connectorOverviewGeneration += 1;
   self.recoveryState = state;
   [self setPrivilegedSurfacesReady:NO];
   [self clearLibraryPlaintext:message];
   self.connections = nil;
+  self.connectorOverviewByKind = @{};
   self.ownerExpiresAt = nil;
   self.auditCursor = nil;
   [self.auditEvents removeAllObjects];
@@ -3524,12 +3522,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.recoveryOperationSequence += 1;
   self.recoveryOperationInFlight = NO;
   self.ownerSessionGeneration += 1;
+  self.connectorOverviewGeneration += 1;
   [self.surfaceRouter beginBrokerRecoveryFromNavigationSegment:
       self.surfaceSelector.selectedSegment];
   NSUInteger sequence = ++self.brokerRecoverySequence;
   [self setPrivilegedSurfacesReady:NO];
   [self clearLibraryPlaintext:@"The broker restarted. Reconnecting…"];
   self.connections = nil;
+  self.connectorOverviewByKind = @{};
   self.ownerExpiresAt = nil;
   self.auditCursor = nil;
   [self.auditEvents removeAllObjects];
@@ -5263,7 +5263,34 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)refreshIntegrationStatusFromButton:(NSButton *)sender {
   (void)sender;
+  [self refreshConnections:nil];
+}
+
+- (void)refreshConnections:(id)sender {
+  (void)sender;
+  NSUInteger generation = ++self.connectorOverviewGeneration;
   [self refreshIntegrationStatuses];
+  [self setBusy:YES status:@"Refreshing connections…"];
+  [self.broker requestMethod:@"owner.connector_overview"
+                      params:@{}
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (generation != self.connectorOverviewGeneration) return;
+      if (error != nil) {
+        [self setBusy:NO status:StringValue(
+            error[@"message"], @"Connection status is unavailable.")];
+        return;
+      }
+      NSDictionary *overview = AfternoteConnectorOverviewByKind(result);
+      if (overview == nil) {
+        [self setBusy:NO status:@"Connection status is unavailable."];
+        return;
+      }
+      self.connectorOverviewByKind = overview;
+      [self render];
+      [self setBusy:NO status:@"Connections are up to date."];
+    });
+  }];
 }
 
 - (void)installIntegration:(NSButton *)sender {
@@ -5423,10 +5450,8 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)setBusy:(BOOL)busy status:(NSString *)status {
   dispatch_async(dispatch_get_main_queue(), ^{
-    BOOL authenticated = self.ownerExpiresAt.length > 0;
-    self.authenticateButton.title = authenticated ? @"Refresh" : @"Authenticate";
-    if (authenticated) [self styleSecondaryButton:self.authenticateButton];
-    else [self stylePrimaryButton:self.authenticateButton];
+    self.authenticateButton.title = @"Refresh";
+    [self styleSecondaryButton:self.authenticateButton];
     self.authenticateButton.enabled = !busy;
     self.statusLabel.stringValue = status;
     self.progress.hidden = !busy;
@@ -5437,7 +5462,6 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)authenticate:(id)sender {
   (void)sender;
-  [self refreshIntegrationStatuses];
   NSUInteger generation = ++self.ownerSessionGeneration;
   [self setBusy:YES status:OwnerApprovalWaitMessage()];
   NSArray *scopes = @[
@@ -5553,8 +5577,7 @@ doCommandBySelector:(SEL)commandSelector {
     [self refreshRecovery:nil];
     return;
   }
-  if (self.ownerExpiresAt.length > 0) [self loadConnectionsAndAudit];
-  else [self authenticate:nil];
+  [self refreshConnections:nil];
 }
 
 - (void)openSetupGuide:(id)sender {
@@ -5565,7 +5588,7 @@ doCommandBySelector:(SEL)commandSelector {
   [self updateSetupBannerVisibility];
   [self displaySurface:AfternoteProductSurfaceSetup recoveryReady:YES];
   [self renderSetupGuide];
-  if (self.connections == nil) [self authenticate:nil];
+  if (self.connectorOverviewByKind.count == 0) [self refreshConnections:nil];
 }
 
 - (void)returnFromSetupGuide:(id)sender {
@@ -5652,11 +5675,6 @@ doCommandBySelector:(SEL)commandSelector {
   if (self.setupContent == nil) return;
   [self clearSetupContent];
   NSArray *allClients = ArrayValue(self.connections[@"clients"]);
-  NSArray *activeClients = [allClients filteredArrayUsingPredicate:
-      [NSPredicate predicateWithBlock:^BOOL(NSDictionary *client, NSDictionary *bindings) {
-    (void)bindings;
-    return ConnectorHasCurrentAuthority(client);
-  }]];
   [self.setupContent addArrangedSubview:
       [self setupRowWithTitle:@"Local notes"
                        detail:[self localSearchReadinessDetail]
@@ -5664,13 +5682,23 @@ doCommandBySelector:(SEL)commandSelector {
                          tone:@"success"
                        button:nil]];
 
-  BOOL integrationActive = activeClients.count > 0;
+  BOOL integrationActive = NO;
+  for (AfternoteConnectorOverviewItem *connector in self.connectorOverviewByKind.allValues) {
+    if (connector.hasCurrentAuthority) {
+      integrationActive = YES;
+      break;
+    }
+  }
   AfternoteIntegrationDescriptor *revokedDescriptor = nil;
   for (AfternoteIntegrationDescriptor *descriptor in IntegrationDescriptors()) {
     NSArray *matching = [self clients:allClients forKind:descriptor.brokerKind];
+    AfternoteConnectorOverviewItem *overview =
+        self.connectorOverviewByKind[descriptor.brokerKind];
     NSDictionary *current = [self currentClientFromClients:matching];
-    BOOL revoked = [[StringValue(current[@"status"]) lowercaseString]
-        isEqualToString:@"revoked"];
+    BOOL revoked = overview != nil
+        ? [overview.status isEqualToString:@"revoked"]
+        : [[StringValue(current[@"status"]) lowercaseString]
+            isEqualToString:@"revoked"];
     if (revoked && [self.integrationStatuses[descriptor.commandKind][@"healthy"] boolValue]) {
       revokedDescriptor = descriptor;
       break;
@@ -5702,6 +5730,14 @@ doCommandBySelector:(SEL)commandSelector {
                        button:connectionsButton]];
 
   BOOL proofComplete = AfternoteHasCorrelatedRecallProof(self.auditEvents);
+  if (!proofComplete) {
+    for (AfternoteConnectorOverviewItem *connector in self.connectorOverviewByKind.allValues) {
+      if (connector.verifiedRoundTrip) {
+        proofComplete = YES;
+        break;
+      }
+    }
+  }
   if (proofComplete && !self.setupGuideDismissed) {
     self.setupGuideDismissed = YES;
     [NSUserDefaults.standardUserDefaults setBool:YES
@@ -5770,24 +5806,28 @@ doCommandBySelector:(SEL)commandSelector {
                                  grants:(NSArray<NSDictionary *> *)grants {
   NSDictionary *integrationStatus = commandKind.length > 0
       ? self.integrationStatuses[commandKind] : nil;
+  AfternoteConnectorOverviewItem *overview = self.connectorOverviewByKind[brokerKind];
   NSDictionary *current = [self currentClientFromClients:clients];
-  BOOL connected = ConnectorHasCurrentAuthority(current);
-  BOOL explicitlyRevoked = [[StringValue(current[@"status"]) lowercaseString]
-      isEqualToString:@"revoked"];
+  BOOL connected = overview != nil
+      ? overview.hasCurrentAuthority : ConnectorHasCurrentAuthority(current);
+  BOOL explicitlyRevoked = overview != nil
+      ? [overview.status isEqualToString:@"revoked"]
+      : [[StringValue(current[@"status"]) lowercaseString]
+          isEqualToString:@"revoked"];
 
   NSArray *events = [self.auditEvents filteredArrayUsingPredicate:
       [NSPredicate predicateWithBlock:^BOOL(NSDictionary *event, NSDictionary *bindings) {
     (void)bindings;
     return [StringValue(event[@"clientKind"]) isEqualToString:brokerKind];
   }]];
-  NSDictionary *activity = ConnectorActivitySummary(events);
   NSArray *defaultScopes = commandKind.length > 0
       ? @[ @"memory.remember", @"memory.recall", @"memory.get_note" ]
       : @[];
   NSArray *visibleScopes = connected
-      ? ArrayValue(current[@"activeScopes"])
+      ? overview != nil ? overview.activeScopes : ArrayValue(current[@"activeScopes"])
       : defaultScopes;
-  NSString *lastUsed = StringValue(current[@"lastActivityAt"]);
+  NSString *lastUsed = overview != nil
+      ? overview.lastActivityAt : StringValue(current[@"lastActivityAt"]);
   if (lastUsed.length == 0 && events.count > 0) {
     lastUsed = StringValue(events.firstObject[@"occurredAt"]);
   }
@@ -5806,8 +5846,9 @@ doCommandBySelector:(SEL)commandSelector {
                                                   revoked:explicitlyRevoked
                                           lastActiveLabel:lastUsed.length > 0
                                               ? DateLabel(lastUsed) : @""];
-  NSString *activityValue = [NSString stringWithFormat:@"%@ saved · %@ recalled",
-      activity[@"saves"], activity[@"reads"]];
+  NSString *activityValue = [NSString stringWithFormat:@"%lu saved · %lu recalled",
+      (unsigned long)(overview != nil ? overview.savedCount : 0),
+      (unsigned long)(overview != nil ? overview.readCount : 0)];
   if (lastUsed.length > 0) {
     activityValue = [activityValue stringByAppendingFormat:@" · Last used %@",
                      DateLabel(lastUsed)];
@@ -5832,7 +5873,8 @@ doCommandBySelector:(SEL)commandSelector {
     connectionLabel, connectionValue, connectionCopy
   ]];
   if (connected) {
-    NSArray *scopes = ArrayValue(current[@"activeScopes"]);
+    NSArray *scopes = overview != nil
+        ? overview.activeScopes : ArrayValue(current[@"activeScopes"]);
     NSButton *revoke = [AfternoteButton buttonWithTitle:@"Revoke access"
                                                    target:self
                                                    action:@selector(confirmRevocation:)];
@@ -5899,8 +5941,11 @@ doCommandBySelector:(SEL)commandSelector {
   history.contentTintColor = AfternoteBrandCaptureColor();
   history.accessibilityLabel = [NSString stringWithFormat:@"%@ %@ connection history",
                                  expanded ? @"Hide" : @"Show", displayName];
-  NSTextField *historyCount = [self label:[NSString stringWithFormat:@"%lu event%@",
-      (unsigned long)historyLines.count, historyLines.count == 1 ? @"" : @"s"]
+  NSString *historyCountText = self.ownerExpiresAt.length > 0
+      ? [NSString stringWithFormat:@"%lu event%@",
+          (unsigned long)historyLines.count, historyLines.count == 1 ? @"" : @"s"]
+      : @"Authenticate to view";
+  NSTextField *historyCount = [self label:historyCountText
                                          size:10
                                        weight:NSFontWeightRegular];
   historyCount.textColor = AfternoteMutedTextColor();
@@ -5972,6 +6017,10 @@ doCommandBySelector:(SEL)commandSelector {
     [self.expandedConnectorKinds removeObject:kind];
   } else {
     [self.expandedConnectorKinds addObject:kind];
+    if (self.ownerExpiresAt.length == 0) {
+      [self authenticate:nil];
+      return;
+    }
   }
   [self render];
 }
@@ -6059,7 +6108,11 @@ doCommandBySelector:(SEL)commandSelector {
   (void)result;
   [self setBusy:YES status:[NSString stringWithFormat:
       @"%@ revoked. Refreshing broker truth…", label]];
-  [self loadConnectionsAndAudit];
+  self.connections = nil;
+  self.ownerExpiresAt = nil;
+  self.auditCursor = nil;
+  [self.auditEvents removeAllObjects];
+  [self refreshConnections:nil];
 }
 
 - (void)showError:(NSDictionary *)error {

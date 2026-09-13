@@ -30,6 +30,15 @@ const SourceContextSchema = z.object({
   label: boundedString(MAX_SOURCE_LABEL_CHARACTERS).optional(),
 });
 
+const RememberContentSchema = z
+  .string()
+  .refine((value) => countCharacters(value) <= MAX_NOTE_CHARACTERS, {
+    message: `Note content cannot exceed ${MAX_NOTE_CHARACTERS} characters`,
+  })
+  .refine((value) => value.trim().length > 0, {
+    message: "Note content cannot be empty",
+  });
+
 function boundedString(maximumCharacters: number) {
   return z
     .string()
@@ -59,7 +68,19 @@ const CitationSchema = z.object({
 export async function createAfternoteMcpServer(
   memory: Memory,
   vault: VaultContext,
+  options: { sourceApplication?: string } = {},
 ): Promise<McpServer> {
+  const sourceApplication = options.sourceApplication === undefined
+    ? undefined
+    : SourceContextSchema.parse({
+        application: options.sourceApplication,
+      }).application;
+  const rememberInputSchema = sourceApplication === undefined
+    ? z.object({
+        content: RememberContentSchema,
+        source: SourceContextSchema.optional(),
+      })
+    : z.object({ content: RememberContentSchema });
   const capabilities = await memory.capabilities(vault);
   if (capabilities.length === 0) {
     throw new MemoryError(
@@ -82,17 +103,7 @@ export async function createAfternoteMcpServer(
       title: "Remember in Afternote",
       description:
         "Save a note only when the user explicitly asks to remember or track it.",
-      inputSchema: z.object({
-        content: z
-          .string()
-          .refine((value) => countCharacters(value) <= MAX_NOTE_CHARACTERS, {
-            message: `Note content cannot exceed ${MAX_NOTE_CHARACTERS} characters`,
-          })
-          .refine((value) => value.trim().length > 0, {
-            message: "Note content cannot be empty",
-          }),
-        source: SourceContextSchema.optional(),
-      }),
+      inputSchema: rememberInputSchema,
       outputSchema: z.object({ note: NoteSchema }),
       annotations: {
         readOnlyHint: false,
@@ -100,8 +111,15 @@ export async function createAfternoteMcpServer(
         idempotentHint: false,
       },
     },
-    async ({ content, source }) => {
-      const note = await memory.remember(vault, { content, source });
+    async (input) => {
+      const source = "source" in input ? input.source : undefined;
+      const attributedSource = sourceApplication === undefined
+        ? source
+        : { application: sourceApplication };
+      const note = await memory.remember(vault, {
+        content: input.content,
+        ...(attributedSource ? { source: attributedSource } : {}),
+      });
       const result = { note };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
