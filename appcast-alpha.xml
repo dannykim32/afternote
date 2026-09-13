@@ -7,23 +7,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Afternote</title>
         <item>
             <title>2.0.0</title>
-            <pubDate>Sat, 12 Sep 2026 23:12:46 -0600</pubDate>
-            <sparkle:version>16</sparkle:version>
-            <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.3</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[## 2.0.0-alpha.16 - 2026-09-12
-
-### Fixed
-
-- Connections now refreshes its share-safe saved and recalled counts whenever Afternote
-  returns to the foreground, so Claude Desktop activity appears without a manual refresh
-  or owner-authentication prompt.
-]]></description>
-            <enclosure url="https://github.com/dannykim32/afternote/releases/download/v2.0.0-alpha.16/afternote-local-2.0.0-alpha.16-darwin-arm64.dmg" length="72854706" type="application/octet-stream" sparkle:edSignature="dyLviEAYkgRjURIk6Qtyq60vhYJk/TliGrt+BWpw0tNlXEynB424TVAUDbE996XJrkHO2x33Y7ijdrqTu+oUDw=="/>
-        </item>
-        <item>
-            <title>2.0.0</title>
             <pubDate>Sat, 12 Sep 2026 21:31:03 -0600</pubDate>
             <sparkle:version>15</sparkle:version>
             <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
@@ -71,6 +54,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: gWPme+Ue1mRyOBQMmIwASCl7BCwt3Y/um9dfiIkdZxKbg/MuS6/VzAOMuibypaJmz8IMp1FpdnmYl3a6oJq0CQ==
-length: 4410
+edSignature: RxslM7OfgZTHwCGgt4u3GQWv8DNhjLrR3GMnsM+acYIGzBhCIFQkEKBHkEBxDO2bvE9e5GVIPqJCK4XuKOHxDA==
+length: 3355
 -->
