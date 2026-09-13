@@ -107,6 +107,7 @@ describeMacos("native integration command runner", () => {
         gutters: true, textFits: true, noOverlap: true,
         actionsReachable: true, scrollFits: true, factSpacing: true, requestedSize: true,
         fillsAvailableWidth: true,
+        repairActionPreserved: true,
       });
       expect(Number(layout.columnWidth)).toBeLessThanOrEqual(920);
     }

@@ -100,10 +100,26 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
     BOOL noOverlap = YES;
     BOOL actionsReachable = YES;
     BOOL factSpacing = YES;
+    BOOL repairActionPreserved = YES;
+    NSUInteger repairActions = 0;
     CGFloat actionX = -1;
     for (NSView *row in delegate.content.arrangedSubviews) {
       NSView *actions = ConnectionLayoutView(row, @"ConnectionActions");
       NSView *facts = ConnectionLayoutView(row, @"ConnectionFacts");
+      for (NSView *view in ((NSStackView *)actions).arrangedSubviews) {
+        if (![view isKindOfClass:[AfternoteButton class]]) continue;
+        AfternoteButton *button = (AfternoteButton *)view;
+        if (![button.title isEqualToString:@"Repair Afternote"]) continue;
+        repairActions++;
+        repairActionPreserved &= button.afternoteFillColor == nil &&
+            button.afternoteBorderColor == nil && !button.bordered &&
+            button.afternoteHoverColor != nil && button.afternotePressedColor != nil &&
+            [button.contentTintColor isEqual:AfternoteBrandCaptureColor()] &&
+            button.action == @selector(installIntegration:) && button.target == delegate &&
+            [button.identifier isEqualToString:@"claude-code"] &&
+            [button.accessibilityLabel isEqualToString:@"Repair Afternote in Claude Code"] &&
+            button.focusRingType == NSFocusRingTypeExterior;
+      }
       NSRect actionFrame = [actions convertRect:actions.bounds toView:delegate.content];
       NSRect factFrame = [facts convertRect:facts.bounds toView:delegate.content];
       if (actionX < 0) actionX = NSMinX(actionFrame);
@@ -131,6 +147,8 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
       @"fillsAvailableWidth": @(fabs(columnFrame.size.width -
           MIN(kConnectionsMaximumWidth, root.bounds.size.width - 2 * kConnectionsPageGutter)) < 1),
       @"factSpacing": @(factSpacing),
+      @"repairActionPreserved": @(repairActionPreserved &&
+          repairActions == ([name isEqualToString:@"setup"] ? 0u : 1u)),
       @"requestedSize": @(fabs(root.bounds.size.width - [fixture[@"width"] doubleValue]) < 1 &&
                             fabs(root.bounds.size.height - [fixture[@"height"] doubleValue]) < 1),
     }];

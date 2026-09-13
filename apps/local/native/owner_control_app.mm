@@ -4906,7 +4906,17 @@ doCommandBySelector:(SEL)commandSelector {
   button.identifier = kind;
   button.accessibilityLabel = [NSString stringWithFormat:@"%@ in %@",
       button.title, displayName];
-  [self styleSecondaryButton:button];
+  if (presentation.action == AfternoteConnectorActionRepair) {
+    // Repair is contextual maintenance, not the primary onboarding action.
+    // Match the page's text actions; reveal a surface only on interaction.
+    button.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+    button.contentTintColor = AfternoteBrandCaptureColor();
+    AfternoteButton *repair = (AfternoteButton *)button;
+    repair.afternoteHoverColor = AfternoteSurfaceColor();
+    repair.afternotePressedColor = AfternoteRaisedSurfaceColor();
+  } else {
+    [self styleSecondaryButton:button];
+  }
   return button;
 }
 
