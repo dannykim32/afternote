@@ -34,8 +34,11 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
 
 - Continue splitting large native UI, broker dispatch, authorization, and storage
   modules along their responsibilities. The architecture has explicit interfaces,
-  but large implementation files remain: the native app is approximately 7,600 lines,
-  and three broker/storage modules are approximately 3,200–4,200 lines each.
+  but large implementation files remain. The next-release source extracts native
+  broker contracts and Note schema migrations with verified backups into focused,
+  behaviorally tested modules. The native app is still approximately 7,000 lines;
+  storage is approximately 2,800, and broker modules are approximately 3,400–4,200.
+  See [the architecture guide](ARCHITECTURE.md) for ownership and the remaining work.
 - Replace source-text checks with behavioral coverage where the check is intended
   to prove runtime behavior. Keep useful packaging and structural checks identified
   separately from behavioral tests.
