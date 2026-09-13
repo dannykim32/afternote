@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +25,7 @@ import {
   releaseCommandEnvironment,
 } from "../../../scripts/release-environment";
 import { sha256DirectoryTree } from "../../../scripts/release-inputs";
+import { assertSignedReleaseEntitlements } from "../../../scripts/build-local-alpha";
 
 const temporaryDirectories: string[] = [];
 
@@ -26,6 +36,57 @@ afterEach(() => {
 });
 
 describe("public release input controls", () => {
+  it("rejects a signed vault worker carrying the client-signing Keychain group", () => {
+    const root = temporaryDirectory();
+    const executable = join(root, "afternote-vault-worker");
+    const entitlements = join(root, "entitlements.plist");
+    copyFileSync("/usr/bin/true", executable);
+    chmodSync(executable, 0o755);
+    writeFileSync(entitlements, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.application-identifier</key><string>486B2A8N8A.dev.afternote.vault-broker.worker</string>
+<key>keychain-access-groups</key><array><string>486B2A8N8A.dev.afternote.client-key</string></array>
+</dict></plist>
+`);
+    const signed = Bun.spawnSync([
+      "/usr/bin/codesign",
+      "--force",
+      "--sign",
+      "-",
+      "--entitlements",
+      entitlements,
+      executable,
+    ], { stdout: "pipe", stderr: "pipe" });
+    expect(signed.exitCode).toBe(0);
+
+    expect(() => assertSignedReleaseEntitlements(executable, {
+      teamId: "486B2A8N8A",
+      identifier: "dev.afternote.vault-broker.worker",
+      accessGroup: "486B2A8N8A.dev.afternote.vault-key",
+    })).toThrow("Keychain access groups");
+
+    writeFileSync(
+      entitlements,
+      readFileSync(entitlements, "utf8").replace("client-key", "vault-key"),
+    );
+    const corrected = Bun.spawnSync([
+      "/usr/bin/codesign",
+      "--force",
+      "--sign",
+      "-",
+      "--entitlements",
+      entitlements,
+      executable,
+    ], { stdout: "pipe", stderr: "pipe" });
+    expect(corrected.exitCode).toBe(0);
+    expect(() => assertSignedReleaseEntitlements(executable, {
+      teamId: "486B2A8N8A",
+      identifier: "dev.afternote.vault-broker.worker",
+      accessGroup: "486B2A8N8A.dev.afternote.vault-key",
+    })).not.toThrow();
+  });
+
   it("rejects ambient compiler and Bun configuration inputs", () => {
     expect(() => assertSafeReleaseEnvironment({ CPATH: "/tmp/inject" }))
       .toThrow("CPATH");
@@ -33,6 +94,9 @@ describe("public release input controls", () => {
       .toThrow("BUN_CONFIG_REGISTRY");
     expect(() => assertSafeReleaseEnvironment({ AFTERNOTE_PACKAGE_VERSION: "2.0.0-alpha.8" }))
       .toThrow("AFTERNOTE_PACKAGE_VERSION");
+    expect(() => assertSafeReleaseEnvironment({
+      AFTERNOTE_KEYCHAIN_ACCESS_GROUP: "486B2A8N8A.dev.afternote.client-key",
+    })).toThrow("AFTERNOTE_KEYCHAIN_ACCESS_GROUP");
   });
 
   it("passes only the reviewed release environment", () => {

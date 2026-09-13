@@ -28,8 +28,12 @@ checksum, and final report to
 6. Confirm the SPDX SBOM, license inventory, and third-party notices cover every compiled
    component, including Sparkle.
 7. Sign with the existing Developer ID identity and the separate worker and client-signer
-   provisioning profiles. Credentials remain outside the checkout.
-8. Verify every nested signature and the signed payload manifest. The manifest covers the
+   provisioning profiles. The vault and client-signing Keychain groups are derived from the
+   Team ID and signed role; release-operator overrides are rejected. Credentials remain outside
+   the checkout.
+8. Verify every nested signature, the worker's exact `dev.afternote.vault-key` Keychain group,
+   the client signer's exact `dev.afternote.client-key` group, and the signed payload manifest.
+   The manifest covers the
    top-level portable payload plus the app resources and embedded runtime. The outer app's main
    Mach-O is covered by its Developer ID signature because signing changes its signature region.
 9. Notarize, staple, verify Gatekeeper assessment, and re-verify a private extracted

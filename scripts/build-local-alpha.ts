@@ -4,6 +4,7 @@ import {
   cpSync,
   existsSync,
   lstatSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -11,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
   CLIENT_SIGNER_APP_NAME,
@@ -20,6 +22,7 @@ import {
   OWNER_CONTROL_MACH_SERVICE,
   VAULT_BROKER_IDENTIFIER,
   clientSignerAccessGroup,
+  vaultKeyAccessGroup,
 } from "../apps/local/src/vault-broker-metadata";
 import { writeReleaseSupplyChainArtifacts } from "./release-supply-chain";
 import {
@@ -516,10 +519,8 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     `--define=AFTERNOTE_BROKER_CODE_REQUIREMENT=${JSON.stringify(gatewayRequirement)}`,
     `--define=AFTERNOTE_BROKER_MACH_SERVICE=${JSON.stringify(brokerMachService)}`,
     `--define=AFTERNOTE_CLIENT_SIGNER_CODE_REQUIREMENT=${JSON.stringify(clientSignerRequirement)}`,
-    ...(process.env.AFTERNOTE_KEYCHAIN_ACCESS_GROUP
-      ? [
-          `--define=AFTERNOTE_KEYCHAIN_ACCESS_GROUP=${JSON.stringify(process.env.AFTERNOTE_KEYCHAIN_ACCESS_GROUP)}`,
-        ]
+    ...(signing.accessGroup
+      ? [`--define=AFTERNOTE_KEYCHAIN_ACCESS_GROUP=${JSON.stringify(signing.accessGroup)}`]
       : []),
     join(
       repositoryRoot,
@@ -582,10 +583,8 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     `--define=AFTERNOTE_GATEWAY_CODE_REQUIREMENT=${JSON.stringify(gatewayRequirement)}`,
     `--define=AFTERNOTE_WORKER_GATEWAY_MACH_SERVICE=${JSON.stringify(workerGatewayMachService)}`,
     `--define=AFTERNOTE_ACCEPTANCE_TRACE=${acceptanceBuild}`,
-    ...(process.env.AFTERNOTE_KEYCHAIN_ACCESS_GROUP
-      ? [
-          `--define=AFTERNOTE_KEYCHAIN_ACCESS_GROUP=${JSON.stringify(process.env.AFTERNOTE_KEYCHAIN_ACCESS_GROUP)}`,
-        ]
+    ...(signing.accessGroup
+      ? [`--define=AFTERNOTE_KEYCHAIN_ACCESS_GROUP=${JSON.stringify(signing.accessGroup)}`]
       : []),
     join(repositoryRoot, "apps/local/src", workerEntrypoint),
     `--outfile=${brokerWorkerPath}`,
@@ -636,6 +635,13 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
       : []),
     clientSignerAppPath,
   ]);
+  if (signing.release) {
+    assertSignedReleaseEntitlements(clientSignerAppPath, {
+      teamId: signing.teamId!,
+      identifier: CLIENT_SIGNER_IDENTIFIER,
+      accessGroup: signing.clientAccessGroup!,
+    });
+  }
   if (includeSemanticRuntime) {
     for (const [name, destination] of [
       [onnxRuntimeLibraryName, onnxRuntimeLibraryPath],
@@ -706,6 +712,13 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
       : []),
     brokerWorkerAppPath,
   ]);
+  if (signing.release) {
+    assertSignedReleaseEntitlements(brokerWorkerAppPath, {
+      teamId: signing.teamId!,
+      identifier: brokerWorkerIdentifier,
+      accessGroup: signing.accessGroup!,
+    });
+  }
   if (signing.release) {
     assertReleaseArtifactHygiene({
       repositoryRoot,
@@ -1326,13 +1339,7 @@ function signingConfiguration(): SigningConfiguration {
   if (!/^[A-Z0-9]{10}$/.test(teamId)) {
     throw new Error("AFTERNOTE_TEAM_ID must be a ten-character Apple Team ID");
   }
-  const accessGroup = requiredReleaseEnvironment("AFTERNOTE_KEYCHAIN_ACCESS_GROUP");
-  if (
-    !accessGroup.startsWith(`${teamId}.`) ||
-    !/^[A-Z0-9][A-Za-z0-9.-]{1,254}$/.test(accessGroup)
-  ) {
-    throw new Error("AFTERNOTE_KEYCHAIN_ACCESS_GROUP must belong to AFTERNOTE_TEAM_ID");
-  }
+  const accessGroup = vaultKeyAccessGroup(teamId);
   return {
     release: true,
     identity,
@@ -1528,6 +1535,50 @@ function readPlutilData(path: string, keyPath: string): string {
   return value;
 }
 
+export function assertSignedReleaseEntitlements(
+  path: string,
+  expected: { teamId: string; identifier: string; accessGroup: string },
+): void {
+  const result = Bun.spawnSync([
+    "/usr/bin/codesign",
+    "-d",
+    "--entitlements",
+    ":-",
+    path,
+  ], {
+    cwd: repositoryRoot,
+    env: subprocessEnvironment(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const entitlements = result.stdout.toString();
+  if (result.exitCode !== 0 || !entitlements.trim()) {
+    throw new Error("Could not inspect signed release entitlements");
+  }
+
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "afternote-signed-entitlements-"));
+  const entitlementsPath = join(temporaryRoot, "entitlements.plist");
+  try {
+    writeFileSync(entitlementsPath, entitlements, { mode: 0o600 });
+    const applicationIdentifier = readPlistBuddyValue(
+      entitlementsPath,
+      ":com.apple.application-identifier",
+    );
+    if (applicationIdentifier !== `${expected.teamId}.${expected.identifier}`) {
+      throw new Error("Signed release application identifier does not match its role");
+    }
+    const accessGroups = readPlistBuddyArray(
+      entitlementsPath,
+      ":keychain-access-groups",
+    );
+    if (accessGroups.length !== 1 || accessGroups[0] !== expected.accessGroup) {
+      throw new Error("Signed Keychain access groups do not match the release role");
+    }
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
 export function assertReleaseProvisioningProfile(
   profile: unknown,
   options: {
@@ -1607,9 +1658,6 @@ function writeSigningEntitlements(
   const path = join(outputDirectory, `.afternote-${kind}-entitlements.plist`);
   writeFileSync(path, releaseEntitlements(kind, {
     teamId: signing.teamId!,
-    accessGroup: kind === "client-signer"
-      ? signing.clientAccessGroup!
-      : signing.accessGroup!,
     identifier,
   }), { mode: 0o600 });
   return path;

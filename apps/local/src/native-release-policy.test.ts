@@ -1,10 +1,28 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { releaseEntitlements } from "../../../scripts/release-policy";
 
 const repositoryRoot = resolve(import.meta.dir, "../../..");
 
 describe("native release input policy", () => {
+  it("derives the vault and client-signer Keychain groups from their signed roles", () => {
+    const teamId = "486B2A8N8A";
+    const mistakenOperatorInput = {
+      teamId,
+      identifier: "dev.afternote.vault-broker.worker",
+      accessGroup: `${teamId}.dev.afternote.client-key`,
+    };
+
+    expect(releaseEntitlements("worker", mistakenOperatorInput)).toContain(
+      `<string>${teamId}.dev.afternote.vault-key</string>`,
+    );
+    expect(releaseEntitlements("client-signer", {
+      ...mistakenOperatorInput,
+      identifier: "dev.afternote.client-signer",
+    })).toContain(`<string>${teamId}.dev.afternote.client-key</string>`);
+  });
+
   it("pins source archives and every externally supplied release binary", () => {
     const configuration = JSON.parse(readFileSync(
       join(repositoryRoot, "scripts/native-release-inputs.json"),

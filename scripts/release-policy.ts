@@ -1,4 +1,8 @@
-import { VAULT_BROKER_IDENTIFIER } from "../apps/local/src/vault-broker-metadata";
+import {
+  VAULT_BROKER_IDENTIFIER,
+  clientSignerAccessGroup,
+  vaultKeyAccessGroup,
+} from "../apps/local/src/vault-broker-metadata";
 
 const PACKAGE_VERSION =
   /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
@@ -226,10 +230,15 @@ export function resolvedPeerRequirement(options: {
 
 export function releaseEntitlements(
   kind: "client" | "worker" | "client-signer",
-  options: { teamId: string; accessGroup: string; identifier: string },
+  options: { teamId: string; identifier: string },
 ): string {
-  const keychainGroups = kind === "worker" || kind === "client-signer"
-    ? `\n<key>keychain-access-groups</key><array><string>${options.accessGroup}</string></array>`
+  const accessGroup = kind === "worker"
+    ? vaultKeyAccessGroup(options.teamId)
+    : kind === "client-signer"
+      ? clientSignerAccessGroup(options.teamId)
+      : null;
+  const keychainGroups = accessGroup
+    ? `\n<key>keychain-access-groups</key><array><string>${accessGroup}</string></array>`
     : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
