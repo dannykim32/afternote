@@ -11,7 +11,9 @@ import { join } from "node:path";
 import { createAfternoteMcpServer } from "@afternote/mcp";
 import type { Memory, Note, VaultContext } from "@afternote/memory";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { MCP_HOST_CODE_POLICIES } from "./integration-host-policy";
 import {
+  authorizeMcpConnectorHost,
   createAcceptanceTraceSink,
   DeferredVaultBrokerMemoryClient,
 } from "./mcp-broker-adapter";
@@ -21,6 +23,62 @@ import {
 } from "./vault-broker-client";
 
 describe("deferred MCP broker activation", () => {
+  it("attributes a Claude Code registration launched by Claude Desktop to the verified desktop host", () => {
+    const checks: string[] = [];
+    const kind = authorizeMcpConnectorHost("claude", {
+      requireParent(requirement) {
+        checks.push(`parent:${requirement}`);
+      },
+      requireParentAndGrandparent(parent, grandparent) {
+        checks.push(`chain:${parent}:${grandparent}`);
+      },
+    });
+
+    expect(kind).toBe("claude-desktop");
+    expect(checks).toEqual([
+      `chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+    ]);
+  });
+
+  it("keeps a direct Claude Code process on the Claude Code identity", () => {
+    const checks: string[] = [];
+    const kind = authorizeMcpConnectorHost("claude", {
+      requireParent(requirement) {
+        checks.push(`parent:${requirement}`);
+      },
+      requireParentAndGrandparent(parent, grandparent) {
+        checks.push(`chain:${parent}:${grandparent}`);
+        throw new Error("Grandparent does not match Claude Desktop");
+      },
+    });
+
+    expect(kind).toBe("claude");
+    expect(checks).toEqual([
+      `chain:${MCP_HOST_CODE_POLICIES.claude.parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+      `parent:${MCP_HOST_CODE_POLICIES.claude.parent}`,
+    ]);
+  });
+
+  it("still requires the complete Claude Desktop chain for its own registration", () => {
+    const checks: string[] = [];
+    const kind = authorizeMcpConnectorHost("claude-desktop", {
+      requireParent(requirement) {
+        checks.push(`parent:${requirement}`);
+      },
+      requireParentAndGrandparent(parent, grandparent) {
+        checks.push(`chain:${parent}:${grandparent}`);
+      },
+    });
+
+    expect(kind).toBe("claude-desktop");
+    expect(checks).toEqual([
+      `chain:${MCP_HOST_CODE_POLICIES["claude-desktop"].parent}:` +
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+    ]);
+  });
+
   it("turns a revoked development key failure into connector-level recovery guidance", async () => {
     const memory = new DeferredVaultBrokerMemoryClient(
       () => {

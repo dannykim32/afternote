@@ -323,6 +323,16 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain(
       'Connect from Terminal with `afternote codex install` or `afternote claude-code install`.',
     );
+    const connectorRow = nativeAppSource.slice(
+      nativeAppSource.indexOf("- (NSView *)connectorRowForCommandKind:"),
+      nativeAppSource.indexOf("- (void)renderConnections"),
+    );
+    expect(connectorRow).not.toContain(
+      "} else if (commandKind.length > 0) {\n    NSButton *setup",
+    );
+    expect(connectorRow.indexOf("NSButton *setup")).toBeLessThan(
+      connectorRow.indexOf("if (connected)"),
+    );
   });
 
   it("refreshes connector status and share-safe activity without owner presence", () => {

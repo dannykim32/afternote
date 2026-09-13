@@ -260,7 +260,7 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
 }
 
 export async function runBrokerMcpAdapter(
-  kind: McpBrokerClientKind,
+  requestedKind: McpBrokerClientKind,
   options?: {
     service?: string;
     clientStatePath?: string;
@@ -269,16 +269,11 @@ export async function runBrokerMcpAdapter(
     hostCodeRequirement?: string;
   },
 ): Promise<void> {
-  const policy = MCP_HOST_CODE_POLICIES[kind];
-  const parentRequirement = options?.hostCodeRequirement ?? policy.parent;
-  if (kind === "claude-desktop") {
-    requireParentAndGrandparentCodeSigningRequirements(
-      parentRequirement,
-      MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
-    );
-  } else {
-    requireParentCodeSigningRequirement(parentRequirement);
-  }
+  const kind = authorizeMcpConnectorHost(
+    requestedKind,
+    undefined,
+    options?.hostCodeRequirement,
+  );
   const memory = new DeferredVaultBrokerMemoryClient(
     () => VaultBrokerMemoryClient.activate(kind, options),
     { connectorKind: kind, trace: acceptanceTraceSink() },
@@ -291,6 +286,51 @@ export async function runBrokerMcpAdapter(
       console.error("Afternote Local MCP error:", error);
     },
   });
+}
+
+type McpConnectorHostAuthorization = {
+  requireParent(requirement: string): void;
+  requireParentAndGrandparent(
+    parentRequirement: string,
+    grandparentRequirement: string,
+  ): void;
+};
+
+const nativeMcpConnectorHostAuthorization: McpConnectorHostAuthorization = {
+  requireParent: requireParentCodeSigningRequirement,
+  requireParentAndGrandparent:
+    requireParentAndGrandparentCodeSigningRequirements,
+};
+
+export function authorizeMcpConnectorHost(
+  requestedKind: McpBrokerClientKind,
+  authorization: McpConnectorHostAuthorization =
+    nativeMcpConnectorHostAuthorization,
+  parentRequirementOverride?: string,
+): McpBrokerClientKind {
+  const requestedPolicy = MCP_HOST_CODE_POLICIES[requestedKind];
+  const parentRequirement = parentRequirementOverride ?? requestedPolicy.parent;
+  if (requestedKind === "claude") {
+    try {
+      authorization.requireParentAndGrandparent(
+        parentRequirement,
+        MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+      );
+      return "claude-desktop";
+    } catch {
+      authorization.requireParent(parentRequirement);
+      return "claude";
+    }
+  }
+  if (requestedKind === "claude-desktop") {
+    authorization.requireParentAndGrandparent(
+      parentRequirement,
+      MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+    );
+    return "claude-desktop";
+  }
+  authorization.requireParent(parentRequirement);
+  return requestedKind;
 }
 
 function connectorSourceApplication(kind: McpBrokerClientKind): string {

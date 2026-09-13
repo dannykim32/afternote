@@ -6,13 +6,27 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.21 - 2026-09-13
+
+### Fixed
+
+- Claude Desktop activity is attributed to Claude Desktop even when its tool selector invokes
+  the user-scoped Claude Code MCP registration. Afternote now resolves the effective connector
+  from the verified signed process chain instead of trusting the registration argument alone.
+- A repairable connector now keeps its **Repair Afternote** action visible when an older broker
+  connection still has active authority; revocation remains available as a separate action.
+
+### Security
+
+- Cross-surface Claude attribution, connector identity, authorization, audit events, and source
+  metadata are bound to the authenticated host process rather than the host-selected MCP name.
+
 ## 2.0.0-alpha.20 - 2026-09-13
 
 ### Fixed
 
-- Claude Code now uses the distinct `afternote-claude-code` MCP registration name. This
-  prevents Claude Desktop's `afternote` extension from colliding with the Claude Code entry
-  and silently recording Desktop activity under Claude Code.
+- Claude Code now uses the distinct `afternote-claude-code` MCP registration name so it no
+  longer collides with Claude Desktop's `afternote` extension registration.
 - Existing Afternote-owned Claude Code registrations named `afternote` are detected as a
   repairable legacy configuration and migrated transactionally without touching unrelated
   MCP servers.

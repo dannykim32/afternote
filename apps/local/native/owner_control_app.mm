@@ -5917,6 +5917,12 @@ doCommandBySelector:(SEL)commandSelector {
   [connectionViews addObjectsFromArray:@[
     connectionLabel, connectionValue, connectionCopy
   ]];
+  if (commandKind.length > 0) {
+    NSButton *setup = [self integrationActionForKind:commandKind
+                                          displayName:displayName
+                                        presentation:presentation];
+    if (setup != nil) [connectionViews addObject:setup];
+  }
   if (connected) {
     NSArray *scopes = overview != nil
         ? overview.activeScopes : ArrayValue(current[@"activeScopes"]);
@@ -5932,11 +5938,6 @@ doCommandBySelector:(SEL)commandSelector {
     revoke.identifier = brokerKind;
     revoke.accessibilityLabel = [NSString stringWithFormat:@"Revoke %@ access", displayName];
     [connectionViews addObject:revoke];
-  } else if (commandKind.length > 0) {
-    NSButton *setup = [self integrationActionForKind:commandKind
-                                          displayName:displayName
-                                        presentation:presentation];
-    if (setup != nil) [connectionViews addObject:setup];
   }
 
   NSTextField *heading = [self label:displayName size:16 weight:NSFontWeightSemibold];
