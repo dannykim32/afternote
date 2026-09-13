@@ -91,6 +91,27 @@ describeMacos("native integration command runner", () => {
     });
   });
 
+  it("keeps Connections centered and aligned across window sizes and connector states", () => {
+    const smoke = Bun.spawnSync([runner, "--connections-layout-smoke"], {
+      stdout: "pipe", stderr: "pipe",
+    });
+    expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
+    expect(smoke.stderr.toString()).not.toContain("Unable to simultaneously satisfy constraints");
+    const layouts = JSON.parse(smoke.stdout.toString()) as Array<Record<string, unknown>>;
+    expect(layouts.map(({ name }) => name)).toEqual([
+      "minimum", "regular", "wide", "history-legacy-scrollbar", "setup",
+    ]);
+    for (const layout of layouts) {
+      expect(layout, String(layout.name)).toMatchObject({
+        centered: true, columnsAligned: true, refreshAligned: true,
+        gutters: true, textFits: true, noOverlap: true,
+        actionsReachable: true, scrollFits: true, factSpacing: true, requestedSize: true,
+        fillsAvailableWidth: true,
+      });
+      expect(Number(layout.columnWidth)).toBeLessThanOrEqual(920);
+    }
+  });
+
   it("rejects malformed JSON and reports bounded command failures", () => {
     const malformed = writeCommand(
       "malformed",

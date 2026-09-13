@@ -40,6 +40,10 @@ constexpr CGFloat kAskIconSize = 15;
 constexpr CGFloat kAskFieldHeight = 20;
 constexpr CGFloat kAskFieldMaximumHeight = 62;
 constexpr CGFloat kAskSubmitButtonSize = 28;
+constexpr CGFloat kConnectionsMaximumWidth = 920;
+constexpr CGFloat kConnectionsPageGutter = 32;
+constexpr CGFloat kConnectionActionsWidth = 280;
+constexpr CGFloat kConnectionColumnGap = 32;
 typedef NS_ENUM(NSInteger, AfternoteLibraryMode) {
   AfternoteLibraryModeWrite = 0,
   AfternoteLibraryModeAsk = 1,
@@ -2136,14 +2140,24 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.authenticateButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
   self.authenticateButton.accessibilityLabel = @"Refresh connections";
 
+  NSStackView *headingRow = [NSStackView stackViewWithViews:@[
+    title, [NSView new], self.authenticateButton
+  ]];
+  headingRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  headingRow.alignment = NSLayoutAttributeCenterY;
+  headingRow.spacing = 16;
+  headingRow.identifier = @"ConnectionsHeading";
+  [title setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                 forOrientation:NSLayoutConstraintOrientationHorizontal];
+
   NSStackView *statusRow = [NSStackView stackViewWithViews:@[
-    self.progress, self.statusLabel, [NSView new], self.authenticateButton
+    self.progress, self.statusLabel
   ]];
   statusRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   statusRow.spacing = 10;
   statusRow.alignment = NSLayoutAttributeCenterY;
-  statusRow.edgeInsets = NSEdgeInsetsMake(10, 12, 10, 12);
-  StyleSurface(statusRow, AfternoteSurfaceColor(), 8);
+  [self.statusLabel setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                            forOrientation:NSLayoutConstraintOrientationHorizontal];
 
   self.content = [FlippedStackView stackViewWithViews:@[]];
   self.content.orientation = NSUserInterfaceLayoutOrientationVertical;
@@ -2155,27 +2169,38 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   scroll.hasVerticalScroller = YES;
   scroll.drawsBackground = NO;
   scroll.documentView = self.content;
+  scroll.autohidesScrollers = YES;
+  scroll.identifier = @"ConnectionsScroll";
 
   NSStackView *layout = [NSStackView stackViewWithViews:@[
-    title, subtitle, statusRow, scroll
+    headingRow, subtitle, statusRow, scroll
   ]];
   layout.orientation = NSUserInterfaceLayoutOrientationVertical;
   layout.alignment = NSLayoutAttributeLeading;
   layout.spacing = 12;
   layout.translatesAutoresizingMaskIntoConstraints = NO;
-  NSLayoutConstraint *preferredConnectionsWidth = [layout.widthAnchor constraintEqualToConstant:920];
-  preferredConnectionsWidth.priority = NSLayoutPriorityDefaultHigh;
-  preferredConnectionsWidth.active = YES;
+  layout.identifier = @"ConnectionsColumn";
   [root addSubview:layout];
+  NSLayoutConstraint *preferredConnectionsWidth =
+      [layout.widthAnchor constraintEqualToAnchor:root.widthAnchor
+                                        constant:-2 * kConnectionsPageGutter];
+  // Fill the available width without resizing the user's window to satisfy it.
+  preferredConnectionsWidth.priority = NSLayoutPriorityWindowSizeStayPut - 1;
+  preferredConnectionsWidth.active = YES;
   [NSLayoutConstraint activateConstraints:@[
-    [layout.leadingAnchor constraintEqualToAnchor:root.leadingAnchor constant:32],
-    [layout.trailingAnchor constraintLessThanOrEqualToAnchor:root.trailingAnchor constant:-32],
+    [layout.centerXAnchor constraintEqualToAnchor:root.centerXAnchor],
+    [layout.leadingAnchor constraintGreaterThanOrEqualToAnchor:root.leadingAnchor constant:kConnectionsPageGutter],
+    [layout.trailingAnchor constraintLessThanOrEqualToAnchor:root.trailingAnchor constant:-kConnectionsPageGutter],
     [layout.topAnchor constraintEqualToAnchor:root.topAnchor constant:30],
     [layout.bottomAnchor constraintEqualToAnchor:root.bottomAnchor constant:-16],
-    [layout.widthAnchor constraintLessThanOrEqualToConstant:920],
-    [statusRow.widthAnchor constraintEqualToAnchor:layout.widthAnchor],
+    [layout.widthAnchor constraintLessThanOrEqualToConstant:kConnectionsMaximumWidth],
+    // Use the viewport's width so header actions align with row dividers even
+    // when macOS is configured to reserve space for an always-visible scrollbar.
+    [headingRow.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
+    [subtitle.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
+    [statusRow.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
     [scroll.widthAnchor constraintEqualToAnchor:layout.widthAnchor],
-    [scroll.heightAnchor constraintGreaterThanOrEqualToConstant:420],
+    [scroll.heightAnchor constraintGreaterThanOrEqualToConstant:120],
     [self.content.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
   ]];
   return root;
@@ -5233,6 +5258,10 @@ doCommandBySelector:(SEL)commandSelector {
   fact.orientation = NSUserInterfaceLayoutOrientationVertical;
   fact.alignment = NSLayoutAttributeLeading;
   fact.spacing = 3;
+  [heading.widthAnchor constraintEqualToAnchor:fact.widthAnchor].active = YES;
+  [copy.widthAnchor constraintEqualToAnchor:fact.widthAnchor].active = YES;
+  [copy setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                forOrientation:NSLayoutConstraintOrientationHorizontal];
   return fact;
 }
 
@@ -5351,17 +5380,33 @@ doCommandBySelector:(SEL)commandSelector {
   facts.orientation = NSUserInterfaceLayoutOrientationVertical;
   facts.alignment = NSLayoutAttributeLeading;
   facts.spacing = 12;
+  [facts setHuggingPriority:NSLayoutPriorityRequired
+            forOrientation:NSLayoutConstraintOrientationVertical];
   NSStackView *currentConnection = [NSStackView stackViewWithViews:connectionViews];
   currentConnection.orientation = NSUserInterfaceLayoutOrientationVertical;
   currentConnection.alignment = NSLayoutAttributeLeading;
   currentConnection.spacing = 4;
-  [currentConnection.widthAnchor constraintGreaterThanOrEqualToConstant:210].active = YES;
+  currentConnection.identifier = @"ConnectionActions";
+  [currentConnection.widthAnchor constraintEqualToConstant:kConnectionActionsWidth].active = YES;
+  for (NSView *view in connectionViews) {
+    if ([view isKindOfClass:[NSTextField class]]) {
+      [view.widthAnchor constraintEqualToAnchor:currentConnection.widthAnchor].active = YES;
+      [view setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
+    }
+  }
+  facts.identifier = @"ConnectionFacts";
+  for (NSView *fact in facts.arrangedSubviews) {
+    [fact.widthAnchor constraintEqualToAnchor:facts.widthAnchor].active = YES;
+  }
   NSStackView *details = [NSStackView stackViewWithViews:@[
-    facts, [NSView new], currentConnection
+    facts, currentConnection
   ]];
   details.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   details.alignment = NSLayoutAttributeTop;
-  details.spacing = 24;
+  details.spacing = kConnectionColumnGap;
+  [facts.widthAnchor constraintEqualToAnchor:details.widthAnchor
+                                  constant:-(kConnectionActionsWidth + kConnectionColumnGap)].active = YES;
 
   NSMutableArray<NSView *> *rows = [NSMutableArray arrayWithObjects:header, state, details, nil];
   BOOL expanded = [self.expandedConnectorKinds containsObject:brokerKind];
@@ -5584,6 +5629,7 @@ doCommandBySelector:(SEL)commandSelector {
 
 
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+#include "owner_control_connections_layout_smoke.inc"
 @interface RevisionNavigationProbeDelegate : OwnerControlDelegate
 @property(nonatomic, copy) NSString *openedNoteId;
 @property(nonatomic, strong) NSNumber *openedRevision;
@@ -6838,6 +6884,12 @@ int RunDiagnosticContractSmoke(const char *path) {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
+#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "--connections-layout-smoke") == 0) {
+      return RunConnectionsLayoutSmoke(argc == 3
+          ? [NSString stringWithUTF8String:argv[2]] : nil);
+    }
+#endif
     if (argc >= 2 && strncmp(argv[1], "--admin-", strlen("--admin-")) == 0) {
       return RunAdminCommand(argc, argv);
     }
