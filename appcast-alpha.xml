@@ -7,6 +7,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Afternote</title>
         <item>
             <title>2.0.0</title>
+            <pubDate>Sun, 13 Sep 2026 16:24:42 -0600</pubDate>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.3</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## 2.0.0-alpha.22 - 2026-09-13
+
+### Fixed
+
+- Claude Desktop activity remains attributed to Claude Desktop when its tool selector routes
+  through the bundled Claude Code process and intervening signed `disclaimer` helper.
+- Claude Desktop bridge detection supports both verified two-level and three-level launch
+  layouts without depending on usernames, installation paths, process IDs, or Mac models.
+
+### Security
+
+- Cross-surface attribution now uses a bounded native ancestor-chain verifier. Every process in
+  an accepted layout must satisfy its exact Anthropic code-signing requirement, and the chain is
+  rechecked after validation to reject process changes during authorization.
+]]></description>
+            <enclosure url="https://github.com/dannykim32/afternote/releases/download/v2.0.0-alpha.22/afternote-local-2.0.0-alpha.22-darwin-arm64.dmg" length="72860994" type="application/octet-stream" sparkle:edSignature="x3nWKvqEbF0b0GrD0deFbpcVJ/1nUhvMqQf2LFiDECYMKKL/eQFQc7OlI2Yc31HydhKX1PSyVL1CUxr/3fK3Cw=="/>
+        </item>
+        <item>
+            <title>2.0.0</title>
             <pubDate>Sun, 13 Sep 2026 10:41:29 -0600</pubDate>
             <sparkle:version>17</sparkle:version>
             <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
@@ -77,6 +101,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: ZYTxgSbFetnaPB40/lBVwsWZne+oxDm5kVd3uqdchApPKJuAQ4DuYOWg5iAfXViLLQeOs58BZCPhGc0Ed9jEBg==
-length: 4715
+edSignature: dh1Jam3GBuWveUAUwRLA5yCMQ7EF2DoH71o8HuFh1J4gZmgEGPAFnhhBzKsbnTN20BMr7E3v2Yax/TYFxEyNDg==
+length: 6203
 -->
