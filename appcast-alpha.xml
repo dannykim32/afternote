@@ -7,6 +7,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Afternote</title>
         <item>
             <title>2.0.0</title>
+            <pubDate>Sun, 13 Sep 2026 10:41:29 -0600</pubDate>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.3</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## 2.0.0-alpha.17 - 2026-09-13
+
+### Fixed
+
+- Existing encrypted vaults remain readable across upgrades because the vault worker's
+  Keychain access group is now derived from its signed role rather than release-operator input.
+- Connections refreshes its share-safe saved and recalled counts whenever Afternote returns
+  to the foreground, including activity from Claude Desktop.
+
+### Security
+
+- Release construction rejects an operator-supplied vault Keychain group and inspects the
+  actual signed worker and client-signer entitlements before notarization.
+]]></description>
+            <enclosure url="https://github.com/dannykim32/afternote/releases/download/v2.0.0-alpha.17/afternote-local-2.0.0-alpha.17-darwin-arm64.dmg" length="72855576" type="application/octet-stream" sparkle:edSignature="8wFm+9Us2YWAbSlhUExnccDYSUC1Ltpkg5HpsPVe1uMnRGqDBgAOTYyjKtf69YBzqTpLre/hJloM5guXdBvNCw=="/>
+        </item>
+        <item>
+            <title>2.0.0</title>
             <pubDate>Sat, 12 Sep 2026 21:31:03 -0600</pubDate>
             <sparkle:version>15</sparkle:version>
             <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
@@ -54,6 +77,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: RxslM7OfgZTHwCGgt4u3GQWv8DNhjLrR3GMnsM+acYIGzBhCIFQkEKBHkEBxDO2bvE9e5GVIPqJCK4XuKOHxDA==
-length: 3355
+edSignature: ZYTxgSbFetnaPB40/lBVwsWZne+oxDm5kVd3uqdchApPKJuAQ4DuYOWg5iAfXViLLQeOs58BZCPhGc0Ed9jEBg==
+length: 4715
 -->
