@@ -6,6 +6,24 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.15 - 2026-09-12
+
+### Fixed
+
+- Codex, Claude Code, and Claude Desktop now share the configured routine-authentication
+  window across broker restarts. Locking the vault, changing the policy, or reaching the
+  configured expiry still requires fresh owner approval.
+- Connections refreshes without asking for Touch ID and reports durable saved and recalled
+  counts for every connector, including Claude Desktop.
+- Claude Desktop saves use broker-verified connector attribution instead of optional
+  model-supplied source metadata, preventing metadata failures or source spoofing.
+
+### Security
+
+- Persistent routine authorization stays inside the encrypted broker database. Newly signed,
+  paired connector processes receive fresh connection-bound least-privilege sessions; prior
+  process sessions remain invalid after a broker restart.
+
 ## 2.0.0-alpha.14 - 2026-09-12
 
 ### Added
