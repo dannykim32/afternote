@@ -86,6 +86,9 @@ describe("native owner administration production boundary", () => {
 
   it("validates broker responses in the native helper and never accepts note plaintext", () => {
     expect(nativeAppSource).toContain("IsAdminResult");
+    expect(nativeAppSource).toContain("IsDiagnosticConnectorActivity");
+    expect(nativeAppSource).toContain('@"connectorActivity"');
+    expect(nativeAppSource).toContain('![result[@"schemaVersion"] isEqual:@2]');
     expect(nativeAppSource).toContain("RunAdminCommand");
     expect(nativeAppSource).toContain('admin.export');
     expect(nativeAppSource).toContain('admin.diagnostics');

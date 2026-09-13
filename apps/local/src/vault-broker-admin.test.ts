@@ -353,7 +353,7 @@ describe("native owner administration broker protocol", () => {
   it("serves share-safe diagnostics only after fresh owner presence", async () => {
     const fixture = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 52201 };
-    await rememberFixture(fixture.worker, connection);
+    await rememberFixture(fixture.worker, connection, "Claude Desktop");
 
     const diagnostics = await ownerRequest(
       fixture.worker,
@@ -364,6 +364,7 @@ describe("native owner administration broker protocol", () => {
     );
     expect(diagnostics).toMatchObject({
       format: "afternote-diagnostics",
+      schemaVersion: 2,
       application: {
         version: "2.0.0-admin-test",
         standalone: true,
@@ -371,6 +372,30 @@ describe("native owner administration broker protocol", () => {
       },
       runtime: { status: "running", networkBoundary: "broker-only" },
       vault: { integrity: "ok", noteCountBucket: "1-9" },
+      connectorActivity: expect.arrayContaining([{
+        kind: "claude-desktop",
+        attributedNotesBucket: "1-9",
+        operations: {
+          remember: {
+            authorizedBucket: "0",
+            successBucket: "0",
+            deniedBucket: "0",
+            errorBucket: "0",
+          },
+          recall: {
+            authorizedBucket: "0",
+            successBucket: "0",
+            deniedBucket: "0",
+            errorBucket: "0",
+          },
+          getNote: {
+            authorizedBucket: "0",
+            successBucket: "0",
+            deniedBucket: "0",
+            errorBucket: "0",
+          },
+        },
+      }]),
     });
     expect(diagnostics).not.toHaveProperty("telemetry");
     const serializedDiagnostics = JSON.stringify(diagnostics);
@@ -495,6 +520,7 @@ async function pairMcpClient(
 async function rememberFixture(
   worker: VaultBrokerWorker,
   connection: { connectionId: string; peerPid: number },
+  application = "Admin test",
 ) {
   await ownerRequest(worker, connection, "library.session.begin", {
     requestedScopes: ["library.remember"],
@@ -502,7 +528,7 @@ async function rememberFixture(
   }, true);
   return ownerRequest(worker, connection, "library.remember", {
     content: "Broker-owned export canary",
-    source: { application: "Admin test", label: "Fixture" },
+    source: { application, label: "Fixture" },
   });
 }
 

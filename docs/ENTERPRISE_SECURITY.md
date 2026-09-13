@@ -104,8 +104,9 @@ the final DMG, and publishes only local output files for a separate human releas
 
 The broker writes no note content to standard output or standard error. Its encrypted audit ledger
 records bounded, redacted authorization and lifecycle events. Share-safe diagnostics expose coarse
-status, schema, integrity, count, and size buckets after owner authentication; they omit notes and
-queries.
+status, schema, integrity, count, size, connector-attribution, and connector-operation outcome
+buckets after owner authentication; they omit note text, note IDs, queries, local paths, and event
+timestamps.
 
 An incident responder can revoke connector grants, lock Afternote, remove the Codex and Claude Code
 connections, and uninstall the runtime. Screen lock, sleep, user-session resignation, manual lock,

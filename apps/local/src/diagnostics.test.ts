@@ -51,4 +51,46 @@ describe("share-safe diagnostics", () => {
       database.close();
     }
   });
+
+  it("buckets connector attribution and audit outcomes without exposing note data", () => {
+    const bundle = buildDiagnosticBundle({
+      applicationVersion: "test",
+      standalone: true,
+      apiVersion: 7,
+      vault: null,
+      connectorActivity: [{
+        kind: "claude-desktop",
+        attributedNoteCount: 2,
+        operations: {
+          remember: { authorized: 2, success: 0, denied: 0, error: 2 },
+          recall: { authorized: 1, success: 1, denied: 0, error: 0 },
+          getNote: { authorized: 0, success: 0, denied: 0, error: 0 },
+        },
+      }],
+    });
+
+    expect(bundle).toMatchObject({
+      schemaVersion: 2,
+      connectorActivity: [{
+        kind: "claude-desktop",
+        attributedNotesBucket: "1-9",
+        operations: {
+          remember: {
+            authorizedBucket: "1-9",
+            successBucket: "0",
+            deniedBucket: "0",
+            errorBucket: "1-9",
+          },
+          recall: {
+            authorizedBucket: "1-9",
+            successBucket: "1-9",
+            deniedBucket: "0",
+            errorBucket: "0",
+          },
+        },
+      }],
+    });
+    expect(JSON.stringify(bundle)).not.toContain("noteId");
+    expect(JSON.stringify(bundle)).not.toContain("content");
+  });
 });

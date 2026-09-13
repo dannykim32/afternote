@@ -826,6 +826,14 @@ describe("VaultBrokerAuthorization", () => {
         verifiedRoundTrip: true,
       })],
     });
+    expect(fixture.broker.connectorAuditDiagnostics("development-only"))
+      .toEqual(expect.arrayContaining([expect.objectContaining({
+        kind: "claude-desktop",
+        operations: expect.objectContaining({
+          remember: expect.objectContaining({ success: 5_000 }),
+          recall: expect.objectContaining({ success: 5_000 }),
+        }),
+      })]));
     expect(elapsedMs).toBeLessThan(1_000);
   });
 

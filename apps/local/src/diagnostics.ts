@@ -15,6 +15,21 @@ export type VaultDiagnosticSnapshot = {
 
 type CountBucket = "0" | "1-9" | "10-99" | "100-999" | "1000+";
 type ByteBucket = "under-1-mib" | "1-9-mib" | "10-99-mib" | "100-mib-plus";
+type DiagnosticOperationCounts = {
+  authorized: number;
+  success: number;
+  denied: number;
+  error: number;
+};
+export type ConnectorActivityDiagnosticSnapshot = {
+  kind: "codex" | "claude" | "claude-desktop";
+  attributedNoteCount: number;
+  operations: {
+    remember: DiagnosticOperationCounts;
+    recall: DiagnosticOperationCounts;
+    getNote: DiagnosticOperationCounts;
+  };
+};
 export type DiagnosticErrorCode =
   | "runtime.unavailable"
   | "vault.unavailable"
@@ -28,13 +43,14 @@ export function buildDiagnosticBundle(input: {
   runtimeStatus?: "running" | "stopped" | "unavailable";
   networkBoundary?: "loopback-only" | "broker-only";
   vault: VaultDiagnosticSnapshot | null;
+  connectorActivity?: ConnectorActivityDiagnosticSnapshot[];
   errors?: DiagnosticErrorCode[];
 }) {
   const runtimeStatus = input.runtimeStatus ?? "running";
   const errors = input.errors ?? [];
   return {
     format: "afternote-diagnostics",
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     application: {
       version: input.applicationVersion,
@@ -61,6 +77,15 @@ export function buildDiagnosticBundle(input: {
         ? byteBucket(input.vault.databaseBytes)
         : "unknown",
     },
+    connectorActivity: (input.connectorActivity ?? []).map((connector) => ({
+      kind: connector.kind,
+      attributedNotesBucket: countBucket(connector.attributedNoteCount),
+      operations: {
+        remember: bucketOperationCounts(connector.operations.remember),
+        recall: bucketOperationCounts(connector.operations.recall),
+        getNote: bucketOperationCounts(connector.operations.getNote),
+      },
+    })),
     checks: [
       {
         code: `runtime.${runtimeStatus}`,
@@ -77,6 +102,15 @@ export function buildDiagnosticBundle(input: {
       },
     ],
     errors: errors.map((code) => ({ code })),
+  } as const;
+}
+
+function bucketOperationCounts(counts: DiagnosticOperationCounts) {
+  return {
+    authorizedBucket: countBucket(counts.authorized),
+    successBucket: countBucket(counts.success),
+    deniedBucket: countBucket(counts.denied),
+    errorBucket: countBucket(counts.error),
   } as const;
 }
 

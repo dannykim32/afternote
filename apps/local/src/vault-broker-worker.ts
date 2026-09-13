@@ -2894,6 +2894,26 @@ export class VaultBrokerWorker {
               : "afternote-markdown-v1",
           });
         }
+        const memory = this.#localMemory();
+        const vault = this.#vaultContext();
+        const connectorDefinitions = [
+          { kind: "codex", application: "Codex" },
+          { kind: "claude", application: "Claude Code" },
+          { kind: "claude-desktop", application: "Claude Desktop" },
+        ] as const;
+        const attributedNotes = memory.sourceApplicationNoteCounts(
+          vault,
+          connectorDefinitions.map(({ application }) => application),
+        );
+        const connectorAudits = new Map(
+          this.#authority().connectorAuditDiagnostics(this.#trustPath)
+            .map((diagnostic) => [diagnostic.kind, diagnostic] as const),
+        );
+        const connectorActivity = connectorDefinitions.map(({ kind, application }) => ({
+          ...connectorAudits.get(kind)!,
+          kind,
+          attributedNoteCount: attributedNotes.get(application) ?? 0,
+        }));
         return success(pending.requestId, buildDiagnosticBundle({
           applicationVersion: this.#applicationVersion,
           standalone: this.#standalone,
@@ -2901,7 +2921,8 @@ export class VaultBrokerWorker {
           apiVersion: LOCAL_DIAGNOSTICS_API_VERSION,
           runtimeStatus: "running",
           networkBoundary: "broker-only",
-          vault: this.#localMemory().diagnosticSnapshot(this.#vaultContext()),
+          vault: memory.diagnosticSnapshot(vault),
+          connectorActivity,
         }));
       }
     );

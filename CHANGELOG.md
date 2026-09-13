@@ -6,6 +6,19 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.18 - 2026-09-13
+
+### Added
+
+- Share-safe diagnostics now compare coarse per-connector Note-attribution buckets with
+  Remember, Recall, and Get Note audit-outcome buckets. This makes activity-counter failures
+  diagnosable without exposing note text, note IDs, local paths, or event timestamps.
+
+### Security
+
+- Connector activity diagnostics remain behind fresh owner approval, cross the signed native
+  broker boundary, and are strictly validated before the CLI or app can display or save them.
+
 ## 2.0.0-alpha.17 - 2026-09-13
 
 ### Fixed

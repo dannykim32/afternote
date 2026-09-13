@@ -847,12 +847,42 @@ BOOL IsDiagnosticCheck(id value) {
   return NO;
 }
 
+BOOL IsDiagnosticCountBucket(id value) {
+  return IsOneOf(value, @[ @"0", @"1-9", @"10-99", @"100-999", @"1000+" ]);
+}
+
+BOOL IsDiagnosticOperationCounts(id value) {
+  if (![value isKindOfClass:[NSDictionary class]]) return NO;
+  NSDictionary *counts = value;
+  if (!ExactKeys(counts, @[
+        @"authorizedBucket", @"successBucket", @"deniedBucket", @"errorBucket"
+      ])) return NO;
+  return IsDiagnosticCountBucket(counts[@"authorizedBucket"]) &&
+      IsDiagnosticCountBucket(counts[@"successBucket"]) &&
+      IsDiagnosticCountBucket(counts[@"deniedBucket"]) &&
+      IsDiagnosticCountBucket(counts[@"errorBucket"]);
+}
+
+BOOL IsDiagnosticConnectorActivity(id value) {
+  if (![value isKindOfClass:[NSDictionary class]]) return NO;
+  NSDictionary *activity = value;
+  NSDictionary *operations = activity[@"operations"];
+  return ExactKeys(activity, @[ @"kind", @"attributedNotesBucket", @"operations" ]) &&
+      IsOneOf(activity[@"kind"], @[ @"codex", @"claude", @"claude-desktop" ]) &&
+      IsDiagnosticCountBucket(activity[@"attributedNotesBucket"]) &&
+      [operations isKindOfClass:[NSDictionary class]] &&
+      ExactKeys(operations, @[ @"remember", @"recall", @"getNote" ]) &&
+      IsDiagnosticOperationCounts(operations[@"remember"]) &&
+      IsDiagnosticOperationCounts(operations[@"recall"]) &&
+      IsDiagnosticOperationCounts(operations[@"getNote"]);
+}
+
 BOOL IsDiagnosticResult(NSDictionary *result) {
   if (!ExactKeys(result, @[
         @"format", @"schemaVersion", @"generatedAt", @"application", @"system",
-        @"runtime", @"vault", @"checks", @"errors"
+        @"runtime", @"vault", @"connectorActivity", @"checks", @"errors"
       ]) || ![result[@"format"] isEqual:@"afternote-diagnostics"] ||
-      ![result[@"schemaVersion"] isEqual:@1] || !IsDate(result[@"generatedAt"])) return NO;
+      ![result[@"schemaVersion"] isEqual:@2] || !IsDate(result[@"generatedAt"])) return NO;
   NSDictionary *application = result[@"application"];
   NSDictionary *system = result[@"system"];
   NSDictionary *runtime = result[@"runtime"];
@@ -881,6 +911,15 @@ BOOL IsDiagnosticResult(NSDictionary *result) {
       !IsOneOf(vault[@"databaseBytesBucket"], @[
         @"under-1-mib", @"1-9-mib", @"10-99-mib", @"100-mib-plus", @"unknown"
       ])) return NO;
+  NSArray *connectorActivity = result[@"connectorActivity"];
+  if (!IsArrayOf(connectorActivity, 3, ^BOOL(id item) {
+    return IsDiagnosticConnectorActivity(item);
+  }) || connectorActivity.count != 3) return NO;
+  NSMutableSet *connectorKinds = [NSMutableSet setWithCapacity:3];
+  for (NSDictionary *activity in connectorActivity) {
+    [connectorKinds addObject:activity[@"kind"]];
+  }
+  if (connectorKinds.count != 3) return NO;
   NSArray *checks = result[@"checks"];
   if (![checks isKindOfClass:[NSArray class]] || checks.count != 2 ||
       !IsArrayOf(checks, 2, ^BOOL(id item) { return IsDiagnosticCheck(item); })) return NO;

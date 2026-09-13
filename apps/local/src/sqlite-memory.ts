@@ -1467,6 +1467,38 @@ export class SqliteMemory implements Memory {
     return { schemaVersion, integrity, noteCount, revisionCount, databaseBytes };
   }
 
+  sourceApplicationNoteCounts(
+    vault: VaultContext,
+    applications: readonly string[],
+  ): ReadonlyMap<string, number> {
+    this.#assertVault(vault);
+    const requested = new Set(applications);
+    if (
+      requested.size !== applications.length ||
+      applications.some((application) =>
+        application.length === 0 ||
+        countCharacters(application) > MAX_SOURCE_APPLICATION_CHARACTERS
+      )
+    ) {
+      throw new MemoryError(
+        "invalid_input",
+        "Diagnostic source applications must be unique bounded strings",
+      );
+    }
+    return new Map(this.#database.query<{
+      application: string;
+      note_count: number;
+    }, []>(`
+      select json_extract(source_json, '$.application') as application,
+             count(*) as note_count
+      from notes
+      where json_type(source_json, '$.application') = 'text'
+      group by application
+    `).all()
+      .filter((row) => requested.has(row.application))
+      .map((row) => [row.application, row.note_count] as const));
+  }
+
   close(): void {
     if (this.#closed) return;
     this.#closed = true;

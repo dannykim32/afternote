@@ -9,6 +9,7 @@ import {
 } from "node:crypto";
 import type { MemoryCapability } from "@afternote/memory";
 import { MEMORY_CAPABILITIES } from "@afternote/memory";
+import type { ConnectorActivityDiagnosticSnapshot } from "./diagnostics";
 import { SqlcipherDatabase } from "./sqlcipher-database";
 import { canonicalBrokerTranscript } from "./vault-broker-canonical";
 export { canonicalBrokerTranscript } from "./vault-broker-canonical";
@@ -1736,6 +1737,56 @@ export class VaultBrokerAuthorization {
         };
       }),
     };
+  }
+
+  connectorAuditDiagnostics(
+    trust: OwnerTrustPath,
+  ): Array<Omit<ConnectorActivityDiagnosticSnapshot, "attributedNoteCount">> {
+    this.#assertOpen();
+    if (trust !== "production-signed" && trust !== "development-only") {
+      throw new Error("Owner trust path is invalid");
+    }
+    const auditCounts = this.#database.query<{
+      kind: "codex" | "claude" | "claude-desktop";
+      operation: "memory.remember" | "memory.recall" | "memory.get_note";
+      outcome: AuditOutcome;
+      event_count: number;
+    }, [string]>(`
+      select c.kind, e.operation, e.outcome, count(*) as event_count
+      from broker_clients c
+      join broker_audit_events e on e.client_id = c.id
+      where c.vault_id = ?
+        and c.kind in ('codex', 'claude', 'claude-desktop')
+        and e.operation in ('memory.remember', 'memory.recall', 'memory.get_note')
+      group by c.kind, e.operation, e.outcome
+    `).all(this.#vaultId);
+    const connectorKinds = ["codex", "claude", "claude-desktop"] as const;
+    return connectorKinds.map((kind) => {
+      const operationCounts = () => ({
+        authorized: 0,
+        success: 0,
+        denied: 0,
+        error: 0,
+      });
+      const operations = {
+        remember: operationCounts(),
+        recall: operationCounts(),
+        getNote: operationCounts(),
+      };
+      for (const row of auditCounts) {
+        if (row.kind !== kind) continue;
+        const operation = row.operation === "memory.remember"
+          ? operations.remember
+          : row.operation === "memory.recall"
+          ? operations.recall
+          : operations.getNote;
+        operation[row.outcome] = row.event_count;
+      }
+      return {
+        kind,
+        operations,
+      };
+    });
   }
 
   inspectAudit(input: { pageSize?: number; cursor?: string }): {
