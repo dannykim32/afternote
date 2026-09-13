@@ -2,8 +2,8 @@
 
 Local memory for Codex, Claude Code, and Claude Desktop on your Mac.
 
-Tell either tool to remember a decision, deadline, or useful piece of context. Ask for it
-later from either one. Afternote keeps the note, its revision history, and its source in an
+Tell a connected host to remember a decision, deadline, or useful piece of context. Ask for it
+later from any connected host. Afternote keeps the note, its revision history, and its source in an
 encrypted local vault you control.
 
 ![Afternote Notes showing a local semantic recall with synthetic data](docs/images/afternote-notes.png)
@@ -14,6 +14,13 @@ hosted service, customer data, deployment configuration, or release credentials.
 ## Try it
 
 Afternote is an early alpha for Apple Silicon Macs running macOS 13.3 or newer.
+
+Download the signed and notarized DMG and its `SHA256SUMS` from
+[GitHub Releases](https://github.com/dannykim32/afternote/releases), then follow
+[the verification and installation steps](docs/VERIFY_RELEASE.md).
+The installed app requires no Bun or Node installation.
+
+### Build from source
 
 You can build the current candidate from source with Bun 1.3.14:
 
@@ -39,11 +46,6 @@ Development and CI builds verify the pinned SQLCipher and OpenSSL source archive
 Apple toolchain that compiled them, and require a macOS 13.3 deployment target. Public release
 builds additionally require the exact reviewed Apple toolchain and byte-for-byte native output
 digests recorded in `scripts/native-release-inputs.json`.
-
-The signed and notarized DMG is published on the
-[GitHub Releases page](https://github.com/dannykim32/afternote/releases). Download the DMG
-and `SHA256SUMS` together, then follow [the verification steps](docs/VERIFY_RELEASE.md)
-before installing it.
 
 ## Remember and Recall
 
@@ -120,9 +122,10 @@ The project's domain language and module boundaries are documented in
   data-protection Keychain and is retrieved only by the signed private worker.
 - Connectors never open the database or receive its key. Their Remember and Recall grants
   are scoped, device-bound, auditable, and revocable.
-- Routine authentication defaults to one owner approval per day while Afternote remains
-  open. You can change it to four hours or fifteen minutes. Within that window, paired
-  connectors can open short-lived connections without another prompt.
+- Routine authentication defaults to one owner approval per day. You can change it to
+  four hours or fifteen minutes. Within that window, paired connectors can open short-lived
+  connections without another prompt. An approved work session can survive a broker restart;
+  manual vault lock, expiry, and policy changes require fresh approval.
 - Screen lock, sleep, logout, manual vault lock, and broker restart clear live authority.
   Export, deletion, recovery, lock, and unlock always require fresh owner approval.
 - Exact search, date-aware retrieval, and optional semantic inference run locally. The
@@ -168,6 +171,9 @@ bun run audit
 ```
 
 ## Contributing
+
+See the [current status and roadmap](docs/ROADMAP.md) for shipped features, open
+engineering work, and the next user-validation goals.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing storage, authorization, lifecycle,
 or connector code. Report vulnerabilities through the private process in
