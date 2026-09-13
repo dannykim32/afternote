@@ -6,6 +6,14 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.16 - 2026-09-12
+
+### Fixed
+
+- Connections now refreshes its share-safe saved and recalled counts whenever Afternote
+  returns to the foreground, so Claude Desktop activity appears without a manual refresh
+  or owner-authentication prompt.
+
 ## 2.0.0-alpha.15 - 2026-09-12
 
 ### Fixed
