@@ -1,6 +1,8 @@
 import {
+  CLIENT_SIGNER_IDENTIFIER,
   VAULT_BROKER_IDENTIFIER,
   clientSignerAccessGroup,
+  validatedAppleTeamId,
   vaultKeyAccessGroup,
 } from "../apps/local/src/vault-broker-metadata";
 
@@ -228,22 +230,44 @@ export function resolvedPeerRequirement(options: {
   return override ?? options.expected;
 }
 
-export function releaseEntitlements(
-  kind: "client" | "worker" | "client-signer",
-  options: { teamId: string; identifier: string },
-): string {
-  const accessGroup = kind === "worker"
-    ? vaultKeyAccessGroup(options.teamId)
-    : kind === "client-signer"
-      ? clientSignerAccessGroup(options.teamId)
-      : null;
+export type ReleaseSigningRole = "client" | "worker" | "client-signer";
+
+export function releaseSigningDescriptor(
+  role: ReleaseSigningRole,
+  teamId: string,
+): { teamId: string; identifier: string; accessGroup: string | null } {
+  const validatedTeamId = validatedAppleTeamId(teamId);
+  if (role === "worker") {
+    return {
+      teamId: validatedTeamId,
+      identifier: `${VAULT_BROKER_IDENTIFIER}.worker`,
+      accessGroup: vaultKeyAccessGroup(validatedTeamId),
+    };
+  }
+  if (role === "client-signer") {
+    return {
+      teamId: validatedTeamId,
+      identifier: CLIENT_SIGNER_IDENTIFIER,
+      accessGroup: clientSignerAccessGroup(validatedTeamId),
+    };
+  }
+  return {
+    teamId: validatedTeamId,
+    identifier: "dev.afternote.local",
+    accessGroup: null,
+  };
+}
+
+export function releaseEntitlements(role: ReleaseSigningRole, teamId: string): string {
+  const descriptor = releaseSigningDescriptor(role, teamId);
+  const accessGroup = descriptor.accessGroup;
   const keychainGroups = accessGroup
     ? `\n<key>keychain-access-groups</key><array><string>${accessGroup}</string></array>`
     : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>com.apple.application-identifier</key><string>${options.teamId}.${options.identifier}</string>${keychainGroups}
+<key>com.apple.application-identifier</key><string>${descriptor.teamId}.${descriptor.identifier}</string>${keychainGroups}
 </dict></plist>
 `;
 }

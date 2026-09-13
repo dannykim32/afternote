@@ -21,8 +21,7 @@ import {
   OWNER_CONTROL_IDENTIFIER,
   OWNER_CONTROL_MACH_SERVICE,
   VAULT_BROKER_IDENTIFIER,
-  clientSignerAccessGroup,
-  vaultKeyAccessGroup,
+  validatedAppleTeamId,
 } from "../apps/local/src/vault-broker-metadata";
 import { writeReleaseSupplyChainArtifacts } from "./release-supply-chain";
 import {
@@ -39,6 +38,7 @@ import {
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseEntitlements,
+  releaseSigningDescriptor,
   releaseVersionMetadata,
   releaseWorkerEntrypoint,
   renderPackagingText,
@@ -51,6 +51,7 @@ export {
   developmentOwnerPresenceBypass,
   desktopRuntimeEntries,
   releaseEntitlements,
+  releaseSigningDescriptor,
   releaseVersionMetadata,
   releaseWorkerEntrypoint,
   renderPackagingText,
@@ -548,7 +549,6 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
           outputDirectory,
           "client",
           signing,
-          "dev.afternote.local",
         )]
       : []),
     binaryPath,
@@ -630,17 +630,16 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
           outputDirectory,
           "client-signer",
           signing,
-          CLIENT_SIGNER_IDENTIFIER,
         )]
       : []),
     clientSignerAppPath,
   ]);
   if (signing.release) {
-    assertSignedReleaseEntitlements(clientSignerAppPath, {
-      teamId: signing.teamId!,
-      identifier: CLIENT_SIGNER_IDENTIFIER,
-      accessGroup: signing.clientAccessGroup!,
-    });
+    assertSignedReleaseEntitlements(
+      clientSignerAppPath,
+      "client-signer",
+      signing.teamId!,
+    );
   }
   if (includeSemanticRuntime) {
     for (const [name, destination] of [
@@ -707,17 +706,16 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
           outputDirectory,
           "worker",
           signing,
-          brokerWorkerIdentifier,
         )]
       : []),
     brokerWorkerAppPath,
   ]);
   if (signing.release) {
-    assertSignedReleaseEntitlements(brokerWorkerAppPath, {
-      teamId: signing.teamId!,
-      identifier: brokerWorkerIdentifier,
-      accessGroup: signing.accessGroup!,
-    });
+    assertSignedReleaseEntitlements(
+      brokerWorkerAppPath,
+      "worker",
+      signing.teamId!,
+    );
   }
   if (signing.release) {
     assertReleaseArtifactHygiene({
@@ -1336,17 +1334,16 @@ function signingConfiguration(): SigningConfiguration {
   }
   const identity = requiredReleaseEnvironment("AFTERNOTE_SIGNING_IDENTITY");
   const teamId = requiredReleaseEnvironment("AFTERNOTE_TEAM_ID");
-  if (!/^[A-Z0-9]{10}$/.test(teamId)) {
-    throw new Error("AFTERNOTE_TEAM_ID must be a ten-character Apple Team ID");
-  }
-  const accessGroup = vaultKeyAccessGroup(teamId);
+  const validatedTeamId = validatedAppleTeamId(teamId);
+  const worker = releaseSigningDescriptor("worker", validatedTeamId);
+  const clientSigner = releaseSigningDescriptor("client-signer", validatedTeamId);
   return {
     release: true,
     identity,
-    teamId,
-    accessGroup,
-    clientAccessGroup: clientSignerAccessGroup(teamId),
-    gatewayRequirement: signedRequirement(VAULT_BROKER_IDENTIFIER, teamId),
+    teamId: validatedTeamId,
+    accessGroup: worker.accessGroup!,
+    clientAccessGroup: clientSigner.accessGroup!,
+    gatewayRequirement: signedRequirement(VAULT_BROKER_IDENTIFIER, validatedTeamId),
   };
 }
 
@@ -1537,8 +1534,10 @@ function readPlutilData(path: string, keyPath: string): string {
 
 export function assertSignedReleaseEntitlements(
   path: string,
-  expected: { teamId: string; identifier: string; accessGroup: string },
+  role: "worker" | "client-signer",
+  teamId: string,
 ): void {
+  const expected = releaseSigningDescriptor(role, teamId);
   const result = Bun.spawnSync([
     "/usr/bin/codesign",
     "-d",
@@ -1653,13 +1652,9 @@ function writeSigningEntitlements(
   outputDirectory: string,
   kind: "client" | "worker" | "client-signer",
   signing: SigningConfiguration,
-  identifier: string,
 ): string {
   const path = join(outputDirectory, `.afternote-${kind}-entitlements.plist`);
-  writeFileSync(path, releaseEntitlements(kind, {
-    teamId: signing.teamId!,
-    identifier,
-  }), { mode: 0o600 });
+  writeFileSync(path, releaseEntitlements(kind, signing.teamId!), { mode: 0o600 });
   return path;
 }
 

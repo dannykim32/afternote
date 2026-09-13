@@ -49,7 +49,7 @@ describe("public release input controls", () => {
 <key>keychain-access-groups</key><array><string>486B2A8N8A.dev.afternote.client-key</string></array>
 </dict></plist>
 `);
-    const signed = Bun.spawnSync([
+    const signExecutable = () => Bun.spawnSync([
       "/usr/bin/codesign",
       "--force",
       "--sign",
@@ -58,33 +58,24 @@ describe("public release input controls", () => {
       entitlements,
       executable,
     ], { stdout: "pipe", stderr: "pipe" });
-    expect(signed.exitCode).toBe(0);
+    expect(signExecutable().exitCode).toBe(0);
 
-    expect(() => assertSignedReleaseEntitlements(executable, {
-      teamId: "486B2A8N8A",
-      identifier: "dev.afternote.vault-broker.worker",
-      accessGroup: "486B2A8N8A.dev.afternote.vault-key",
-    })).toThrow("Keychain access groups");
+    expect(() => assertSignedReleaseEntitlements(
+      executable,
+      "worker",
+      "486B2A8N8A",
+    )).toThrow("Keychain access groups");
 
     writeFileSync(
       entitlements,
       readFileSync(entitlements, "utf8").replace("client-key", "vault-key"),
     );
-    const corrected = Bun.spawnSync([
-      "/usr/bin/codesign",
-      "--force",
-      "--sign",
-      "-",
-      "--entitlements",
-      entitlements,
+    expect(signExecutable().exitCode).toBe(0);
+    expect(() => assertSignedReleaseEntitlements(
       executable,
-    ], { stdout: "pipe", stderr: "pipe" });
-    expect(corrected.exitCode).toBe(0);
-    expect(() => assertSignedReleaseEntitlements(executable, {
-      teamId: "486B2A8N8A",
-      identifier: "dev.afternote.vault-broker.worker",
-      accessGroup: "486B2A8N8A.dev.afternote.vault-key",
-    })).not.toThrow();
+      "worker",
+      "486B2A8N8A",
+    )).not.toThrow();
   });
 
   it("rejects ambient compiler and Bun configuration inputs", () => {

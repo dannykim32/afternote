@@ -6,16 +6,17 @@ export const CLIENT_SIGNER_APP_NAME = "AfternoteClientSigner.app";
 export const CLIENT_SIGNER_EXECUTABLE_NAME = "afternote-client-signer";
 export const VAULT_BROKER_PROTOCOL_VERSION = 1;
 
-export function vaultKeyAccessGroup(teamId: string): string {
+export function validatedAppleTeamId(teamId: string): string {
   if (!/^[A-Z0-9]{10}$/.test(teamId)) {
-    throw new Error("Vault key access requires a valid Apple Team ID");
+    throw new Error("Apple Team ID must contain ten uppercase letters or digits");
   }
-  return `${teamId}.dev.afternote.vault-key`;
+  return teamId;
+}
+
+export function vaultKeyAccessGroup(teamId: string): string {
+  return `${validatedAppleTeamId(teamId)}.dev.afternote.vault-key`;
 }
 
 export function clientSignerAccessGroup(teamId: string): string {
-  if (!/^[A-Z0-9]{10}$/.test(teamId)) {
-    throw new Error("Client signer requires a valid Apple Team ID");
-  }
-  return `${teamId}.dev.afternote.client-key`;
+  return `${validatedAppleTeamId(teamId)}.dev.afternote.client-key`;
 }
