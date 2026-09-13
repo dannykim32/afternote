@@ -6,13 +6,32 @@ during release review.
 
 ## Unreleased
 
-## 2.0.0-alpha.16 - 2026-09-12
+## 2.0.0-alpha.17 - 2026-09-13
+
+### Fixed
+
+- Existing encrypted vaults remain readable across upgrades because the vault worker's
+  Keychain access group is now derived from its signed role rather than release-operator input.
+- Connections refreshes its share-safe saved and recalled counts whenever Afternote returns
+  to the foreground, including activity from Claude Desktop.
+
+### Security
+
+- Release construction rejects an operator-supplied vault Keychain group and inspects the
+  actual signed worker and client-signer entitlements before notarization.
+
+## 2.0.0-alpha.16 - 2026-09-12 (withdrawn)
 
 ### Fixed
 
 - Connections now refreshes its share-safe saved and recalled counts whenever Afternote
   returns to the foreground, so Claude Desktop activity appears without a manual refresh
   or owner-authentication prompt.
+
+### Known issue
+
+- Withdrawn because the vault worker was signed with the client-signing Keychain access group,
+  preventing upgraded installations from reading their existing installation-bound vault key.
 
 ## 2.0.0-alpha.15 - 2026-09-12
 

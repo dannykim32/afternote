@@ -35,7 +35,7 @@ Confirm the release identity recorded in the bundle:
   /Volumes/Afternote/Afternote.app/Contents/Info.plist
 ```
 
-For alpha.16 these values are, in order, `2.0.0-alpha.16`, `2.0.0`, `16`, and `13.3`.
+For alpha.17 these values are, in order, `2.0.0-alpha.17`, `2.0.0`, `17`, and `13.3`.
 The first value is Afternote's full package version. The next two are Apple's required numeric
 marketing and build versions.
 
@@ -80,3 +80,17 @@ themselves prove that a binary was built from a particular source commit. The em
 release record states the maintainer build commit, Git tree, dependency tree, restricted build
 environment, toolchain, and native input digests. This is maintainer-signed provenance, not a
 third-party reproducible-build attestation.
+
+Confirm the two installation-bound Keychain roles did not cross during signing:
+
+```bash
+codesign -d --entitlements :- \
+  /Volumes/Afternote/Afternote.app/Contents/Resources/AfternoteRuntime/AfternoteVaultWorker.app \
+  2>/dev/null
+codesign -d --entitlements :- \
+  /Volumes/Afternote/Afternote.app/Contents/Resources/AfternoteRuntime/AfternoteClientSigner.app \
+  2>/dev/null
+```
+
+The worker must contain only `486B2A8N8A.dev.afternote.vault-key`; the client signer must
+contain only `486B2A8N8A.dev.afternote.client-key`.
