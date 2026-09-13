@@ -6,6 +6,22 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.20 - 2026-09-13
+
+### Fixed
+
+- Claude Code now uses the distinct `afternote-claude-code` MCP registration name. This
+  prevents Claude Desktop's `afternote` extension from colliding with the Claude Code entry
+  and silently recording Desktop activity under Claude Code.
+- Existing Afternote-owned Claude Code registrations named `afternote` are detected as a
+  repairable legacy configuration and migrated transactionally without touching unrelated
+  MCP servers.
+
+### Changed
+
+- Connector-bound MCP tools identify Codex, Claude Code, or Claude Desktop in their titles and
+  instructions so hosts can choose the connector matching the active surface.
+
 ## 2.0.0-alpha.19 - 2026-09-13
 
 ### Fixed

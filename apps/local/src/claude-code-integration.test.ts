@@ -205,8 +205,71 @@ describe("Claude Code integration actions", () => {
       runTool: (args) => commands.push([...args]),
     })).rejects.toThrow("did not retain a healthy");
     expect(commands).toEqual([
-      ["mcp", "add", "--scope", "user", "afternote", "--", afternote, "mcp", "--client", "claude"],
-      ["mcp", "remove", "--scope", "user", "afternote"],
+      ["mcp", "add", "--scope", "user", "afternote-claude-code", "--", afternote, "mcp", "--client", "claude"],
+      ["mcp", "remove", "--scope", "user", "afternote-claude-code"],
     ]);
+  });
+
+  it("migrates the overlapping afternote registration to a Claude Code-specific name", async () => {
+    const afternote = "/Applications/Afternote.app/Contents/MacOS/afternote";
+    const legacy = {
+      type: "stdio",
+      command: afternote,
+      args: ["mcp", "--client", "claude"],
+    };
+    const configured = {
+      type: "stdio",
+      command: afternote,
+      args: ["mcp", "--client", "claude"],
+    };
+    let current: typeof configured | null = null;
+    let overlapping: typeof legacy | null = legacy;
+    const commands: string[][] = [];
+
+    const status = await manageClaudeCodeIntegration("install", true, {
+      afternoteCommand: afternote,
+      toolCommand: "/verified/claude",
+      readServer: () => current,
+      readLegacyServer: () => overlapping,
+      probeIdentity: () => true,
+      probeRuntime: async () => true,
+      runTool: (args) => {
+        commands.push([...args]);
+        const name = args[4];
+        if (args[1] === "remove" && name === "afternote") overlapping = null;
+        if (args[1] === "add" && name === "afternote-claude-code") current = configured;
+      },
+    });
+
+    expect(status).toMatchObject({
+      healthy: true,
+      configHealthy: true,
+      changed: true,
+    });
+    expect(commands).toEqual([
+      ["mcp", "remove", "--scope", "user", "afternote"],
+      ["mcp", "add", "--scope", "user", "afternote-claude-code", "--", afternote, "mcp", "--client", "claude"],
+    ]);
+  });
+
+  it("preserves an unrelated overlapping registration for explicit review", async () => {
+    const status = await manageClaudeCodeIntegration("status", true, {
+      afternoteCommand: "/Applications/Afternote.app/Contents/MacOS/afternote",
+      toolCommand: "/verified/claude",
+      readServer: () => null,
+      readLegacyServer: () => ({
+        type: "stdio",
+        command: "/usr/local/bin/unrelated-afternote",
+        args: ["serve"],
+      }),
+    });
+
+    expect(status).toMatchObject({
+      installed: true,
+      healthy: false,
+      configHealthy: false,
+      repairable: false,
+      problemCode: "connector_conflict",
+    });
   });
 });

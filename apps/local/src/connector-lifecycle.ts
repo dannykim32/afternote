@@ -41,7 +41,7 @@ export interface ConnectorHostAdapter<Configuration, Status extends ConnectorLif
   existingConfigurationError(status: Status): string;
   installedConfigurationError(status: Status): string;
   add(): void;
-  remove(): void;
+  remove(configuration: Configuration): void;
   restore(previous: Configuration | null): void;
   identityIsHealthy(): Promise<boolean>;
 }
@@ -85,7 +85,7 @@ export async function manageConnectorLifecycle<
       throw new Error("Afternote client signing identity is unavailable");
     }
     try {
-      if (legacyOwned) adapter.remove();
+      if (legacyOwned && current) adapter.remove(current);
       adapter.add();
       const installed = await adapter.withRuntimeStatus(
         adapter.status(adapter.readConfiguration()),
@@ -110,7 +110,7 @@ export async function manageConnectorLifecycle<
   if (!current) return { ...classified, removed: false, backup: null };
   if (!classified.configHealthy) throw new Error(adapter.removalRefusedError);
   try {
-    adapter.remove();
+    adapter.remove(current);
     const removed = adapter.status(adapter.readConfiguration());
     if (removed.installed) throw new Error(adapter.stillInstalledError);
     return { ...removed, removed: true, backup: null };

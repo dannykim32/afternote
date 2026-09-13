@@ -171,7 +171,7 @@
             action:AfternoteConnectorActionReviewSetup
              badge:@"Needs attention"
               tone:@"error"
-           summary:[NSString stringWithFormat:@"%@ already has a different connector named Afternote.", displayName]
+           summary:[NSString stringWithFormat:@"%@ already has a different Afternote connector registration.", displayName]
    connectionTitle:@"Connector conflict"
   connectionDetail:@"Review the existing entry before changing it"];
   return view;

@@ -5444,7 +5444,7 @@ doCommandBySelector:(SEL)commandSelector {
   } else {
     alert.messageText = @"Existing connector needs review";
     alert.informativeText = [NSString stringWithFormat:
-        @"%@ already has an MCP connector named “afternote” that was not created by this Afternote installation. Afternote will not overwrite it. Remove or rename that entry in %@, then return here and check again.",
+        @"%@ already has an Afternote MCP connector that was not created by this installation. Afternote will not overwrite it. Remove or rename that entry in %@, then return here and check again.",
         displayName, displayName];
   }
   [alert addButtonWithTitle:@"Got it"];

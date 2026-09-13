@@ -278,6 +278,27 @@ describe("Afternote Local MCP", () => {
     }
   });
 
+  it("identifies the connector surface in tool metadata and server instructions", async () => {
+    const session = await openMcpClient(":memory:", undefined, "Claude Code");
+    try {
+      expect(session.client.getInstructions()).toContain(
+        "use this connector only from Claude Code",
+      );
+      const tools = await session.client.listTools();
+      expect(tools.tools.find((tool) => tool.name === "remember")?.title).toBe(
+        "Remember in Afternote (Claude Code)",
+      );
+      expect(tools.tools.find((tool) => tool.name === "recall")?.title).toBe(
+        "Recall from Afternote (Claude Code)",
+      );
+      expect(tools.tools.find((tool) => tool.name === "get_note")?.title).toBe(
+        "Get an Afternote note (Claude Code)",
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
   it("normalizes connector timestamps at the MCP boundary", async () => {
     const session = await openMcpClient(":memory:");
     try {

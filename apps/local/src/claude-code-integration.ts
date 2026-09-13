@@ -15,7 +15,8 @@ import {
   type ConnectorHostAdapter,
 } from "./connector-lifecycle";
 
-const CLAUDE_SERVER_NAME = "afternote";
+const CLAUDE_SERVER_NAME = "afternote-claude-code";
+const LEGACY_CLAUDE_SERVER_NAME = "afternote";
 
 export type ClaudeCodeIntegrationAction =
   | "install"
@@ -62,6 +63,7 @@ export type ClaudeCodeIntegrationDependencies = {
   afternoteCommand?: string;
   toolCommand?: string | null;
   readServer?: () => ClaudeCodeServer | null;
+  readLegacyServer?: () => ClaudeCodeServer | null;
   probeRuntime?: (command: string, args: readonly string[]) => Promise<boolean>;
   probeIdentity?: () => boolean | Promise<boolean>;
   runTool?: (args: readonly string[]) => void;
@@ -69,26 +71,31 @@ export type ClaudeCodeIntegrationDependencies = {
 
 export function createClaudeCodeConnectorAdapter(
   dependencies: ClaudeCodeIntegrationDependencies = {},
-): ConnectorHostAdapter<ClaudeCodeServer, ClaudeCodeIntegrationStatus> {
+): ConnectorHostAdapter<ClaudeCodeRegistrations, ClaudeCodeIntegrationStatus> {
   const afternoteCommand = dependencies.afternoteCommand ??
     installedAfternoteCommand();
   const toolCommand = dependencies.toolCommand === undefined
     ? resolveClaudeCodeCommand()
     : dependencies.toolCommand;
-  const readServer = dependencies.readServer ?? readClaudeCodeServer;
+  const readServer = dependencies.readServer ?? (() =>
+    readClaudeCodeServer(CLAUDE_SERVER_NAME));
+  const readLegacyServer = dependencies.readLegacyServer ??
+    (dependencies.readServer
+      ? () => null
+      : () => readClaudeCodeServer(LEGACY_CLAUDE_SERVER_NAME));
   const probeRuntime = dependencies.probeRuntime ?? probeMcpRuntime;
   const probeIdentity = dependencies.probeIdentity ?? (() => true);
   const runTool = dependencies.runTool ?? ((args: readonly string[]) => {
     if (!toolCommand) throw new Error("Claude Code CLI is unavailable");
     runClaude(toolCommand, [...args]);
   });
-  const readConfiguration = () => readServer();
-  const status = (server: ClaudeCodeServer | null) =>
-    classifyConfiguration(
-      configurationStatus(server, afternoteCommand),
-      server,
-      isOwnedLegacyClaudeCodeServer(server, afternoteCommand),
-    );
+  const readConfiguration = (): ClaudeCodeRegistrations | null => {
+    const current = readServer();
+    const legacy = readLegacyServer();
+    return current || legacy ? { current, legacy } : null;
+  };
+  const status = (registrations: ClaudeCodeRegistrations | null) =>
+    classifyRegistrations(registrations, afternoteCommand);
   return {
     displayName: "Claude Code",
     afternoteCommand,
@@ -96,7 +103,7 @@ export function createClaudeCodeConnectorAdapter(
     unavailableError:
       "Afternote requires the signed native Claude Code build; npm scripts and wrapper processes are not supported. Install Anthropic's native build, then try again.",
     conflictError:
-      "Claude Code already has a different MCP server named afternote; remove or rename it before installing",
+      "Claude Code has an Afternote MCP registration that this installation does not own; remove or rename it before installing",
     removalRefusedError:
       "Refusing to remove a Claude Code MCP server that is not owned by this Afternote installation",
     stillInstalledError:
@@ -122,8 +129,10 @@ export function createClaudeCodeConnectorAdapter(
     }),
     readConfiguration,
     status,
-    isOwnedLegacy: (server) =>
-      isOwnedLegacyClaudeCodeServer(server, afternoteCommand),
+    isOwnedLegacy: (registrations) =>
+      registrations !== null &&
+      classifyRegistrations(registrations, afternoteCommand).problemCode ===
+        "connector_legacy",
     withRuntimeStatus: (value) =>
       withRuntimeStatus(value, probeRuntime, probeIdentity),
     existingConfigurationError: () =>
@@ -142,16 +151,15 @@ export function createClaudeCodeConnectorAdapter(
       "--client",
       "claude",
     ]),
-    remove: () => runTool([
-      "mcp",
-      "remove",
-      "--scope",
-      "user",
-      CLAUDE_SERVER_NAME,
-    ]),
-    restore: (previous) => restoreClaudeCodeEntry(
+    remove: (registrations) => removeOwnedClaudeCodeEntries(
+      registrations,
+      afternoteCommand,
+      runTool,
+    ),
+    restore: (previous) => restoreClaudeCodeEntries(
       previous,
       readServer,
+      readLegacyServer,
       afternoteCommand,
       runTool,
     ),
@@ -239,6 +247,62 @@ export function isOwnedLegacyClaudeCodeServer(
     (server.env === undefined || Object.keys(server.env).length === 0);
 }
 
+function isOwnedClaudeCodeServer(
+  server: ClaudeCodeServer | null,
+  afternoteCommand: string,
+): boolean {
+  return isOwnedLegacyClaudeCodeServer(server, afternoteCommand) ||
+    server?.type === "stdio" &&
+      server.command === afternoteCommand &&
+      server.args?.length === 3 &&
+      server.args[0] === "mcp" &&
+      server.args[1] === "--client" &&
+      server.args[2] === "claude" &&
+      (server.env === undefined || Object.keys(server.env).length === 0);
+}
+
+type ClaudeCodeRegistrations = {
+  current: ClaudeCodeServer | null;
+  legacy: ClaudeCodeServer | null;
+};
+
+function classifyRegistrations(
+  registrations: ClaudeCodeRegistrations | null,
+  afternoteCommand: string,
+): ClaudeCodeIntegrationStatus {
+  if (!registrations) return classifyConfiguration(
+    configurationStatus(null, afternoteCommand),
+    null,
+    false,
+  );
+  const { current, legacy } = registrations;
+  const currentStatus = configurationStatus(current, afternoteCommand);
+  const currentOwned = isOwnedClaudeCodeServer(current, afternoteCommand);
+  const legacyOwned = isOwnedClaudeCodeServer(legacy, afternoteCommand);
+  if (
+    (current && !currentOwned) ||
+    (legacy && !legacyOwned)
+  ) {
+    return {
+      ...currentStatus,
+      installed: true,
+      configHealthy: false,
+      repairable: false,
+      problemCode: "connector_conflict",
+    };
+  }
+  if (legacy || (current && !currentStatus.configHealthy)) {
+    return {
+      ...currentStatus,
+      installed: true,
+      configHealthy: false,
+      repairable: true,
+      problemCode: "connector_legacy",
+    };
+  }
+  return classifyConfiguration(currentStatus, current, false);
+}
+
 function configurationStatus(
   server: ClaudeCodeServer | null,
   afternoteCommand: string,
@@ -315,7 +379,7 @@ async function withRuntimeStatus(
   };
 }
 
-function readClaudeCodeServer(): ClaudeCodeServer | null {
+function readClaudeCodeServer(serverName: string): ClaudeCodeServer | null {
   const path = claudeCodeConfigPath();
   if (!existsSync(path)) return null;
   let config: unknown;
@@ -329,7 +393,7 @@ function readClaudeCodeServer(): ClaudeCodeServer | null {
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     throw new Error("Claude Code configuration must be a JSON object");
   }
-  const server = (config as ClaudeCodeConfig).mcpServers?.[CLAUDE_SERVER_NAME];
+  const server = (config as ClaudeCodeConfig).mcpServers?.[serverName];
   if (server === undefined) return null;
   if (!server || typeof server !== "object" || Array.isArray(server)) {
     throw new Error("Claude Code Afternote MCP configuration is invalid");
@@ -341,46 +405,62 @@ function runClaude(claudeCommand: string, args: string[]): void {
   runIntegrationHostCommand("Claude Code", claudeCommand, args);
 }
 
-function restoreClaudeCodeEntry(
-  previous: ClaudeCodeServer | null,
-  readServer: () => ClaudeCodeServer | null,
+function removeOwnedClaudeCodeEntries(
+  registrations: ClaudeCodeRegistrations,
   afternoteCommand: string,
   runTool: (args: readonly string[]) => void,
 ): void {
-  const current = readServer();
-  if (JSON.stringify(current) === JSON.stringify(previous)) return;
-  if (
-    current &&
-    !configurationStatus(current, afternoteCommand).configHealthy &&
-    !isOwnedLegacyClaudeCodeServer(current, afternoteCommand)
-  ) {
-    throw new Error(
-      "Claude Code configuration changed concurrently; the unrelated entry was preserved",
-    );
+  for (const [name, server] of [
+    [LEGACY_CLAUDE_SERVER_NAME, registrations.legacy],
+    [CLAUDE_SERVER_NAME, registrations.current],
+  ] as const) {
+    if (!server) continue;
+    if (!isOwnedClaudeCodeServer(server, afternoteCommand)) {
+      throw new Error("Refusing to remove an unowned Claude Code MCP server");
+    }
+    runTool(["mcp", "remove", "--scope", "user", name]);
   }
-  if (current) {
+}
+
+function restoreClaudeCodeEntries(
+  previous: ClaudeCodeRegistrations | null,
+  readServer: () => ClaudeCodeServer | null,
+  readLegacyServer: () => ClaudeCodeServer | null,
+  afternoteCommand: string,
+  runTool: (args: readonly string[]) => void,
+): void {
+  const current: ClaudeCodeRegistrations = {
+    current: readServer(),
+    legacy: readLegacyServer(),
+  };
+  for (const [name, present, expected] of [
+    [CLAUDE_SERVER_NAME, current.current, previous?.current ?? null],
+    [LEGACY_CLAUDE_SERVER_NAME, current.legacy, previous?.legacy ?? null],
+  ] as const) {
+    if (JSON.stringify(present) === JSON.stringify(expected)) continue;
+    if (present && !isOwnedClaudeCodeServer(present, afternoteCommand)) {
+      throw new Error(
+        "Claude Code configuration changed concurrently; the unrelated entry was preserved",
+      );
+    }
+    if (present) {
+      runTool(["mcp", "remove", "--scope", "user", name]);
+    }
+    if (!expected) continue;
+    if (!expected.command || !Array.isArray(expected.args)) {
+      throw new Error("The previous Claude Code Afternote entry cannot be restored safely");
+    }
     runTool([
       "mcp",
-      "remove",
+      "add",
       "--scope",
       "user",
-      CLAUDE_SERVER_NAME,
+      name,
+      "--",
+      expected.command,
+      ...expected.args,
     ]);
   }
-  if (!previous) return;
-  if (!previous.command || !Array.isArray(previous.args)) {
-    throw new Error("The previous Claude Code Afternote entry cannot be restored safely");
-  }
-  runTool([
-    "mcp",
-    "add",
-    "--scope",
-    "user",
-    CLAUDE_SERVER_NAME,
-    "--",
-    previous.command,
-    ...previous.args,
-  ]);
 }
 
 function claudeCodeConfigPath(): string {
