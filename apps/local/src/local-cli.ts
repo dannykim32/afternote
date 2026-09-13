@@ -11,9 +11,9 @@ import {
   parseClaudeCodeIntegrationAction,
 } from "./claude-code-integration";
 import {
-  manageClaudeDesktopIntegration,
-  parseClaudeDesktopIntegrationAction,
-} from "./claude-desktop-integration";
+  manageClaudeDesktopConnector,
+  parseClaudeDesktopConnectorAction,
+} from "./claude-desktop-connector";
 import { writeExclusivePrivateFile } from "./exclusive-export";
 import { runRecallEvaluation } from "./recall-eval";
 import { runOrganizationEvaluation } from "./organization-eval";
@@ -181,7 +181,7 @@ export async function runLocalCli(
       return;
     }
     case "claude-desktop": {
-      const action = parseClaudeDesktopIntegrationAction(args[1]);
+      const action = parseClaudeDesktopConnectorAction(args[1]);
       if (action === "rotate-identity") {
         console.log(JSON.stringify(
           await rotateInstalledMcpClientIdentity("claude-desktop"),
@@ -196,7 +196,7 @@ export async function runLocalCli(
       const identity = action === "install" && isReleaseArtifact()
         ? await ensureInstalledMcpClientIdentity("claude-desktop")
         : undefined;
-      const integration = await manageClaudeDesktopIntegration(
+      const connector = await manageClaudeDesktopConnector(
         action,
         isStandaloneArtifact,
         {
@@ -207,7 +207,7 @@ export async function runLocalCli(
       );
       console.log(
         JSON.stringify(
-          { ...integration, ...(identity ? { identity } : {}) },
+          { ...connector, ...(identity ? { identity } : {}) },
           null,
           2,
         ),
@@ -693,8 +693,8 @@ ${recallHelp}
                        Configure and validate the Codex MCP integration
   claude-code install|status|remove|rotate-identity
                        Configure and validate the Claude Code MCP integration
-  claude-desktop install|status|remove|rotate-identity
-                       Configure and validate the Claude Desktop MCP integration
+  claude-desktop install|status|rotate-identity
+                       Configure and validate the Claude Desktop MCP connector
   version             Print the artifact version
 
 Exports contain plaintext note content and source metadata. Markdown is not a restore format. Diagnostics use coarse allowlisted fields. Existing files and vaults are never overwritten.`);

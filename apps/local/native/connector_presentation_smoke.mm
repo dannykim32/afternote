@@ -25,7 +25,13 @@ NSDictionary *Summary(
 int main(void) {
   @autoreleasepool {
     NSArray *cases = @[
-      Summary(@"connected-even-if-status-refreshes", @{ @"uiState" : @"checking" }, YES, NO),
+      Summary(@"connected-and-healthy", @{
+        @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @YES,
+      }, YES, NO),
+      Summary(@"connected-but-disabled", @{
+        @"toolAvailable" : @YES, @"installed" : @YES, @"healthy" : @NO,
+        @"repairable" : @YES, @"problemCode" : @"connector_disabled",
+      }, YES, NO),
       Summary(@"tool-missing", @{
         @"toolAvailable" : @NO, @"installed" : @NO, @"healthy" : @NO,
       }, NO, YES),

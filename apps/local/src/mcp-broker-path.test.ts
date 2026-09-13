@@ -35,8 +35,20 @@ describe("production MCP broker path", () => {
     expect(productionPath).not.toContain("LocalRuntimeMemoryClient");
     expect(readFileSync(join(sourceDirectory, "mcp-broker-adapter.ts"), "utf8"))
       .not.toContain("SqliteMemory");
-    expect(readFileSync(join(sourceDirectory, "mcp-broker-adapter.ts"), "utf8"))
-      .toContain("requireParentCodeSigningRequirement");
+    const adapter = readFileSync(
+      join(sourceDirectory, "mcp-broker-adapter.ts"),
+      "utf8",
+    );
+    expect(adapter).toContain("requireParentCodeSigningRequirement");
+    expect(adapter)
+      .toContain("requireParentAndGrandparentCodeSigningRequirements");
+    const nativeAddon = readFileSync(
+      join(sourceDirectory, "../native/sqlcipher_addon.cc"),
+      "utf8",
+    );
+    expect(nativeAddon).toContain("ParentProcessIdentifier");
+    expect(nativeAddon)
+      .toContain("Grandparent process does not satisfy the required code signature");
   });
 
   it("rejects generic MCP invocation before creating legacy runtime authority", () => {

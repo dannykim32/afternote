@@ -29,11 +29,18 @@ import {
   type McpBrokerClientKind,
 } from "./vault-broker-client";
 import {
+  requireParentAndGrandparentCodeSigningRequirements,
   requireParentCodeSigningRequirement,
   type DurableClientSigner,
 } from "./sqlcipher-database";
-import { MCP_HOST_CODE_REQUIREMENTS } from "./integration-host-policy";
-export { MCP_HOST_CODE_REQUIREMENTS } from "./integration-host-policy";
+import {
+  MCP_HOST_CODE_POLICIES,
+  MCP_HOST_CODE_REQUIREMENTS,
+} from "./integration-host-policy";
+export {
+  MCP_HOST_CODE_POLICIES,
+  MCP_HOST_CODE_REQUIREMENTS,
+} from "./integration-host-policy";
 
 declare const AFTERNOTE_ACCEPTANCE_TRACE: boolean | undefined;
 
@@ -262,9 +269,16 @@ export async function runBrokerMcpAdapter(
     hostCodeRequirement?: string;
   },
 ): Promise<void> {
-  requireParentCodeSigningRequirement(
-    options?.hostCodeRequirement ?? MCP_HOST_CODE_REQUIREMENTS[kind],
-  );
+  const policy = MCP_HOST_CODE_POLICIES[kind];
+  const parentRequirement = options?.hostCodeRequirement ?? policy.parent;
+  if (kind === "claude-desktop") {
+    requireParentAndGrandparentCodeSigningRequirements(
+      parentRequirement,
+      MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent,
+    );
+  } else {
+    requireParentCodeSigningRequirement(parentRequirement);
+  }
   const memory = new DeferredVaultBrokerMemoryClient(
     () => VaultBrokerMemoryClient.activate(kind, options),
     { connectorKind: kind, trace: acceptanceTraceSink() },

@@ -14,10 +14,10 @@ import { afterEach, describe, expect, it } from "bun:test";
 import {
   CLAUDE_DESKTOP_EXTENSION_ID,
   createClaudeDesktopPackage,
-  manageClaudeDesktopIntegration,
-  parseClaudeDesktopIntegrationAction,
+  manageClaudeDesktopConnector,
+  parseClaudeDesktopConnectorAction,
   resolveClaudeDesktopApplication,
-} from "./claude-desktop-integration";
+} from "./claude-desktop-connector";
 
 const temporaryDirectories: string[] = [];
 
@@ -27,34 +27,78 @@ afterEach(() => {
   }
 });
 
-describe("Claude Desktop integration", () => {
+describe("Claude Desktop connector", () => {
   it("accepts only the explicit lifecycle actions", () => {
-    expect(parseClaudeDesktopIntegrationAction("install")).toBe("install");
-    expect(parseClaudeDesktopIntegrationAction("status")).toBe("status");
-    expect(parseClaudeDesktopIntegrationAction("remove")).toBe("remove");
-    expect(parseClaudeDesktopIntegrationAction("rotate-identity"))
+    expect(parseClaudeDesktopConnectorAction("install")).toBe("install");
+    expect(parseClaudeDesktopConnectorAction("status")).toBe("status");
+    expect(parseClaudeDesktopConnectorAction("rotate-identity"))
       .toBe("rotate-identity");
-    expect(() => parseClaudeDesktopIntegrationAction("enable"))
-      .toThrow("install, status, remove, or rotate-identity");
+    expect(() => parseClaudeDesktopConnectorAction("enable"))
+      .toThrow("install, status, or rotate-identity");
   });
 
   it("resolves only a publisher-verified Claude application", () => {
     const root = fixtureRoot();
     const application = join(root, "Claude.app");
     const executable = join(application, "Contents", "MacOS", "Claude");
+    const launcher = join(application, "Contents", "Helpers", "disclaimer");
     mkdirSync(join(application, "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(application, "Contents", "Helpers"), { recursive: true });
     writeFileSync(executable, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(launcher, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     chmodSync(executable, 0o755);
+    chmodSync(launcher, 0o755);
+    const resolvedApplication = realpathSync.native(application);
+    const resolvedExecutable = join(resolvedApplication, "Contents", "MacOS", "Claude");
+    const resolvedLauncher = join(
+      resolvedApplication,
+      "Contents",
+      "Helpers",
+      "disclaimer",
+    );
+
+    const verified: Array<{
+      label: string;
+      target: string;
+      deep?: boolean;
+      executable?: boolean;
+    }> = [];
 
     expect(resolveClaudeDesktopApplication({
       candidates: [application],
-      verifyCommand: (_host, command) => command,
-    })).toBe(realpathSync.native(application));
+      verifyCode: (label, target, _requirement, options = {}) => {
+        verified.push({ label, target, ...options });
+        return target;
+      },
+    })).toBe(resolvedApplication);
+    expect(verified).toEqual([
+      {
+        label: "Claude Desktop application",
+        target: resolvedApplication,
+        deep: true,
+      },
+      {
+        label: "Claude Desktop executable",
+        target: resolvedExecutable,
+        executable: true,
+      },
+      {
+        label: "Claude Desktop launcher",
+        target: resolvedLauncher,
+        executable: true,
+      },
+    ]);
     expect(resolveClaudeDesktopApplication({
       candidates: [application],
-      verifyCommand: () => {
+      verifyCode: () => {
         throw new Error("wrong publisher");
       },
+    })).toBeNull();
+
+    rmSync(launcher);
+    expect(resolveClaudeDesktopApplication({
+      candidates: [application],
+      verifyCode: (_label, target) => target,
     })).toBeNull();
   });
 
@@ -113,7 +157,7 @@ describe("Claude Desktop integration", () => {
   it("opens an MCPB for Claude's approval without claiming it is installed", async () => {
     const root = fixtureRoot();
     const opened: Array<{ application: string; packagePath: string }> = [];
-    const result = await manageClaudeDesktopIntegration("install", true, {
+    const result = await manageClaudeDesktopConnector("install", true, {
       afternoteCommand: "/Users/test/.local/bin/afternote",
       packageVersion: "2.0.0-alpha.14",
       homeDirectory: root,
@@ -125,7 +169,7 @@ describe("Claude Desktop integration", () => {
     });
 
     expect(result).toMatchObject({
-      format: "afternote-claude-desktop-integration",
+      format: "afternote-claude-desktop-connector",
       schemaVersion: 1,
       toolAvailable: true,
       installed: false,
@@ -146,7 +190,7 @@ describe("Claude Desktop integration", () => {
   it("recognizes only the enabled Afternote-owned extension", async () => {
     const root = fixtureRoot();
     installExtensionFixture(root, true);
-    const healthy = await manageClaudeDesktopIntegration("status", true, {
+    const healthy = await manageClaudeDesktopConnector("status", true, {
       afternoteCommand: "/Users/test/.local/bin/afternote",
       packageVersion: "2.0.0-alpha.14",
       homeDirectory: root,
@@ -166,7 +210,7 @@ describe("Claude Desktop integration", () => {
     });
 
     installExtensionFixture(root, false);
-    const disabled = await manageClaudeDesktopIntegration("status", true, {
+    const disabled = await manageClaudeDesktopConnector("status", true, {
       afternoteCommand: "/Users/test/.local/bin/afternote",
       packageVersion: "2.0.0-alpha.14",
       homeDirectory: root,
@@ -178,9 +222,26 @@ describe("Claude Desktop integration", () => {
       repairable: true,
       problemCode: "connector_disabled",
     });
+
+    const unavailable = await manageClaudeDesktopConnector("status", true, {
+      afternoteCommand: "/Users/test/.local/bin/afternote",
+      packageVersion: "2.0.0-alpha.14",
+      homeDirectory: root,
+      resolveApplication: () => null,
+      probeIdentity: () => true,
+      probeRuntime: async () => true,
+    });
+    expect(unavailable).toMatchObject({
+      toolAvailable: false,
+      installed: true,
+      healthy: false,
+      identityHealthy: false,
+      runtimeHealthy: false,
+      repairable: false,
+    });
   });
 
-  it("refuses to overwrite a foreign extension and keeps removal user-mediated", async () => {
+  it("refuses to overwrite a foreign extension", async () => {
     const root = fixtureRoot();
     const extension = extensionRoot(root);
     mkdirSync(extension, { recursive: true });
@@ -189,18 +250,12 @@ describe("Claude Desktop integration", () => {
       name: "not-afternote",
     }));
 
-    await expect(manageClaudeDesktopIntegration("install", true, {
+    await expect(manageClaudeDesktopConnector("install", true, {
       afternoteCommand: "/Users/test/.local/bin/afternote",
       packageVersion: "2.0.0-alpha.14",
       homeDirectory: root,
       resolveApplication: () => "/Applications/Claude.app",
     })).rejects.toThrow("will not overwrite");
-    await expect(manageClaudeDesktopIntegration("remove", true, {
-      afternoteCommand: "/Users/test/.local/bin/afternote",
-      packageVersion: "2.0.0-alpha.14",
-      homeDirectory: root,
-      resolveApplication: () => "/Applications/Claude.app",
-    })).rejects.toThrow("remove Afternote there");
     expect(readFileSync(join(extension, "manifest.json"), "utf8"))
       .toContain("not-afternote");
   });

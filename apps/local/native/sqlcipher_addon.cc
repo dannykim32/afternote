@@ -8,6 +8,7 @@
 #endif
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/sysctl.h>
 #include <pwd.h>
 #include <sys/stdio.h>
 #include <sys/stat.h>
@@ -873,41 +874,37 @@ napi_value XpcBrokerRequest(napi_env environment,
   return result;
 }
 
-napi_value RequireParentCodeSigningRequirement(
-    napi_env environment, napi_callback_info information) {
-  size_t count = 1;
-  napi_value arguments[1];
-  napi_get_cb_info(environment, information, &count, arguments, nullptr,
-                   nullptr);
-  std::string code_requirement;
-  if (count != 1 ||
-      !StringValue(environment, arguments[0], &code_requirement) ||
-      code_requirement.empty() || code_requirement.size() > 4096 ||
-      code_requirement.find('\0') != std::string::npos ||
-      code_requirement.find('\n') != std::string::npos ||
-      code_requirement.find('\r') != std::string::npos) {
-    return Throw(environment, "Parent code-signing requirement is invalid");
-  }
+enum class ProcessCodeValidation {
+  kValid,
+  kUnavailable,
+  kMismatch,
+};
 
-  const pid_t parent_pid = getppid();
-  if (parent_pid <= 1) {
-    return Throw(environment, "Authorized parent process is unavailable");
-  }
-  int64_t parent_pid_value = static_cast<int64_t>(parent_pid);
-  CFNumberRef parent_pid_number = CFNumberCreate(
-      kCFAllocatorDefault, kCFNumberSInt64Type, &parent_pid_value);
+bool IsValidCodeRequirement(const std::string &requirement) {
+  return !requirement.empty() && requirement.size() <= 4096 &&
+         requirement.find('\0') == std::string::npos &&
+         requirement.find('\n') == std::string::npos &&
+         requirement.find('\r') == std::string::npos;
+}
+
+ProcessCodeValidation ValidateProcessCode(
+    pid_t process_pid, const std::string &code_requirement) {
+  if (process_pid <= 1) return ProcessCodeValidation::kUnavailable;
+  int64_t process_pid_value = static_cast<int64_t>(process_pid);
+  CFNumberRef process_pid_number = CFNumberCreate(
+      kCFAllocatorDefault, kCFNumberSInt64Type, &process_pid_value);
   const void *keys[] = {kSecGuestAttributePid};
-  const void *values[] = {parent_pid_number};
+  const void *values[] = {process_pid_number};
   CFDictionaryRef attributes = CFDictionaryCreate(
       kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
-  SecCodeRef parent_code = nullptr;
+  SecCodeRef process_code = nullptr;
   OSStatus status = SecCodeCopyGuestWithAttributes(
-      nullptr, attributes, kSecCSDefaultFlags, &parent_code);
+      nullptr, attributes, kSecCSDefaultFlags, &process_code);
   CFRelease(attributes);
-  CFRelease(parent_pid_number);
-  if (status != errSecSuccess || parent_code == nullptr) {
-    return Throw(environment, "Could not identify the parent process");
+  CFRelease(process_pid_number);
+  if (status != errSecSuccess || process_code == nullptr) {
+    return ProcessCodeValidation::kUnavailable;
   }
 
   CFStringRef requirement_text = CFStringCreateWithBytes(
@@ -923,14 +920,98 @@ napi_value RequireParentCodeSigningRequirement(
                                                 &requirement);
   if (requirement_text != nullptr) CFRelease(requirement_text);
   if (status == errSecSuccess && requirement != nullptr) {
-    status = SecCodeCheckValidity(parent_code, kSecCSStrictValidate,
+    status = SecCodeCheckValidity(process_code, kSecCSStrictValidate,
                                   requirement);
   }
   if (requirement != nullptr) CFRelease(requirement);
-  CFRelease(parent_code);
-  if (status != errSecSuccess) {
+  CFRelease(process_code);
+  return status == errSecSuccess
+      ? ProcessCodeValidation::kValid
+      : ProcessCodeValidation::kMismatch;
+}
+
+pid_t ParentProcessIdentifier(pid_t process_pid) {
+  int selectors[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, process_pid};
+  struct kinfo_proc process = {};
+  size_t size = sizeof(process);
+  if (sysctl(selectors, 4, &process, &size, nullptr, 0) != 0 ||
+      size != sizeof(process) || process.kp_proc.p_pid != process_pid) {
+    return -1;
+  }
+  return process.kp_eproc.e_ppid;
+}
+
+napi_value RequireParentCodeSigningRequirement(
+    napi_env environment, napi_callback_info information) {
+  size_t count = 1;
+  napi_value arguments[1];
+  napi_get_cb_info(environment, information, &count, arguments, nullptr,
+                   nullptr);
+  std::string code_requirement;
+  if (count != 1 ||
+      !StringValue(environment, arguments[0], &code_requirement) ||
+      !IsValidCodeRequirement(code_requirement)) {
+    return Throw(environment, "Parent code-signing requirement is invalid");
+  }
+
+  const pid_t parent_pid = getppid();
+  if (parent_pid <= 1) {
+    return Throw(environment, "Authorized parent process is unavailable");
+  }
+  const ProcessCodeValidation validation =
+      ValidateProcessCode(parent_pid, code_requirement);
+  if (validation == ProcessCodeValidation::kUnavailable) {
+    return Throw(environment, "Could not identify the parent process");
+  }
+  if (validation == ProcessCodeValidation::kMismatch) {
     return Throw(environment,
                  "Parent process does not satisfy the required code signature");
+  }
+  return Undefined(environment);
+}
+
+napi_value RequireParentAndGrandparentCodeSigningRequirements(
+    napi_env environment, napi_callback_info information) {
+  size_t count = 2;
+  napi_value arguments[2];
+  napi_get_cb_info(environment, information, &count, arguments, nullptr,
+                   nullptr);
+  std::string parent_requirement;
+  std::string grandparent_requirement;
+  if (count != 2 ||
+      !StringValue(environment, arguments[0], &parent_requirement) ||
+      !StringValue(environment, arguments[1], &grandparent_requirement) ||
+      !IsValidCodeRequirement(parent_requirement) ||
+      !IsValidCodeRequirement(grandparent_requirement)) {
+    return Throw(environment, "Process-chain code-signing requirements are invalid");
+  }
+
+  const pid_t parent_pid = getppid();
+  const pid_t grandparent_pid = ParentProcessIdentifier(parent_pid);
+  if (parent_pid <= 1 || grandparent_pid <= 1) {
+    return Throw(environment, "Authorized parent process chain is unavailable");
+  }
+  const ProcessCodeValidation parent_validation =
+      ValidateProcessCode(parent_pid, parent_requirement);
+  if (parent_validation == ProcessCodeValidation::kUnavailable) {
+    return Throw(environment, "Could not identify the parent process");
+  }
+  if (parent_validation == ProcessCodeValidation::kMismatch) {
+    return Throw(environment,
+                 "Parent process does not satisfy the required code signature");
+  }
+  const ProcessCodeValidation grandparent_validation =
+      ValidateProcessCode(grandparent_pid, grandparent_requirement);
+  if (grandparent_validation == ProcessCodeValidation::kUnavailable) {
+    return Throw(environment, "Could not identify the grandparent process");
+  }
+  if (grandparent_validation == ProcessCodeValidation::kMismatch) {
+    return Throw(environment,
+                 "Grandparent process does not satisfy the required code signature");
+  }
+  if (getppid() != parent_pid ||
+      ParentProcessIdentifier(parent_pid) != grandparent_pid) {
+    return Throw(environment, "Authorized parent process chain changed during verification");
   }
   return Undefined(environment);
 }
@@ -1896,6 +1977,7 @@ napi_value Init(napi_env environment, napi_value exports) {
     {"deleteDataProtectionVaultKey", nullptr, DeleteDataProtectionVaultKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"xpcBrokerRequest", nullptr, XpcBrokerRequest, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"requireParentCodeSigningRequirement", nullptr, RequireParentCodeSigningRequirement, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"requireParentAndGrandparentCodeSigningRequirements", nullptr, RequireParentAndGrandparentCodeSigningRequirements, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"clientSigningPublicKey", nullptr, ClientSigningPublicKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"signWithClientKey", nullptr, SignWithClientKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"deleteClientSigningKey", nullptr, DeleteClientSigningKey, nullptr, nullptr, nullptr, napi_default, nullptr},

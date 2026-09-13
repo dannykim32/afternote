@@ -25,6 +25,11 @@ fixed Apple code-signing requirements. Its worker channel additionally requires 
 gateway launched. Connector requests are bound to the authenticated process, grant, scope,
 session, signature, nonce, digest, and deadline.
 
+Claude Desktop starts local MCP servers through Anthropic's signed `disclaimer` launcher.
+Afternote admits that connector only when the launcher is its direct parent and the signed Claude
+Desktop executable is the launcher's direct parent. Invoking the general-purpose launcher from an
+unrelated process does not satisfy the chain.
+
 No component requests root, administrator authorization, Full Disk Access, Accessibility, a
 system or kernel extension, an inbound firewall rule, or an MDM profile. Owner-only actions use
 the normal macOS LocalAuthentication prompt.

@@ -40,7 +40,8 @@ describeMacos("native connector presentation", () => {
       summary: string;
     }>;
     expect(rows.map(({ name, badge, action }) => ({ name, badge, action }))).toEqual([
-      { name: "connected-even-if-status-refreshes", badge: "Active", action: 0 },
+      { name: "connected-and-healthy", badge: "Active", action: 0 },
+      { name: "connected-but-disabled", badge: "Disabled", action: 6 },
       { name: "tool-missing", badge: "Not installed", action: 1 },
       { name: "available", badge: "Available", action: 2 },
       { name: "approval", badge: "Finish in Claude", action: 5 },

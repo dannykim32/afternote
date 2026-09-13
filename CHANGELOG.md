@@ -18,7 +18,9 @@ during release review.
 
 - Claude Desktop runs through the same signed broker boundary and least-privilege Remember,
   Recall, and Get Note grant as the existing connectors. Its authority, revocation, and reconnect
-  state remain separate from Claude Code.
+  state remain separate from Claude Code. Runtime admission verifies both Anthropic's direct
+  launcher and its signed Claude Desktop parent, so the general-purpose launcher cannot be used
+  by an unrelated process to impersonate Claude.
 
 ## 2.0.0-alpha.13 - 2026-09-12
 

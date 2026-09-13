@@ -6,7 +6,10 @@ import {
   INTEGRATION_HOST_CODE_REQUIREMENTS,
   runIntegrationHostCommand,
 } from "./integration-host-command";
-import { MCP_HOST_CODE_REQUIREMENTS } from "./mcp-broker-adapter";
+import {
+  MCP_HOST_CODE_POLICIES,
+  MCP_HOST_CODE_REQUIREMENTS,
+} from "./mcp-broker-adapter";
 
 const temporaryDirectories: string[] = [];
 
@@ -30,6 +33,10 @@ describe("integration host command deadline", () => {
       .toContain('identifier "disclaimer"');
     expect(MCP_HOST_CODE_REQUIREMENTS["claude-desktop"])
       .toContain('certificate leaf[subject.OU] = "Q6L2SF6YDW"');
+    expect(MCP_HOST_CODE_POLICIES["claude-desktop"].grandparent)
+      .toBe(INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"]);
+    expect("grandparent" in MCP_HOST_CODE_POLICIES.codex).toBe(false);
+    expect("grandparent" in MCP_HOST_CODE_POLICIES.claude).toBe(false);
     for (const requirement of Object.values(INTEGRATION_HOST_CODE_REQUIREMENTS)) {
       expect(requirement).toContain("1.2.840.113635.100.6.1.13");
       expect(requirement).toContain("1.2.840.113635.100.6.2.6");

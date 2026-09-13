@@ -53,6 +53,10 @@ type NativeAddon = {
     timeoutMs: number,
   ): string;
   requireParentCodeSigningRequirement(codeRequirement: string): void;
+  requireParentAndGrandparentCodeSigningRequirements(
+    parentRequirement: string,
+    grandparentRequirement: string,
+  ): void;
   clientSigningPublicKey(tag: string): Uint8Array;
   signWithClientKey(tag: string, message: Uint8Array): Uint8Array;
   deleteClientSigningKey(tag: string): void;
@@ -236,6 +240,18 @@ export function cosineSimilaritiesNative(
 export function requireParentCodeSigningRequirement(codeRequirement: string): void {
   assertCodeSigningRequirement(codeRequirement, "Parent");
   loadAddon().requireParentCodeSigningRequirement(codeRequirement);
+}
+
+export function requireParentAndGrandparentCodeSigningRequirements(
+  parentRequirement: string,
+  grandparentRequirement: string,
+): void {
+  assertCodeSigningRequirement(parentRequirement, "Parent");
+  assertCodeSigningRequirement(grandparentRequirement, "Grandparent");
+  loadAddon().requireParentAndGrandparentCodeSigningRequirements(
+    parentRequirement,
+    grandparentRequirement,
+  );
 }
 
 export function getOrCreateClientSigningPublicKey(tag: string): string {

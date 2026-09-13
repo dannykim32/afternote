@@ -30,7 +30,7 @@
   BOOL repairable = [status[@"repairable"] boolValue];
   BOOL approvalRequired = [status[@"approvalRequired"] boolValue];
 
-  if (connected) {
+  if (connected && toolAvailable && installed && healthy) {
     NSString *detail = lastActiveLabel.length > 0
         ? [NSString stringWithFormat:@"Last active %@", lastActiveLabel]
         : @"Current access is approved";

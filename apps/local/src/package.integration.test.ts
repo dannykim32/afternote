@@ -172,7 +172,7 @@ exit 0
     expect(help).toContain("mcp --client codex|claude|claude-desktop");
     expect(help).toContain("codex install|status|remove|rotate-identity");
     expect(help).toContain("claude-code install|status|remove|rotate-identity");
-    expect(help).toContain("claude-desktop install|status|remove|rotate-identity");
+    expect(help).toContain("claude-desktop install|status|rotate-identity");
     expect(help).not.toMatch(/browser install|slack configure/i);
 
     const names = Bun.spawnSync([
@@ -439,22 +439,33 @@ exit 1
       join(installRoot, "versions/2.0.0-alpha.0/afternote"),
       `#!/bin/sh
 if [ "\${1:-}" = claude-desktop ] && [ "\${2:-}" = status ]; then
-  printf '{"configHealthy": true}\n'
+  printf '%s\n' "\${AFTERNOTE_TEST_CLAUDE_DESKTOP_STATUS:-{\"configHealthy\": true}}"
   exit 0
 fi
 exit 1
 `,
     );
-    const result = Bun.spawnSync([join(alphaZero.portableDirectory, "uninstall.sh")], {
-      env: environment,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toString()).toContain(
-      "Remove Afternote in Claude Desktop Settings > Extensions",
-    );
-    expect(existsSync(installRoot)).toBe(true);
+    for (const status of [
+      '{"configHealthy": true}',
+      '{"configHealthy": false, "problemCode": "connector_disabled"}',
+    ]) {
+      const result = Bun.spawnSync(
+        [join(alphaZero.portableDirectory, "uninstall.sh")],
+        {
+          env: {
+            ...environment,
+            AFTERNOTE_TEST_CLAUDE_DESKTOP_STATUS: status,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain(
+        "Remove Afternote in Claude Desktop Settings > Extensions",
+      );
+      expect(existsSync(installRoot)).toBe(true);
+    }
   }, 30_000);
 
   it("rejects unsafe lifecycle roots and leaves unrelated files untouched", () => {

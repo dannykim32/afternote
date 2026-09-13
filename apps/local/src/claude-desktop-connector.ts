@@ -13,18 +13,21 @@ import {
   createClaudeDesktopPackage,
 } from "./claude-desktop-package";
 import { installedAfternoteCommand, probeMcpRuntime } from "./connector-runtime";
-import { verifyIntegrationHostCommand } from "./integration-host-command";
+import { verifyCodeSigningRequirement } from "./integration-host-command";
+import {
+  INTEGRATION_HOST_CODE_REQUIREMENTS,
+  MCP_HOST_CODE_REQUIREMENTS,
+} from "./integration-host-policy";
 import { integrationIdentityIsHealthy } from "./integration-identity";
 
 export { CLAUDE_DESKTOP_EXTENSION_ID, createClaudeDesktopPackage };
 
-export type ClaudeDesktopIntegrationAction =
+export type ClaudeDesktopConnectorAction =
   | "install"
   | "status"
-  | "remove"
   | "rotate-identity";
 
-export type ClaudeDesktopIntegrationProblemCode =
+export type ClaudeDesktopConnectorProblemCode =
   | "connector_missing"
   | "connector_disabled"
   | "connector_conflict"
@@ -32,8 +35,8 @@ export type ClaudeDesktopIntegrationProblemCode =
   | "runtime_unavailable"
   | null;
 
-export type ClaudeDesktopIntegrationStatus = {
-  format: "afternote-claude-desktop-integration";
+export type ClaudeDesktopConnectorStatus = {
+  format: "afternote-claude-desktop-connector";
   schemaVersion: 1;
   toolAvailable: boolean;
   installed: boolean;
@@ -42,14 +45,14 @@ export type ClaudeDesktopIntegrationStatus = {
   identityHealthy: boolean;
   runtimeHealthy: boolean;
   repairable: boolean;
-  problemCode: ClaudeDesktopIntegrationProblemCode;
+  problemCode: ClaudeDesktopConnectorProblemCode;
   approvalRequired: boolean;
   extensionId: typeof CLAUDE_DESKTOP_EXTENSION_ID;
   command: string;
   args: ["mcp", "--client", "claude-desktop"];
 };
 
-export type ClaudeDesktopIntegrationDependencies = {
+export type ClaudeDesktopConnectorDependencies = {
   afternoteCommand?: string;
   packageVersion?: string;
   homeDirectory?: string;
@@ -59,27 +62,25 @@ export type ClaudeDesktopIntegrationDependencies = {
   openPackage?: (application: string, packagePath: string) => void;
 };
 
-export function parseClaudeDesktopIntegrationAction(
+export function parseClaudeDesktopConnectorAction(
   action: string | undefined,
-): ClaudeDesktopIntegrationAction {
+): ClaudeDesktopConnectorAction {
   if (
     action === "install" ||
     action === "status" ||
-    action === "remove" ||
     action === "rotate-identity"
   ) return action;
   throw new Error(
-    "Claude Desktop action must be install, status, remove, or rotate-identity",
+    "Claude Desktop action must be install, status, or rotate-identity",
   );
 }
 
-export async function manageClaudeDesktopIntegration(
-  action: ClaudeDesktopIntegrationAction,
+export async function manageClaudeDesktopConnector(
+  action: ClaudeDesktopConnectorAction,
   standalone: boolean,
-  dependencies: ClaudeDesktopIntegrationDependencies = {},
-): Promise<ClaudeDesktopIntegrationStatus & {
+  dependencies: ClaudeDesktopConnectorDependencies = {},
+): Promise<ClaudeDesktopConnectorStatus & {
   changed?: boolean;
-  removed?: boolean;
   packagePath?: string;
 }> {
   if (action === "rotate-identity") {
@@ -87,7 +88,7 @@ export async function manageClaudeDesktopIntegration(
   }
   if (!standalone) {
     throw new Error(
-      "Claude Desktop integration must be configured from a standalone Afternote artifact",
+      "Claude Desktop connector must be configured from a standalone Afternote artifact",
     );
   }
   const afternoteCommand = dependencies.afternoteCommand ??
@@ -105,11 +106,6 @@ export async function manageClaudeDesktopIntegration(
 
   if (action === "status") {
     return await withRuntimeStatus(status, dependencies);
-  }
-  if (action === "remove") {
-    throw new Error(
-      "Open Settings > Extensions in Claude Desktop and remove Afternote there, then check again in Afternote",
-    );
   }
   if (!application) {
     throw new Error(
@@ -152,21 +148,51 @@ export async function manageClaudeDesktopIntegration(
 export function resolveClaudeDesktopApplication(options: {
   homeDirectory?: string;
   candidates?: readonly string[];
-  verifyCommand?: typeof verifyIntegrationHostCommand;
+  verifyCode?: typeof verifyCodeSigningRequirement;
 } = {}): string | null {
   const homeDirectory = options.homeDirectory ?? homedir();
   const candidates = options.candidates ?? [
     "/Applications/Claude.app",
     join(homeDirectory, "Applications", "Claude.app"),
   ];
-  const verifyCommand = options.verifyCommand ?? verifyIntegrationHostCommand;
+  const verifyCode = options.verifyCode ?? verifyCodeSigningRequirement;
   for (const candidate of candidates) {
     try {
       const applicationInfo = lstatSync(candidate);
       if (!applicationInfo.isDirectory() || applicationInfo.isSymbolicLink()) continue;
       const application = realpathSync.native(candidate);
       const executable = join(application, "Contents", "MacOS", "Claude");
-      verifyCommand("Claude Desktop", executable);
+      const launcher = join(application, "Contents", "Helpers", "disclaimer");
+      const executableInfo = lstatSync(executable);
+      const launcherInfo = lstatSync(launcher);
+      if (
+        !executableInfo.isFile() ||
+        executableInfo.isSymbolicLink() ||
+        !launcherInfo.isFile() ||
+        launcherInfo.isSymbolicLink()
+      ) continue;
+      if (
+        realpathSync.native(executable) !== executable ||
+        realpathSync.native(launcher) !== launcher
+      ) continue;
+      verifyCode(
+        "Claude Desktop application",
+        application,
+        INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"],
+        { deep: true },
+      );
+      verifyCode(
+        "Claude Desktop executable",
+        executable,
+        INTEGRATION_HOST_CODE_REQUIREMENTS["Claude Desktop"],
+        { executable: true },
+      );
+      verifyCode(
+        "Claude Desktop launcher",
+        launcher,
+        MCP_HOST_CODE_REQUIREMENTS["claude-desktop"],
+        { executable: true },
+      );
       return application;
     } catch {
       // Ignore unsigned lookalikes and continue to the next standard location.
@@ -179,13 +205,13 @@ function classifyClaudeDesktopInstallation(options: {
   afternoteCommand: string;
   homeDirectory: string;
   toolAvailable: boolean;
-}): ClaudeDesktopIntegrationStatus {
+}): ClaudeDesktopConnectorStatus {
   const extensionPath = claudeDesktopExtensionPath(options.homeDirectory);
   const installed = existsSync(extensionPath);
   const owned = installed && extensionIsOwned(extensionPath, options.afternoteCommand);
   const enabled = owned && extensionIsEnabled(options.homeDirectory);
   const configHealthy = owned && enabled;
-  const problemCode: ClaudeDesktopIntegrationProblemCode = !installed
+  const problemCode: ClaudeDesktopConnectorProblemCode = !installed
     ? "connector_missing"
     : !owned
     ? "connector_conflict"
@@ -193,7 +219,7 @@ function classifyClaudeDesktopInstallation(options: {
     ? "connector_disabled"
     : null;
   return {
-    format: "afternote-claude-desktop-integration",
+    format: "afternote-claude-desktop-connector",
     schemaVersion: 1,
     toolAvailable: options.toolAvailable,
     installed,
@@ -211,9 +237,18 @@ function classifyClaudeDesktopInstallation(options: {
 }
 
 async function withRuntimeStatus(
-  status: ClaudeDesktopIntegrationStatus,
-  dependencies: ClaudeDesktopIntegrationDependencies,
-): Promise<ClaudeDesktopIntegrationStatus> {
+  status: ClaudeDesktopConnectorStatus,
+  dependencies: ClaudeDesktopConnectorDependencies,
+): Promise<ClaudeDesktopConnectorStatus> {
+  if (!status.toolAvailable) {
+    return {
+      ...status,
+      healthy: false,
+      identityHealthy: false,
+      runtimeHealthy: false,
+      repairable: false,
+    };
+  }
   if (!status.configHealthy) return status;
   if (!await integrationIdentityIsHealthy(dependencies.probeIdentity ?? (() => true))) {
     return {

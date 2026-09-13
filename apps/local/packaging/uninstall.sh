@@ -108,7 +108,7 @@ if [ -e "$claude_desktop_extension" ] || [ -L "$claude_desktop_extension" ]; the
     AFTERNOTE_BIN_ROOT="$bin_root" \
     "$management_binary" claude-desktop status 2>/dev/null); then
     case "$claude_desktop_status" in
-      *'"configHealthy": true'*)
+      *'"configHealthy": true'*|*'"problemCode": "connector_disabled"'*)
         printf 'Remove Afternote in Claude Desktop Settings > Extensions, then retry uninstall. No files were removed.\n' >&2
         exit 1
         ;;
