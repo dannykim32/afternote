@@ -19,6 +19,9 @@ const noteEditorStateSource = readFileSync(
   join(sourceDirectory, "../native/note_editor_state.mm"),
   "utf8",
 );
+const brokerContractSource = readFileSync(
+  join(sourceDirectory, "../native/owner_broker_contract.mm"), "utf8",
+);
 const cliSource = readFileSync(join(sourceDirectory, "local-cli.ts"), "utf8");
 const applicationInstallationSource = readFileSync(
   join(sourceDirectory, "../native/application_installation.mm"),
@@ -309,7 +312,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain("AfternoteMemoryThreadView");
     const connectorHistory = nativeAppSource.slice(
       nativeAppSource.indexOf("NSArray<NSString *> *ConnectorLifecycleHistory("),
-      nativeAppSource.indexOf("BOOL IsSearchMode"),
+      nativeAppSource.indexOf("OwnerBrokerConnection *NewOwnerBrokerConnection"),
     );
     expect(connectorHistory).toContain('addEntry(@"Connected"');
     expect(connectorHistory).toContain('addEntry(@"Revoked"');
@@ -460,9 +463,9 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("libraryMutationInFlight");
     expect(ownerBrokerSource).toContain("testRejectsSerializedResponse");
     expect(ownerBrokerSource).toContain("testAcceptsSerializedResponse");
-    expect(nativeAppSource).toContain("IsAuditClientId");
-    expect(nativeAppSource).toContain("IsAuditPrincipal");
-    expect(nativeAppSource).toContain("IsBrokerResult");
+    expect(brokerContractSource).toContain("IsAuditClientId");
+    expect(brokerContractSource).toContain("IsAuditPrincipal");
+    expect(brokerContractSource).toContain("IsBrokerResult");
     expect(nativeAppSource).toContain("protocolInvalidationCleared");
     expect(nativeAppSource).toContain("RunLibraryCleanupSmoke");
     expect(nativeAppSource).toContain("self.window.restorable = NO");
@@ -483,10 +486,10 @@ describe("native Library production boundary", () => {
     expect(cliSource).toContain('"--admin-unlock"');
     expect(nativeAppSource).toContain('@"lifecycle.lock"');
     expect(nativeAppSource).toContain('@"lifecycle.unlock"');
-    expect(nativeAppSource).toContain("IsLifecycleResult");
-    expect(nativeAppSource).toContain("IsLifecycleTransitionConsistent");
+    expect(brokerContractSource).toContain("IsLifecycleResult");
+    expect(brokerContractSource).toContain("IsLifecycleTransitionConsistent");
     expect(nativeAppSource).toContain('requestSynchronouslyMethod:@"lifecycle.status"');
-    expect(nativeAppSource).toContain('ExactKeys(result, @[ @"state", @"epoch" ])');
+    expect(brokerContractSource).toContain('ExactKeys(result, @[ @"state", @"epoch" ])');
     for (const prohibited of [
       "LocalRuntimeAdminClient",
       "runtime.token",
@@ -501,7 +504,7 @@ describe("native Library production boundary", () => {
 
   it("checks recovery readiness before opening Notes plaintext", () => {
     expect(nativeAppSource).toContain('requestMethod:@"recovery.status"');
-    expect(nativeAppSource).toContain("IsRecoveryStatusResult");
+    expect(brokerContractSource).toContain("IsRecoveryStatusResult");
     expect(nativeAppSource).toContain('segmentedControlWithLabels:@[ @"Notes", @"Connections" ]');
     expect(nativeAppSource).toContain(
       "[self displaySurface:AfternoteProductSurfaceRecovery recoveryReady:YES]",

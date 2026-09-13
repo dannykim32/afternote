@@ -453,6 +453,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     join(repositoryRoot, "apps/local/native/application_installation.mm"),
     join(repositoryRoot, "apps/local/native/software_update.mm"),
     join(repositoryRoot, "apps/local/native/owner_broker.mm"),
+    join(repositoryRoot, "apps/local/native/owner_broker_contract.mm"),
     join(repositoryRoot, "apps/local/native/product_surface_router.mm"),
     join(repositoryRoot, "apps/local/native/owner_control_app.mm"),
     "-o",

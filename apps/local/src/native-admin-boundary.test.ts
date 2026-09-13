@@ -7,6 +7,9 @@ const nativeAppSource = readFileSync(
   join(sourceDirectory, "../native/owner_control_app.mm"),
   "utf8",
 );
+const brokerContractSource = readFileSync(
+  join(sourceDirectory, "../native/owner_broker_contract.mm"), "utf8",
+);
 const cliSource = readFileSync(join(sourceDirectory, "local-cli.ts"), "utf8");
 const gatewaySource = readFileSync(
   join(sourceDirectory, "../native/vault_broker_gateway.mm"),
@@ -85,10 +88,10 @@ describe("native owner administration production boundary", () => {
   });
 
   it("validates broker responses in the native helper and never accepts note plaintext", () => {
-    expect(nativeAppSource).toContain("IsAdminResult");
-    expect(nativeAppSource).toContain("IsDiagnosticConnectorActivity");
-    expect(nativeAppSource).toContain('@"connectorActivity"');
-    expect(nativeAppSource).toContain('![result[@"schemaVersion"] isEqual:@2]');
+    expect(brokerContractSource).toContain("IsAdminResult");
+    expect(brokerContractSource).toContain("IsDiagnosticConnectorActivity");
+    expect(brokerContractSource).toContain('@"connectorActivity"');
+    expect(brokerContractSource).toContain('![result[@"schemaVersion"] isEqual:@2]');
     expect(nativeAppSource).toContain("RunAdminCommand");
     expect(nativeAppSource).toContain('admin.export');
     expect(nativeAppSource).toContain('admin.diagnostics');
@@ -100,26 +103,26 @@ describe("native owner administration production boundary", () => {
       "admin.telemetry.disable",
       "admin.telemetry.reset",
     ]) {
-      expect(nativeAppSource).toContain(historicalOperation);
+      expect(brokerContractSource).toContain(historicalOperation);
     }
     expect(nativeAppSource).toContain('admin.prepare_client_rotation');
     expect(nativeAppSource).toContain('"--admin-prepare-client-rotation"');
-    expect(nativeAppSource).toContain('@"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity"');
-    expect(nativeAppSource).toContain('isEqual:params[@"replacementInstallIdentity"]');
-    expect(nativeAppSource).toContain(
+    expect(brokerContractSource).toContain('@"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity"');
+    expect(brokerContractSource).toContain('isEqual:params[@"replacementInstallIdentity"]');
+    expect(brokerContractSource).toContain(
       '(result[@"clientId"] == NSNull.null || IsUUID(result[@"clientId"]))',
     );
     expect(nativeAppSource).toContain('lifecycle.lock');
     expect(nativeAppSource).toContain('lifecycle.unlock');
-    expect(nativeAppSource).toContain("IsLifecycleResult");
+    expect(brokerContractSource).toContain("IsLifecycleResult");
     expect(nativeAppSource).toContain('recovery.migrate');
     expect(nativeAppSource).toContain('"--admin-migrate"');
     expect(nativeAppSource).toContain('recovery.restore');
     expect(nativeAppSource).toContain('"--admin-restore"');
-    expect(nativeAppSource).toContain("IsRecoveryResult");
-    expect(nativeAppSource).toContain("afternote-diagnostics");
-    expect(nativeAppSource).toContain("afternote-vault-v1");
-    expect(nativeAppSource).toContain("afternote-markdown-v1");
+    expect(brokerContractSource).toContain("IsRecoveryResult");
+    expect(brokerContractSource).toContain("afternote-diagnostics");
+    expect(brokerContractSource).toContain("afternote-vault-v1");
+    expect(brokerContractSource).toContain("afternote-markdown-v1");
     expect(nativeAppSource).not.toContain("SqliteMemory");
     expect(nativeAppSource).not.toContain("runtime.token");
   });
