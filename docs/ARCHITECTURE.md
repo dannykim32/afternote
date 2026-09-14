@@ -23,7 +23,8 @@ Paths below are relative to the repository root.
 | `apps/local/native/owner_broker.mm` | Owner-side transport, response correlation, invalidation | Method-specific result schemas |
 | `apps/local/native/owner_broker_contract.mm` | Owner-facing result/error validation and lifecycle epoch consistency | XPC connections, AppKit, or live Vault state |
 | `apps/local/native/connections_view.mm` | Connections layout, controls, redacted rows, and transient display state | Broker requests, authorization, host configuration, or navigation |
-| `apps/local/native/native_appearance.mm` | Shared native colors, labels, button appearance, and interaction feedback | Product state or authorization |
+| `apps/local/native/note_editor_view.mm` | Editor draft, saved baseline, formatting, revision presentation, controls, and undo cleanup | Broker requests, authorization, conflict/delete approval, or navigation |
+| `apps/local/native/native_appearance.mm` | Shared native colors, labels, date formatting, button appearance, and interaction feedback | Product state or authorization |
 | `apps/local/native/owner_control_app.mm` | Owner interaction, shared lifecycle coordination, Connections display-data assembly, and remaining screens | Direct Vault storage access |
 
 Filenames shortened in a row share its first directory. Connector lifecycle,
@@ -55,6 +56,17 @@ also have focused modules alongside these entry points.
 - The Connections view is main-thread-only. Each render replaces its previous rows;
   an error replaces the rows with the error state. The view does not own background
   requests, authentication, or window navigation.
+- The editor is main-thread-only and owns its draft behind a read-only accessor.
+  Availability and revision-history updates preserve the draft and undo history.
+  Displaying a Note replaces the draft and clears undo; changing Notes also clears
+  the previous revision menu. Busy or unauthenticated editors cannot mutate text.
+- Lock, expiry, disconnect, and recovery invalidation clear the editor's saved
+  baseline, draft, history, and undo state. Reauthentication alone restores none of
+  that text. The coordinator still invalidates asynchronous generations before
+  clearing the screen and checks them before applying a broker response.
+- Editor actions carry intent through a weak target, not broker authority. The
+  coordinator retains optimistic revision checks, exact deletion targets, sensitive
+  confirmation sheets, and the decision to rebase a conflicting draft.
 
 ## Testing the seams
 
@@ -78,16 +90,25 @@ history replacement, busy state, error clearing, and weak action-target lifetime
 The full-app layout fixture separately checks real window sizes and scrollbar modes.
 Together these replace the old source-string checks for the extracted controls.
 
+`native-note-editor-view.test.ts` compiles the editor without the app coordinator
+or broker. It exercises real AppKit text input and controls: no-op save detection,
+discard, revision selection and pagination, cited-note inspection, list formatting,
+save feedback, busy-state handling, conflict-draft restoration, cross-note isolation,
+plaintext/undo cleanup, weak action-target lifetime, and three window widths.
+The full-app lifecycle tests use that editor interface while retaining the broker
+recovery, invalidation, sensitive-sheet clearing, and stale-response checks.
+
 ## Remaining organization work
 
 The current source separates Note migrations, native broker contracts, Connections
-rendering, and native appearance from their former large callers. It is not the end
-of the refactor: the Owner app still combines Notes, Settings, Recovery, shared
-lifecycle coordination, and substantial conditional test fixtures. Broker dispatch
-and authorization also remain large.
+rendering, editor ownership, and native appearance from their former large callers.
+It is not the end of the refactor: the Owner app still combines Notes search/browse
+and broker orchestration, Settings, Recovery, shared lifecycle coordination, and
+substantial conditional test fixtures. Broker dispatch and authorization also
+remain large.
 
-The next useful seam is Notes screen ownership with explicit shared lifecycle
-coordination, following the Connections separation. Notes additionally owns pending
-edits and plaintext, so its extraction needs tests for pending edits, lock-time
-plaintext clearing, stale asynchronous replies, and navigation through Recovery.
-Keep those responsibilities explicit rather than splitting methods by file size.
+The next Notes pass should consolidate search/browse state and retrieval
+orchestration without moving shared lifecycle authority into the editor. Preserve
+the generation checks, pending search state, and navigation through Recovery.
+Settings, Recovery, test fixtures, and the broker modules remain separate follow-up
+work; moving methods merely to lower a line count would not settle their ownership.

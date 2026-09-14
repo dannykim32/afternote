@@ -216,3 +216,64 @@ void AfternoteStyleDestructiveButton(NSButton *button) {
   button.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
   button.contentTintColor = StatusColor(@"error");
 }
+
+void AfternoteStylePrimaryButton(NSButton *button) {
+  button.bordered = NO;
+  button.controlSize = NSControlSizeRegular;
+  button.contentTintColor = AfternoteCanvasColor();
+  button.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
+  if ([button isKindOfClass:[AfternoteButton class]]) {
+    AfternoteButton *flatButton = (AfternoteButton *)button;
+    flatButton.afternoteFillColor = AfternoteTextColor();
+    flatButton.afternoteHoverColor = [AfternoteTextColor()
+        blendedColorWithFraction:0.08 ofColor:NSColor.whiteColor];
+    flatButton.afternotePressedColor = [AfternoteTextColor()
+        blendedColorWithFraction:0.14 ofColor:NSColor.blackColor];
+    flatButton.afternoteBorderColor = nil;
+    [flatButton invalidateIntrinsicContentSize];
+    [flatButton setNeedsDisplay:YES];
+  }
+}
+
+void AfternoteStyleToolButton(NSButton *button) {
+  button.bordered = NO;
+  button.controlSize = NSControlSizeSmall;
+  button.contentTintColor = AfternoteTextColor();
+  button.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold];
+  if ([button isKindOfClass:[AfternoteButton class]]) {
+    AfternoteButton *flatButton = (AfternoteButton *)button;
+    flatButton.afternoteFillColor = AfternoteSurfaceColor();
+    flatButton.afternoteHoverColor = AfternoteRaisedSurfaceColor();
+    flatButton.afternotePressedColor = AfternoteCanvasColor();
+    flatButton.afternoteBorderColor = AfternoteBorderColor();
+    [flatButton invalidateIntrinsicContentSize];
+    [flatButton setNeedsDisplay:YES];
+  }
+}
+
+NSDate *DateValue(id value) {
+  NSString *text = ([value isKindOfClass:NSString.class] ? value : @"");
+  if (text.length == 0) return nil;
+  static NSDateFormatter *input;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    input = [[NSDateFormatter alloc] init];
+    input.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    input.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX";
+  });
+  return [input dateFromString:text];
+}
+
+NSString *DateLabel(id value) {
+  NSString *text = ([value isKindOfClass:NSString.class] ? value : @"");
+  if (text.length == 0) return @"Never";
+  static NSDateFormatter *output;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    output = [[NSDateFormatter alloc] init];
+    output.dateStyle = NSDateFormatterMediumStyle;
+    output.timeStyle = NSDateFormatterShortStyle;
+  });
+  NSDate *date = DateValue(text);
+  return date == nil ? @"Unavailable" : [output stringFromDate:date];
+}

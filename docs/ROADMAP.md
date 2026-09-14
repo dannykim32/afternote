@@ -37,8 +37,11 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
   but large implementation files remain. The next-release source extracts native
   broker contracts and Note schema migrations with verified backups into focused,
   behaviorally tested modules. Connections rendering and shared native appearance
-  now also have focused modules, with a standalone AppKit test that does not link
-  the broker or app coordinator. The native app is still approximately 6,500 lines;
+  now also have focused modules. The Notes editor separately owns its draft,
+  formatting, revision presentation, and undo cleanup. Both screens have standalone
+  AppKit tests that do not link the broker or app coordinator. The native app is
+  still approximately 6,000 lines; Notes search/browse and shared lifecycle
+  orchestration remain there. The editor implementation is approximately 600 lines;
   storage is approximately 2,800, and broker modules are approximately 3,400–4,200.
   See [the architecture guide](ARCHITECTURE.md) for ownership and the remaining work.
 - Replace source-text checks with behavioral coverage where the check is intended

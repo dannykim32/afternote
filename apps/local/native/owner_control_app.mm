@@ -11,7 +11,7 @@
 #import "connector_presentation.h"
 #import "native_appearance.h"
 #import "connections_view.h"
-#import "note_editor_state.h"
+#import "note_editor_view.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
 #import "product_surface_router.h"
@@ -255,33 +255,6 @@ NSString *ScopesLabel(NSArray *scopes) {
     if ([scope isKindOfClass:[NSString class]]) [labels addObject:ScopeLabel(scope)];
   }
   return labels.count == 0 ? @"No scopes" : [labels componentsJoinedByString:@", "];
-}
-
-NSDate *DateValue(id value) {
-  NSString *text = StringValue(value);
-  if (text.length == 0) return nil;
-  static NSDateFormatter *input;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    input = [[NSDateFormatter alloc] init];
-    input.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-    input.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX";
-  });
-  return [input dateFromString:text];
-}
-
-NSString *DateLabel(id value) {
-  NSString *text = StringValue(value);
-  if (text.length == 0) return @"Never";
-  static NSDateFormatter *output;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    output = [[NSDateFormatter alloc] init];
-    output.dateStyle = NSDateFormatterMediumStyle;
-    output.timeStyle = NSDateFormatterShortStyle;
-  });
-  NSDate *date = DateValue(text);
-  return date == nil ? @"Unavailable" : [output stringFromDate:date];
 }
 
 NSString *DayLabel(id value) {
@@ -634,71 +607,6 @@ NSString *FreshOwnerApprovalDescription() {
 }
 @end
 
-@interface AfternoteNoteTextView : NSTextView
-@end
-
-@implementation AfternoteNoteTextView
-
-- (void)mouseDown:(NSEvent *)event {
-  if (!self.editable || self.string.length == 0 || self.layoutManager == nil ||
-      self.textContainer == nil) {
-    [super mouseDown:event];
-    return;
-  }
-  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  NSPoint containerPoint = NSMakePoint(point.x - self.textContainerOrigin.x,
-                                       point.y - self.textContainerOrigin.y);
-  CGFloat fraction = 0;
-  NSUInteger glyphIndex = [self.layoutManager glyphIndexForPoint:containerPoint
-                                                  inTextContainer:self.textContainer
-                                   fractionOfDistanceThroughGlyph:&fraction];
-  if (glyphIndex >= self.layoutManager.numberOfGlyphs) {
-    [super mouseDown:event];
-    return;
-  }
-  NSUInteger characterIndex = [self.layoutManager characterIndexForGlyphAtIndex:glyphIndex];
-  if (characterIndex >= self.string.length) {
-    [super mouseDown:event];
-    return;
-  }
-  NSRange lineRange = [self.string lineRangeForRange:NSMakeRange(characterIndex, 0)];
-  NSUInteger markerIndex = lineRange.location;
-  while (markerIndex < NSMaxRange(lineRange)) {
-    unichar character = [self.string characterAtIndex:markerIndex];
-    if (character != ' ' && character != '\t') break;
-    markerIndex += 1;
-  }
-  if (markerIndex >= self.string.length) {
-    [super mouseDown:event];
-    return;
-  }
-  unichar marker = [self.string characterAtIndex:markerIndex];
-  if (marker != 0x2610 && marker != 0x2611) {
-    [super mouseDown:event];
-    return;
-  }
-  NSRange glyphRange = [self.layoutManager glyphRangeForCharacterRange:NSMakeRange(markerIndex, 1)
-                                                   actualCharacterRange:nullptr];
-  NSRect markerRect = [self.layoutManager boundingRectForGlyphRange:glyphRange
-                                                    inTextContainer:self.textContainer];
-  markerRect.origin.x += self.textContainerOrigin.x;
-  markerRect.origin.y += self.textContainerOrigin.y;
-  markerRect = NSInsetRect(markerRect, -5, -4);
-  if (!NSPointInRect(point, markerRect)) {
-    [super mouseDown:event];
-    return;
-  }
-  NSString *replacement = marker == 0x2610 ? @"☑" : @"☐";
-  if ([self shouldChangeTextInRange:NSMakeRange(markerIndex, 1)
-                  replacementString:replacement]) {
-    [self.textStorage replaceCharactersInRange:NSMakeRange(markerIndex, 1)
-                                     withString:replacement];
-    [self didChangeText];
-  }
-}
-
-@end
-
 @interface AfternoteTableRowView : NSTableRowView
 @property(nonatomic, strong) NSTrackingArea *afternoteTrackingArea;
 @property(nonatomic) BOOL afternoteHovered;
@@ -790,7 +698,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   return descriptors;
 }
 
-@interface OwnerControlDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSOpenSavePanelDelegate, AfternoteConnectionsActions>
+@interface OwnerControlDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate,  NSOpenSavePanelDelegate, AfternoteConnectionsActions, AfternoteNoteEditorActions>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) NSTabView *surfaceTabs;
 @property(nonatomic, strong) AfternoteProductSurfaceRouter *surfaceRouter;
@@ -798,6 +706,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSButton *memoryNavigationButton;
 @property(nonatomic, strong) NSButton *connectionsNavigationButton;
 @property(nonatomic, strong) AfternoteConnectionsView *connectionsView;
+@property(nonatomic, strong) AfternoteNoteEditorView *noteEditorView;
 @property(nonatomic, strong) NSStackView *setupContent;
 @property(nonatomic, strong) NSView *setupBanner;
 @property(nonatomic) BOOL setupGuideDismissed;
@@ -847,21 +756,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSTextField *resultsHeadingLabel;
 @property(nonatomic, strong) NSTableView *noteTable;
 @property(nonatomic, strong) NSMutableArray<NSDictionary *> *noteSummaries;
-@property(nonatomic, strong) NSTextView *noteEditor;
-@property(nonatomic, strong) NSButton *memoryBackButton;
-@property(nonatomic, strong) NSButton *checklistButton;
-@property(nonatomic, strong) NSButton *bulletListButton;
-@property(nonatomic, strong) NSButton *numberedListButton;
 @property(nonatomic, strong) NSTextField *searchModeLabel;
 @property(nonatomic, copy) NSString *currentSearchMode;
 @property(nonatomic, strong) NSTextField *semanticSettingsState;
-@property(nonatomic, strong) NSTextField *sourceLabel;
-@property(nonatomic, strong) NSTextField *revisionLabel;
-@property(nonatomic, strong) NSPopUpButton *revisionMenu;
-@property(nonatomic, strong) NSButton *saveButton;
-@property(nonatomic, strong) NSButton *discardChangesButton;
-@property(nonatomic, strong) NSButton *deleteButton;
-@property(nonatomic, strong) NSButton *editCurrentNoteButton;
 @property(nonatomic, strong) NSButton *loadMoreNotesButton;
 @property(nonatomic, strong) NSButton *libraryRecentButton;
 @property(nonatomic, strong) NSButton *createNoteButton;
@@ -886,7 +783,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL revisionHistoryLoaded;
 @property(nonatomic) BOOL libraryMutationInFlight;
 @property(nonatomic) BOOL editorSaveConfirmationPending;
-@property(nonatomic) AfternoteEditorSaveState editorSaveState;
 @property(nonatomic) BOOL libraryListInFlight;
 @property(nonatomic) BOOL libraryRefreshPending;
 @property(nonatomic) BOOL vaultLocked;
@@ -1093,7 +989,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self renderRecoveryState];
   }
   if ([arguments containsObject:@"--preview-saved"]) {
-    [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:NO];
+    [self.noteEditorView setSaveState:AfternoteEditorSaveStateSaved animated:NO];
   }
   if ([arguments containsObject:@"--preview-focus-ask"]) {
     [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
@@ -1203,41 +1099,11 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)stylePrimaryButton:(NSButton *)button {
-  button.bordered = NO;
-  button.controlSize = NSControlSizeRegular;
-  button.contentTintColor = AfternoteCanvasColor();
-  button.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
-  if ([button isKindOfClass:[AfternoteButton class]]) {
-    AfternoteButton *flatButton = (AfternoteButton *)button;
-    flatButton.afternoteFillColor = AfternoteTextColor();
-    flatButton.afternoteHoverColor = [AfternoteTextColor()
-        blendedColorWithFraction:0.08 ofColor:NSColor.whiteColor];
-    flatButton.afternotePressedColor = [AfternoteTextColor()
-        blendedColorWithFraction:0.14 ofColor:NSColor.blackColor];
-    flatButton.afternoteBorderColor = nil;
-    [flatButton invalidateIntrinsicContentSize];
-    [flatButton setNeedsDisplay:YES];
-  }
+  AfternoteStylePrimaryButton(button);
 }
 
 - (void)styleSecondaryButton:(NSButton *)button {
   AfternoteStyleSecondaryButton(button);
-}
-
-- (void)styleToolButton:(NSButton *)button {
-  button.bordered = NO;
-  button.controlSize = NSControlSizeSmall;
-  button.contentTintColor = AfternoteTextColor();
-  button.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold];
-  if ([button isKindOfClass:[AfternoteButton class]]) {
-    AfternoteButton *flatButton = (AfternoteButton *)button;
-    flatButton.afternoteFillColor = AfternoteSurfaceColor();
-    flatButton.afternoteHoverColor = AfternoteRaisedSurfaceColor();
-    flatButton.afternotePressedColor = AfternoteCanvasColor();
-    flatButton.afternoteBorderColor = AfternoteBorderColor();
-    [flatButton invalidateIntrinsicContentSize];
-    [flatButton setNeedsDisplay:YES];
-  }
 }
 
 - (void)styleDestructiveButton:(NSButton *)button {
@@ -1341,27 +1207,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     self.semanticSettingsState.textColor = AfternoteMutedTextColor();
   }
   [self renderSetupGuide];
-}
-
-- (void)applyEditorTheme {
-  if (self.noteEditor == nil) return;
-  NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
-  paragraph.lineSpacing = 4;
-  paragraph.paragraphSpacing = 7;
-  NSDictionary *typingAttributes = @{
-    NSFontAttributeName : [NSFont systemFontOfSize:17 weight:NSFontWeightRegular],
-    NSForegroundColorAttributeName : AfternoteTextColor(),
-    NSParagraphStyleAttributeName : paragraph,
-  };
-  self.noteEditor.typingAttributes = typingAttributes;
-  self.noteEditor.font = typingAttributes[NSFontAttributeName];
-  self.noteEditor.textColor = AfternoteTextColor();
-  self.noteEditor.backgroundColor = AfternoteCanvasColor();
-  self.noteEditor.insertionPointColor = AfternoteBrandCaptureColor();
-  if (self.noteEditor.textStorage.length > 0) {
-    [self.noteEditor.textStorage addAttributes:typingAttributes
-                                         range:NSMakeRange(0, self.noteEditor.textStorage.length)];
-  }
 }
 
 - (NSView *)buildSetupView {
@@ -2202,172 +2047,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                                       size:12 weight:NSFontWeightSemibold];
   self.resultsHeadingLabel.textColor = AfternoteMutedTextColor();
 
-  self.revisionLabel = [self label:@"Choose a note" size:12 weight:NSFontWeightSemibold];
-  self.revisionLabel.textColor = AfternoteMutedTextColor();
-  self.sourceLabel = [self label:@"The note and its source will appear here."
-                                  size:13 weight:NSFontWeightRegular];
-  self.sourceLabel.textColor = AfternoteMutedTextColor();
-  NSScrollView *editorScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 720, 480)];
-  NSSize editorContentSize = editorScroll.contentSize;
-  self.noteEditor = [[AfternoteNoteTextView alloc]
-      initWithFrame:NSMakeRect(0, 0, editorContentSize.width, editorContentSize.height)];
-  self.noteEditor.minSize = NSMakeSize(0, editorContentSize.height);
-  self.noteEditor.maxSize = NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX);
-  self.noteEditor.verticallyResizable = YES;
-  self.noteEditor.horizontallyResizable = NO;
-  self.noteEditor.autoresizingMask = NSViewWidthSizable;
-  self.noteEditor.textContainer.containerSize = NSMakeSize(editorContentSize.width, CGFLOAT_MAX);
-  self.noteEditor.textContainer.widthTracksTextView = YES;
-  self.noteEditor.textContainerInset = NSMakeSize(8, 16);
-  self.noteEditor.richText = NO;
-  self.noteEditor.importsGraphics = NO;
-  self.noteEditor.allowsImageEditing = NO;
-  self.noteEditor.automaticQuoteSubstitutionEnabled = NO;
-  self.noteEditor.automaticDashSubstitutionEnabled = NO;
-  self.noteEditor.automaticTextReplacementEnabled = NO;
-  self.noteEditor.delegate = self;
-  self.noteEditor.accessibilityLabel = @"Note text";
-  [self applyEditorTheme];
-  editorScroll.documentView = self.noteEditor;
-  editorScroll.hasVerticalScroller = YES;
-  editorScroll.borderType = NSNoBorder;
-  editorScroll.drawsBackground = NO;
-  self.revisionMenu = [[NSPopUpButton alloc] init];
-  self.revisionMenu.target = self;
-  self.revisionMenu.action = @selector(selectRevision:);
-  self.revisionMenu.accessibilityLabel = @"Revision history";
-  [self styleSecondaryButton:self.revisionMenu];
-  NSImage *backImage = [NSImage imageWithSystemSymbolName:@"chevron.left"
-                                 accessibilityDescription:@"Back to Notes"];
-  self.memoryBackButton = [AfternoteButton buttonWithTitle:@"Notes"
-                                                   target:self
-                                                   action:@selector(returnToMemory:)];
-  self.memoryBackButton.image = backImage;
-  self.memoryBackButton.imagePosition = NSImageLeft;
-  self.memoryBackButton.imageHugsTitle = YES;
-  self.memoryBackButton.bordered = NO;
-  self.memoryBackButton.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
-  self.memoryBackButton.contentTintColor = AfternoteAccentColor();
-  self.memoryBackButton.accessibilityLabel = @"Back to Notes";
-  NSImageSymbolConfiguration *formatSymbolConfiguration =
-      [NSImageSymbolConfiguration configurationWithPointSize:14 weight:NSFontWeightRegular];
-  NSImage *checklistImage = [[NSImage imageWithSystemSymbolName:@"checklist"
-                                      accessibilityDescription:@"Checklist"]
-      imageWithSymbolConfiguration:formatSymbolConfiguration];
-  self.checklistButton = [AfternoteButton buttonWithImage:checklistImage
-                                                   target:self
-                                                   action:@selector(toggleChecklist:)];
-  [self styleToolButton:self.checklistButton];
-  self.checklistButton.keyEquivalent = @"9";
-  self.checklistButton.keyEquivalentModifierMask =
-      NSEventModifierFlagCommand | NSEventModifierFlagShift;
-  self.checklistButton.toolTip = @"Checklist (Command-Shift-9)";
-  self.checklistButton.accessibilityLabel = @"Toggle checklist";
-  NSImage *bulletImage = [[NSImage imageWithSystemSymbolName:@"list.bullet"
-                                   accessibilityDescription:@"Bullet list"]
-      imageWithSymbolConfiguration:formatSymbolConfiguration];
-  self.bulletListButton = [AfternoteButton buttonWithImage:bulletImage
-                                                    target:self
-                                                    action:@selector(toggleBulletList:)];
-  [self styleToolButton:self.bulletListButton];
-  self.bulletListButton.keyEquivalent = @"8";
-  self.bulletListButton.keyEquivalentModifierMask =
-      NSEventModifierFlagCommand | NSEventModifierFlagShift;
-  self.bulletListButton.toolTip = @"Bullet list (Command-Shift-8)";
-  self.bulletListButton.accessibilityLabel = @"Toggle bullet list";
-  NSImage *numberedImage = [[NSImage imageWithSystemSymbolName:@"list.number"
-                                     accessibilityDescription:@"Numbered list"]
-      imageWithSymbolConfiguration:formatSymbolConfiguration];
-  self.numberedListButton = [AfternoteButton buttonWithImage:numberedImage
-                                                      target:self
-                                                      action:@selector(toggleNumberedList:)];
-  [self styleToolButton:self.numberedListButton];
-  self.numberedListButton.keyEquivalent = @"7";
-  self.numberedListButton.keyEquivalentModifierMask =
-      NSEventModifierFlagCommand | NSEventModifierFlagShift;
-  self.numberedListButton.toolTip = @"Numbered list (Command-Shift-7)";
-  self.numberedListButton.accessibilityLabel = @"Toggle numbered list";
-  NSStackView *formatting = [NSStackView stackViewWithViews:@[
-    self.checklistButton, self.bulletListButton, self.numberedListButton
-  ]];
-  formatting.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  formatting.alignment = NSLayoutAttributeCenterY;
-  formatting.spacing = 4;
-  for (NSButton *button in @[
-         self.checklistButton, self.bulletListButton, self.numberedListButton
-       ]) {
-    [button.widthAnchor constraintEqualToConstant:28].active = YES;
-    [button.heightAnchor constraintEqualToConstant:28].active = YES;
-  }
-  NSStackView *formattingBar = [NSStackView stackViewWithViews:@[
-    formatting, [NSView new]
-  ]];
-  formattingBar.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  formattingBar.alignment = NSLayoutAttributeCenterY;
-  formattingBar.edgeInsets = NSEdgeInsetsMake(0, 12, 0, 12);
-  NSStackView *editorSurface = [NSStackView stackViewWithViews:@[
-    formattingBar, editorScroll
-  ]];
-  editorSurface.orientation = NSUserInterfaceLayoutOrientationVertical;
-  editorSurface.alignment = NSLayoutAttributeLeading;
-  editorSurface.spacing = 8;
-  StyleSurface(editorSurface, AfternoteCanvasColor());
-  [formattingBar.widthAnchor constraintEqualToAnchor:editorSurface.widthAnchor].active = YES;
-  [editorScroll.widthAnchor constraintEqualToAnchor:editorSurface.widthAnchor].active = YES;
-  self.saveButton = [AfternoteButton buttonWithTitle:@"Save changes" target:self action:@selector(saveNote:)];
-  [self stylePrimaryButton:self.saveButton];
-  self.saveButton.keyEquivalent = @"s";
-  self.saveButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
-  [self.saveButton.widthAnchor constraintEqualToConstant:132].active = YES;
-  self.discardChangesButton = [AfternoteButton buttonWithTitle:@"Discard changes"
-                                                         target:self
-                                                         action:@selector(discardEditorChanges:)];
-  [self styleSecondaryButton:self.discardChangesButton];
-  self.discardChangesButton.accessibilityLabel = @"Discard unsaved note changes";
-  self.deleteButton = [AfternoteButton buttonWithTitle:@"Delete permanently" target:self action:@selector(confirmDeleteNote:)];
-  [self styleDestructiveButton:self.deleteButton];
-  self.editCurrentNoteButton = [AfternoteButton buttonWithTitle:@"Edit current note"
-                                                          target:self
-                                                          action:@selector(editCurrentNote:)];
-  [self styleSecondaryButton:self.editCurrentNoteButton];
-  self.editCurrentNoteButton.hidden = YES;
-  NSStackView *actions = [NSStackView stackViewWithViews:@[
-    self.revisionMenu, [NSView new], self.editCurrentNoteButton,
-    self.deleteButton, self.discardChangesButton, self.saveButton
-  ]];
-  actions.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  actions.alignment = NSLayoutAttributeCenterY;
-  actions.spacing = 10;
-  NSStackView *editorHeading = [NSStackView stackViewWithViews:@[
-    self.memoryBackButton, [NSView new], self.revisionLabel
-  ]];
-  editorHeading.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  editorHeading.alignment = NSLayoutAttributeCenterY;
-  NSStackView *detail = [NSStackView stackViewWithViews:@[
-    editorHeading, self.sourceLabel, editorSurface, actions
-  ]];
-  detail.orientation = NSUserInterfaceLayoutOrientationVertical;
-  detail.alignment = NSLayoutAttributeLeading;
-  detail.spacing = 12;
-  detail.edgeInsets = NSEdgeInsetsMake(38, 0, 28, 0);
-  StyleSurface(detail, AfternoteCanvasColor());
-
-  NSView *writeWorkspace = [[NSView alloc] init];
-  StyleSurface(writeWorkspace, AfternoteCanvasColor());
-  detail.translatesAutoresizingMaskIntoConstraints = NO;
-  [writeWorkspace addSubview:detail];
-  [NSLayoutConstraint activateConstraints:@[
-    [detail.leadingAnchor constraintGreaterThanOrEqualToAnchor:writeWorkspace.leadingAnchor constant:32],
-    [detail.trailingAnchor constraintLessThanOrEqualToAnchor:writeWorkspace.trailingAnchor constant:-32],
-    [detail.centerXAnchor constraintEqualToAnchor:writeWorkspace.centerXAnchor],
-    [detail.topAnchor constraintEqualToAnchor:writeWorkspace.topAnchor],
-    [detail.bottomAnchor constraintEqualToAnchor:writeWorkspace.bottomAnchor],
-    [detail.widthAnchor constraintLessThanOrEqualToConstant:760],
-    [detail.widthAnchor constraintGreaterThanOrEqualToConstant:600],
-    [editorHeading.widthAnchor constraintEqualToAnchor:detail.widthAnchor],
-    [editorSurface.widthAnchor constraintEqualToAnchor:detail.widthAnchor],
-    [actions.widthAnchor constraintEqualToAnchor:detail.widthAnchor],
-  ]];
+  self.noteEditorView = [[AfternoteNoteEditorView alloc] initWithActionTarget:self];
+  NSView *writeWorkspace = self.noteEditorView;
 
   self.libraryWorkspaceTitle = [self label:@"Notes" size:28 weight:NSFontWeightSemibold];
   self.libraryWorkspaceSubtitle = [self label:@"Your local notes."
@@ -3073,8 +2754,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     self.librarySearch.enabled = self.libraryExpiresAt.length > 0;
     self.askButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.noteTable.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
-    self.revisionMenu.enabled = !controlsBusy && self.libraryExpiresAt.length > 0 &&
-        self.revisionHistoryLoaded;
     self.loadMoreNotesButton.enabled = !controlsBusy && self.noteCursor != nil;
     self.libraryRecentButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.createNoteButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
@@ -3084,17 +2763,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         ((NSButton *)view).enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
       }
     }
-    BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
-        self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
-    self.saveButton.enabled = !controlsBusy && !self.inspectingCitation &&
-        hasUnsavedChanges && (self.activeNote != nil || self.creatingNote);
-    self.discardChangesButton.enabled = !controlsBusy && !self.inspectingCitation &&
-        hasUnsavedChanges;
-    self.deleteButton.enabled = !controlsBusy && self.activeNote != nil && !self.creatingNote;
-    self.memoryBackButton.enabled = !controlsBusy;
-    self.checklistButton.enabled = !controlsBusy && self.noteEditor.editable;
-    self.bulletListButton.enabled = !controlsBusy && self.noteEditor.editable;
-    self.numberedListButton.enabled = !controlsBusy && self.noteEditor.editable;
+    [self.noteEditorView setBusy:controlsBusy authenticated:self.libraryExpiresAt.length > 0];
     self.libraryStatusLabel.stringValue = status;
     self.libraryProgress.hidden = !controlsBusy;
     if (controlsBusy) [self.libraryProgress startAnimation:nil];
@@ -3317,17 +2986,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   if (notification.object == self.librarySearch) self.askComposer.afternoteFocused = NO;
 }
 
-- (void)textDidChange:(NSNotification *)notification {
-  if (notification.object != self.noteEditor) return;
-  if (self.editorSaveState == AfternoteEditorSaveStateSaved) {
-    [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:YES];
-  }
-  BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
-      self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
-  self.saveButton.enabled = hasUnsavedChanges && !self.libraryMutationInFlight;
-  self.discardChangesButton.enabled = hasUnsavedChanges && !self.libraryMutationInFlight;
-}
-
 - (BOOL)control:(NSControl *)control
         textView:(NSTextView *)textView
 doCommandBySelector:(SEL)commandSelector {
@@ -3531,8 +3189,7 @@ doCommandBySelector:(SEL)commandSelector {
             ![StringValue(self.activeNote[@"id"]) isEqualToString:noteId]) return;
         [self renderActiveNote];
         if (response == NSAlertFirstButtonReturn) {
-          self.noteEditor.string = draft;
-          [self applyEditorTheme];
+          [self.noteEditorView restoreDraft:draft];
           [self setLibraryBusy:NO status:[NSString stringWithFormat:
               @"Draft preserved against revision %@. Review it, then Save to create the next revision.",
               latest[@"revision"] ?: @0]];
@@ -3687,7 +3344,7 @@ doCommandBySelector:(SEL)commandSelector {
   if (noteId.length == 0) return;
   BOOL showSavedStateAfterOpen = self.editorSaveConfirmationPending && revision == nil;
   self.editorSaveConfirmationPending = NO;
-  [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+  [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
   BOOL changingNote = ![StringValue(self.activeNote[@"id"]) isEqualToString:noteId];
   if (changingNote) {
     self.activeNote = nil;
@@ -3723,7 +3380,7 @@ doCommandBySelector:(SEL)commandSelector {
       [self renderActiveNote];
       [self showLibraryMode:AfternoteLibraryModeWrite loadBrowse:NO];
       if (showSavedStateAfterOpen) {
-        [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:YES];
+        [self.noteEditorView setSaveState:AfternoteEditorSaveStateSaved animated:YES];
       }
       if (revision == nil || self.inspectingCitation) [self loadRevisionHistory:NO];
       [self setLibraryBusy:NO status:[NSString stringWithFormat:@"Authenticated until %@", DateLabel(self.libraryExpiresAt)]];
@@ -3771,48 +3428,14 @@ doCommandBySelector:(SEL)commandSelector {
       self.revisionCursor = [cursor isKindOfClass:[NSString class]] ? cursor : nil;
       self.revisionHistoryLoaded = YES;
       [self renderRevisionMenu];
-      self.revisionMenu.enabled = !self.libraryMutationInFlight && self.libraryExpiresAt.length > 0;
+      [self.noteEditorView setBusy:self.libraryMutationInFlight
+                    authenticated:self.libraryExpiresAt.length > 0];
     });
   }];
 }
 
-- (void)renderRevisionMenu {
-  [self.revisionMenu removeAllItems];
-  [self.revisionMenu addItemWithTitle:self.creatingNote ? @"New note" : @"Current revision"];
-  for (NSDictionary *revision in AfternoteHistoricalRevisionRows(
-           self.activeNote ?: @{}, self.revisionSummaries ?: @[])) {
-    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:
-        [NSString stringWithFormat:@"Revision %@ · %@", revision[@"revision"] ?: @0,
-                                   DateLabel(revision[@"createdAt"])]
-                                             action:nil keyEquivalent:@""];
-    item.representedObject = revision;
-    [self.revisionMenu.menu addItem:item];
-  }
-  if (self.revisionCursor != nil) {
-    NSMenuItem *more = [[NSMenuItem alloc] initWithTitle:@"More revisions available…"
-                                                 action:nil keyEquivalent:@""];
-    more.representedObject = @{ @"loadMore" : @YES };
-    [self.revisionMenu.menu addItem:more];
-  }
-  if (self.inspectingCitation) {
-    NSInteger displayedRevision = [self.activeNote[@"revision"] integerValue];
-    for (NSMenuItem *item in self.revisionMenu.itemArray) {
-      NSDictionary *revision = [item.representedObject isKindOfClass:[NSDictionary class]]
-          ? item.representedObject
-          : nil;
-      if ([revision[@"revision"] integerValue] == displayedRevision) {
-        [self.revisionMenu selectItem:item];
-        break;
-      }
-    }
-  }
-}
-
-- (void)selectRevision:(NSPopUpButton *)sender {
-  NSDictionary *revision = [sender.selectedItem.representedObject isKindOfClass:[NSDictionary class]]
-      ? sender.selectedItem.representedObject : nil;
+- (void)selectEditorRevision:(NSDictionary *)revision {
   if ([revision[@"loadMore"] boolValue]) {
-    [sender selectItemAtIndex:0];
     [self loadRevisionHistory:YES];
     return;
   }
@@ -3833,61 +3456,13 @@ doCommandBySelector:(SEL)commandSelector {
 }
 
 - (void)renderActiveNote {
-  if (self.activeNote == nil && !self.creatingNote) {
-    [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
-    self.noteEditor.string = @"";
-    self.noteEditor.editable = NO;
-    self.revisionLabel.stringValue = @"Choose a note";
-    self.sourceLabel.stringValue = @"The note and its source will appear here.";
-    [self applyEditorTheme];
-    self.saveButton.enabled = NO;
-    self.checklistButton.enabled = NO;
-    self.bulletListButton.enabled = NO;
-    self.numberedListButton.enabled = NO;
-    self.deleteButton.hidden = YES;
-    self.discardChangesButton.hidden = YES;
-    self.editCurrentNoteButton.hidden = YES;
-    self.saveButton.hidden = NO;
-    self.revisionMenu.hidden = YES;
-    return;
-  }
-  self.noteEditor.string = StringValue(self.activeNote[@"content"]);
-  self.noteEditor.selectedRange = NSMakeRange(0, 0);
-  [self applyEditorTheme];
-  BOOL isCurrentRevision = [self.activeNote[@"id"] isKindOfClass:[NSString class]];
-  self.noteEditor.editable = !self.inspectingCitation &&
-      (self.creatingNote || isCurrentRevision);
-  self.checklistButton.enabled = self.noteEditor.editable && !self.libraryMutationInFlight;
-  self.bulletListButton.enabled = self.noteEditor.editable && !self.libraryMutationInFlight;
-  self.numberedListButton.enabled = self.noteEditor.editable && !self.libraryMutationInFlight;
-  self.revisionLabel.stringValue = self.inspectingCitation
-      ? [NSString stringWithFormat:@"Cited result · Revision %@",
-           self.activeNote[@"revision"] ?: @0]
-      : (self.creatingNote
-          ? @"New note"
-          : [NSString stringWithFormat:@"Revision %@ · updated %@",
-             self.activeNote[@"revision"] ?: @0,
-             DateLabel(self.activeNote[@"updatedAt"] ?: self.activeNote[@"createdAt"])]);
-  NSDictionary *source = [self.activeNote[@"source"] isKindOfClass:[NSDictionary class]] ? self.activeNote[@"source"] : @{};
-  NSMutableArray<NSString *> *parts = [NSMutableArray array];
-  for (NSString *key in @[ @"label", @"application", @"author", @"url", @"timestamp" ]) {
-    NSString *value = StringValue(source[key]);
-    if (value.length > 0) [parts addObject:value];
-  }
-  self.sourceLabel.stringValue = parts.count > 0
-      ? [parts componentsJoinedByString:@" · "]
-      : @"Saved locally · No source attached";
-  BOOL hasUnsavedChanges = AfternoteEditorHasUnsavedChanges(
-      self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
-  self.saveButton.enabled = !self.inspectingCitation && hasUnsavedChanges &&
-      (self.creatingNote || isCurrentRevision);
-  self.saveButton.hidden = self.inspectingCitation;
-  self.editCurrentNoteButton.hidden = !self.inspectingCitation;
-  self.discardChangesButton.hidden = self.inspectingCitation;
-  self.discardChangesButton.enabled = hasUnsavedChanges;
-  self.deleteButton.hidden = self.inspectingCitation || self.creatingNote ||
-      !isCurrentRevision;
-  self.revisionMenu.hidden = self.creatingNote;
+  [self.noteEditorView displayNote:self.activeNote creating:self.creatingNote
+               inspectingCitation:self.inspectingCitation];
+}
+
+- (void)renderRevisionMenu {
+  [self.noteEditorView setHistory:self.revisionSummaries ?: @[]
+                       hasMore:self.revisionCursor != nil loaded:self.revisionHistoryLoaded];
 }
 
 - (void)editCurrentNote:(id)sender {
@@ -3901,7 +3476,7 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)beginNewNote:(id)sender {
   (void)sender;
   self.editorSaveConfirmationPending = NO;
-  [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+  [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
   self.libraryNoteRequestSequence += 1;
   self.libraryRevisionRequestSequence += 1;
   self.creatingNote = YES;
@@ -3913,28 +3488,21 @@ doCommandBySelector:(SEL)commandSelector {
   [self.noteTable deselectAll:nil];
   [self renderActiveNote];
   [self showLibraryMode:AfternoteLibraryModeWrite loadBrowse:NO];
-  [self.noteEditor.window makeFirstResponder:self.noteEditor];
+  [self.noteEditorView focusDraft];
 }
 
 - (void)discardEditorChanges:(id)sender {
   (void)sender;
-  if (!AfternoteEditorHasUnsavedChanges(
-          self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote)) return;
-  self.noteEditor.string = StringValue(self.activeNote[@"content"]);
-  [self.noteEditor.undoManager removeAllActions];
-  [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
-  [self renderActiveNote];
+  if (![self.noteEditorView discardChanges]) return;
   [self setLibraryBusy:NO status:self.creatingNote
       ? @"Draft cleared."
       : @"Changes discarded. The saved revision is unchanged."];
-  [self.noteEditor.window makeFirstResponder:self.noteEditor];
+  [self.noteEditorView focusDraft];
 }
 
 - (void)returnToMemory:(id)sender {
   (void)sender;
-  BOOL hasUnsavedChanges = self.noteEditor.editable &&
-      AfternoteEditorHasUnsavedChanges(
-          self.activeNote ?: @{}, self.noteEditor.string, self.creatingNote);
+  BOOL hasUnsavedChanges = self.noteEditorView.hasUnsavedChanges;
   void (^finish)(void) = ^{
     if (self.creatingNote) {
       self.creatingNote = NO;
@@ -3965,119 +3533,20 @@ doCommandBySelector:(SEL)commandSelector {
   }];
 }
 
-- (void)applyListTransform:(AfternoteListTransform *)updated
-                toTextView:(NSTextView *)textView {
-  if (updated == nil) return;
-  NSString *text = updated.text;
-  NSRange selection = updated.selection;
-  if (![text isEqualToString:textView.string]) {
-    [textView insertText:text
-         replacementRange:NSMakeRange(0, textView.string.length)];
-    [self applyEditorTheme];
-  }
-  textView.selectedRange = selection;
-  [textView.window makeFirstResponder:textView];
-}
-
-- (void)applyListStyle:(AfternoteListStyle)style {
-  if (!self.noteEditor.editable) return;
-  [self applyListTransform:AfternoteToggleList(
-      self.noteEditor.string, self.noteEditor.selectedRange, style)
-                toTextView:self.noteEditor];
-}
-
-- (void)toggleBulletList:(id)sender {
+- (void)saveNote:(id)sender {
   (void)sender;
-  [self applyListStyle:AfternoteListStyleBullet];
-}
-
-- (void)toggleChecklist:(id)sender {
-  (void)sender;
-  [self applyListStyle:AfternoteListStyleChecklist];
-}
-
-- (void)toggleNumberedList:(id)sender {
-  (void)sender;
-  [self applyListStyle:AfternoteListStyleNumbered];
-}
-
-- (BOOL)textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector {
-  if (textView != self.noteEditor) return NO;
-  if (commandSelector == @selector(insertNewline:)) {
-    AfternoteListContinuation *continuation =
-        AfternoteContinueList(textView.string, textView.selectedRange);
-    if (continuation == nil) return NO;
-    [textView insertText:continuation.replacement replacementRange:continuation.range];
-    return YES;
-  }
-  BOOL outdent = commandSelector == @selector(insertBacktab:);
-  if (!outdent && commandSelector != @selector(insertTab:)) return NO;
-  AfternoteListTransform *updated =
-      AfternoteIndentList(textView.string, textView.selectedRange, outdent);
-  if (updated == nil) return NO;
-  [self applyListTransform:updated toTextView:textView];
-  return YES;
-}
-
-- (void)setEditorSaveButtonState:(AfternoteEditorSaveState)state
-                         animated:(BOOL)animated {
-  self.editorSaveState = state;
-  AfternoteEditorSavePresentation *presentation =
-      AfternoteEditorSavePresentationForState(state);
-  AfternoteButton *button = (AfternoteButton *)self.saveButton;
-  button.image = nil;
-  button.imagePosition = NSNoImage;
-  if (presentation.showsSavedConfirmation) {
-    NSImageSymbolConfiguration *configuration =
-        [NSImageSymbolConfiguration configurationWithPointSize:12
-                                                        weight:NSFontWeightSemibold];
-    button.image = [[NSImage imageWithSystemSymbolName:@"checkmark"
-                              accessibilityDescription:@"Saved"]
-        imageWithSymbolConfiguration:configuration];
-    button.imagePosition = NSImageLeft;
-    button.imageHugsTitle = YES;
-    button.title = presentation.title;
-    button.contentTintColor = AfternoteCanvasColor();
-    button.afternoteFillColor = StatusColor(@"success");
-    button.afternoteHoverColor = [StatusColor(@"success")
-        blendedColorWithFraction:0.08 ofColor:NSColor.whiteColor];
-    button.afternotePressedColor = [StatusColor(@"success")
-        blendedColorWithFraction:0.10 ofColor:NSColor.blackColor];
-    button.afternoteBorderColor = nil;
-    button.accessibilityLabel = presentation.accessibilityLabel;
-  } else {
-    button.title = presentation.title;
-    button.accessibilityLabel = presentation.accessibilityLabel;
-    [self stylePrimaryButton:button];
-  }
-  [button invalidateIntrinsicContentSize];
-  [button setNeedsDisplay:YES];
-  if (animated && !NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion) {
-    button.alphaValue = 0.72;
-    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-      context.duration = 0.14;
-      button.animator.alphaValue = 1;
-    } completionHandler:nil];
-  } else {
-    button.alphaValue = 1;
-  }
-}
-
-- (void)saveNote:(NSButton *)sender {
-  NSString *content = self.noteEditor.string;
+  NSString *content = self.noteEditorView.draft;
   if ([[content stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] length] == 0) {
     [self setLibraryBusy:NO status:@"A note cannot be empty."];
     return;
   }
-  if (!AfternoteEditorHasUnsavedChanges(
-          self.activeNote ?: @{}, content, self.creatingNote)) {
-    [self setEditorSaveButtonState:AfternoteEditorSaveStateSaved animated:YES];
+  if (!self.noteEditorView.hasUnsavedChanges) {
+    [self.noteEditorView setSaveState:AfternoteEditorSaveStateSaved animated:YES];
     [self setLibraryBusy:NO status:@"No changes to save. The revision is unchanged."];
     return;
   }
   self.editorSaveConfirmationPending = NO;
-  [self setEditorSaveButtonState:AfternoteEditorSaveStateSaving animated:YES];
-  sender.enabled = NO;
+  [self.noteEditorView setSaveState:AfternoteEditorSaveStateSaving animated:YES];
   BOOL creating = self.creatingNote;
   NSString *submittedNoteId = creating ? @"" : StringValue(self.activeNote[@"id"]);
   NSString *method = creating ? @"library.remember" : @"library.update_note";
@@ -4096,13 +3565,13 @@ doCommandBySelector:(SEL)commandSelector {
       if (generation != self.librarySessionGeneration) return;
       if (!creating && ![StringValue(self.activeNote[@"id"]) isEqualToString:submittedNoteId]) {
         self.libraryMutationInFlight = NO;
-        [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+        [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
         [self loadLibraryNotes:NO];
         return;
       }
       if (error != nil) {
         self.libraryMutationInFlight = NO;
-        [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+        [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
         if ([StringValue(error[@"code"]) isEqualToString:@"conflict"] && !creating) {
           [self showUpdateConflictForNoteId:submittedNoteId draft:content generation:generation];
           return;
@@ -4120,7 +3589,7 @@ doCommandBySelector:(SEL)commandSelector {
         self.editorSaveConfirmationPending = YES;
         [self openNoteId:StringValue(note[@"id"]) revision:nil];
       } else {
-        [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+        [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
       }
     });
   }];
@@ -4200,7 +3669,7 @@ doCommandBySelector:(SEL)commandSelector {
   self.creatingNote = NO;
   self.libraryMutationInFlight = NO;
   self.editorSaveConfirmationPending = NO;
-  [self setEditorSaveButtonState:AfternoteEditorSaveStateDefault animated:NO];
+  [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
   self.libraryListInFlight = NO;
   self.libraryRefreshPending = NO;
   self.revisionHistoryLoaded = NO;
@@ -4211,9 +3680,7 @@ doCommandBySelector:(SEL)commandSelector {
   self.clearSearchButton.hidden = YES;
   [self applySearchMode:@"checking"];
   [self.noteTable reloadData];
-  [self renderActiveNote];
-  [self.noteEditor.undoManager removeAllActions];
-  [self renderRevisionMenu];
+  [self.noteEditorView clearPlaintext];
   [self setLibraryBusy:NO status:status];
 }
 
@@ -5059,6 +4526,14 @@ doCommandBySelector:(SEL)commandSelector {
 
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
 #include "owner_control_connections_layout_smoke.inc"
+NSTextView *FixtureEditorText(NSView *view) {
+  if ([view.identifier isEqualToString:@"note-editor-draft"]) return (NSTextView *)view;
+  for (NSView *child in view.subviews) {
+    NSTextView *text = FixtureEditorText(child);
+    if (text != nil) return text;
+  }
+  return nil;
+}
 @interface RevisionNavigationProbeDelegate : OwnerControlDelegate
 @property(nonatomic, copy) NSString *openedNoteId;
 @property(nonatomic, strong) NSNumber *openedRevision;
@@ -5083,10 +4558,7 @@ int RunRevisionNavigationSmoke() {
   };
   delegate.noteSummaries = [NSMutableArray array];
   delegate.noteTable = [[NSTableView alloc] init];
-  delegate.revisionMenu = [[NSPopUpButton alloc] init];
-  [delegate.revisionMenu addItemWithTitle:@"Current revision"];
-  [delegate.revisionMenu selectItemAtIndex:0];
-  [delegate selectRevision:delegate.revisionMenu];
+  [delegate selectEditorRevision:nil];
   BOOL historicalRevisionReturnsToCurrent =
       [delegate.openedNoteId isEqualToString:noteId] &&
       delegate.openedRevision == nil;
@@ -5465,18 +4937,13 @@ OwnerControlDelegate *BrokerRecoveryProbeDelegate(
   delegate.revocationTargets = [NSMutableDictionary dictionary];
   delegate.librarySearch = [[NSSearchField alloc] init];
   delegate.noteTable = [[NSTableView alloc] init];
-  delegate.noteEditor = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 320, 180)];
-  delegate.noteEditor.string = @"Sensitive fixture";
-  delegate.revisionLabel = [[NSTextField alloc] init];
-  delegate.sourceLabel = [[NSTextField alloc] init];
-  delegate.revisionMenu = [[NSPopUpButton alloc] init];
+  delegate.noteEditorView = [[AfternoteNoteEditorView alloc] initWithActionTarget:delegate];
+  [delegate renderActiveNote];
+  [delegate.noteEditorView restoreDraft:@"Sensitive fixture"];
   delegate.libraryAuthenticateButton = [[NSButton alloc] init];
   delegate.libraryRecentButton = [[NSButton alloc] init];
   delegate.createNoteButton = [[NSButton alloc] init];
   delegate.loadMoreNotesButton = [[NSButton alloc] init];
-  delegate.saveButton = [[AfternoteButton alloc] init];
-  delegate.deleteButton = [[NSButton alloc] init];
-  delegate.memoryBackButton = [[NSButton alloc] init];
   delegate.libraryStatusLabel = [[NSTextField alloc] init];
   delegate.libraryProgress = [[NSProgressIndicator alloc] init];
   delegate.libraryViews = [NSStackView stackViewWithViews:@[]];
@@ -5517,7 +4984,7 @@ int RunBrokerRecoverySmoke() {
   OwnerControlDelegate *recovered = BrokerRecoveryProbeDelegate(recoveringBroker);
   [recovered brokerDidDisconnect];
   BOOL immediateAuthorityClear = recovered.activeNote == nil &&
-      recovered.noteEditor.string.length == 0 && recovered.libraryExpiresAt == nil &&
+      recovered.noteEditorView.draft.length == 0 && recovered.libraryExpiresAt == nil &&
       recovered.ownerExpiresAt == nil && recovered.connections == nil;
   WaitForBrokerRecovery(recovered);
   NSSet<NSString *> *readOnlyRecoveryMethods = [NSSet setWithArray:@[
@@ -5771,20 +5238,16 @@ int RunLibraryCleanupSmoke() {
   delegate.librarySearch = [[NSSearchField alloc] init];
   delegate.librarySearch.stringValue = canary;
   delegate.noteTable = [[NSTableView alloc] init];
-  delegate.noteEditor = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 320, 180)];
-  delegate.noteEditor.string = canary;
-  [delegate.noteEditor.undoManager registerUndoWithTarget:delegate handler:^(id target) {
+  delegate.noteEditorView = [[AfternoteNoteEditorView alloc] initWithActionTarget:delegate];
+  [delegate renderActiveNote];
+  [delegate.noteEditorView restoreDraft:canary];
+  [FixtureEditorText(delegate.noteEditorView).undoManager registerUndoWithTarget:delegate handler:^(id target) {
     (void)target;
   }];
-  delegate.revisionLabel = [[NSTextField alloc] init];
-  delegate.sourceLabel = [[NSTextField alloc] init];
-  delegate.revisionMenu = [[NSPopUpButton alloc] init];
   delegate.libraryAuthenticateButton = [[NSButton alloc] init];
   delegate.libraryRecentButton = [[NSButton alloc] init];
   delegate.createNoteButton = [[NSButton alloc] init];
   delegate.loadMoreNotesButton = [[NSButton alloc] init];
-  delegate.saveButton = [[AfternoteButton alloc] init];
-  delegate.deleteButton = [[NSButton alloc] init];
   delegate.libraryStatusLabel = [[NSTextField alloc] init];
   delegate.libraryProgress = [[NSProgressIndicator alloc] init];
   NSButton *libraryViewButton = [[NSButton alloc] init];
@@ -5840,7 +5303,7 @@ int RunLibraryCleanupSmoke() {
   delegate.connections = @{ @"plaintextFixture" : canary };
   delegate.ownerExpiresAt = @"2099-01-01T00:00:00.000Z";
   delegate.activeNote = @{ @"content" : canary };
-  delegate.noteEditor.string = canary;
+  [delegate.noteEditorView restoreDraft:canary];
   NSUInteger staleOwnerGeneration = delegate.ownerSessionGeneration;
   dispatch_semaphore_t staleOwnerQueued = dispatch_semaphore_create(0);
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -5868,7 +5331,7 @@ int RunLibraryCleanupSmoke() {
   [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
   BOOL nonReadyRecoveryClearedAuthority = delegate.connections == nil &&
       delegate.ownerExpiresAt == nil && delegate.activeNote == nil &&
-      delegate.noteEditor.string.length == 0 &&
+      delegate.noteEditorView.draft.length == 0 &&
       ![delegate.surfaceSelector isEnabledForSegment:0] &&
       ![delegate.surfaceSelector isEnabledForSegment:1] &&
       delegate.surfaceSelector.selectedSegment == -1;
@@ -5997,7 +5460,7 @@ int RunLibraryCleanupSmoke() {
   }
 
   delegate.activeNote = @{ @"content" : canary };
-  delegate.noteEditor.string = canary;
+  [delegate.noteEditorView restoreDraft:canary];
   delegate.libraryExpiresAt = @"2099-01-01T00:00:00.000Z";
   __weak OwnerControlDelegate *weakDelegate = delegate;
   responseBroker.disconnectHandler = ^{
@@ -6009,12 +5472,12 @@ int RunLibraryCleanupSmoke() {
       @"{\"protocolVersion\":1,\"requestId\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"ok\":true,\"result\":{\"events\":[\"bad\"],\"nextCursor\":null}}"
       method:@"owner.inspect_audit" params:@{}];
   NSDate *crossSurfaceDeadline = [NSDate dateWithTimeIntervalSinceNow:0.2];
-  while ((delegate.activeNote != nil || delegate.noteEditor.string.length > 0 ||
+  while ((delegate.activeNote != nil || delegate.noteEditorView.draft.length > 0 ||
           delegate.libraryExpiresAt != nil) && [crossSurfaceDeadline timeIntervalSinceNow] > 0) {
     [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
   }
   BOOL crossSurfaceMalformedOwnerCleared = malformedOwnerRejected &&
-      delegate.activeNote == nil && delegate.noteEditor.string.length == 0 &&
+      delegate.activeNote == nil && delegate.noteEditorView.draft.length == 0 &&
       delegate.libraryExpiresAt == nil;
 
   NSUInteger staleGeneration = delegate.librarySessionGeneration;
@@ -6029,18 +5492,18 @@ int RunLibraryCleanupSmoke() {
   BOOL disconnectCleared = delegate.activeNote == nil &&
       delegate.noteSummaries.count == 0 && delegate.revisionSummaries.count == 0 &&
       delegate.activeQuery.length == 0 && delegate.activeView == nil &&
-      delegate.activeDeleteTarget == nil && delegate.noteEditor.string.length == 0 &&
+      delegate.activeDeleteTarget == nil && delegate.noteEditorView.draft.length == 0 &&
       delegate.librarySearch.stringValue.length == 0 &&
-      !delegate.noteEditor.undoManager.canUndo && !staleReplyApplied &&
+      !FixtureEditorText(delegate.noteEditorView).undoManager.canUndo && !staleReplyApplied &&
       !delegate.libraryRecentButton.enabled && !libraryViewButton.enabled;
   BOOL sensitiveSheetCleared = delegate.librarySensitiveAlert == nil &&
       delegate.librarySensitiveTextView == nil && sensitiveText.string.length == 0 &&
       ![sensitiveAlert.informativeText containsString:canary];
 
   delegate.activeNote = @{ @"content" : canary };
-  delegate.noteEditor.string = canary;
+  [delegate.noteEditorView restoreDraft:canary];
   [delegate clearLibraryPlaintext:@"Library session expired"];
-  BOOL expiryCleared = delegate.activeNote == nil && delegate.noteEditor.string.length == 0;
+  BOOL expiryCleared = delegate.activeNote == nil && delegate.noteEditorView.draft.length == 0;
   BOOL protocolInvalidationCleared = YES;
   BOOL lockedResponseFeedback = NO;
   for (NSString *code in @[
@@ -6048,13 +5511,13 @@ int RunLibraryCleanupSmoke() {
     @"replayed", @"identity_mismatch", @"vault_locked"
   ]) {
     delegate.activeNote = @{ @"content" : canary };
-    delegate.noteEditor.string = canary;
+    [delegate.noteEditorView restoreDraft:canary];
     delegate.libraryExpiresAt = @"2099-01-01T00:00:00.000Z";
     NSUInteger priorGeneration = delegate.librarySessionGeneration;
     [delegate showLibraryError:@{ @"code" : code }];
     protocolInvalidationCleared = protocolInvalidationCleared &&
         delegate.librarySessionGeneration == priorGeneration + 1 &&
-        delegate.activeNote == nil && delegate.noteEditor.string.length == 0 &&
+        delegate.activeNote == nil && delegate.noteEditorView.draft.length == 0 &&
         delegate.libraryExpiresAt == nil;
     if ([code isEqualToString:@"vault_locked"]) {
       lockedResponseFeedback = delegate.vaultLocked &&
@@ -6123,7 +5586,7 @@ int RunLibraryCleanupSmoke() {
     @"crossSurfaceMalformedOwnerCleared" : @(crossSurfaceMalformedOwnerCleared),
     @"sensitiveSheetCleared" : @(sensitiveSheetCleared),
     @"staleReplyRejected" : @(!staleReplyApplied),
-    @"undoHistoryCleared" : @(!delegate.noteEditor.undoManager.canUndo),
+    @"undoHistoryCleared" : @(!FixtureEditorText(delegate.noteEditorView).undoManager.canUndo),
     @"processArgumentsPlaintext" : @(processArgumentsPlaintext),
     @"bundlePlistPlaintext" : @(bundlePlistPlaintext),
     @"statusPlaintext" : @(statusPlaintext),

@@ -31,3 +31,8 @@ void AfternoteStyleDestructiveButton(NSButton *button);
 @property(nonatomic) BOOL afternotePointerInside;
 @property(nonatomic, strong) NSTrackingArea *afternoteTrackingArea;
 @end
+
+void AfternoteStylePrimaryButton(NSButton *button);
+void AfternoteStyleToolButton(NSButton *button);
+NSDate *DateValue(id value);
+NSString *DateLabel(id value);

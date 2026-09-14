@@ -10,6 +10,7 @@ const nativeAppSource = readFileSync(
   join(sourceDirectory, "../native/owner_control_app.mm"),
   "utf8",
 );
+const editorViewSource = readFileSync(join(sourceDirectory, "../native/note_editor_view.mm"), "utf8");
 const ownerBrokerSource = readFileSync(
   join(sourceDirectory, "../native/owner_broker.mm"),
   "utf8",
@@ -52,17 +53,17 @@ describe("native Library production boundary", () => {
     }
     expect(nativeAppSource).toContain("NSAppearanceNameDarkAqua");
     expect(nativeAppSource).toContain("selectedSegmentBezelColor");
-    expect(nativeAppSource).toContain("typingAttributes");
-    expect(nativeAppSource).toContain("NSForegroundColorAttributeName");
-    expect(nativeAppSource).toContain("noteEditor.richText = NO");
-    expect(nativeAppSource).toContain("noteEditor.importsGraphics = NO");
+    expect(editorViewSource).toContain("typingAttributes");
+    expect(editorViewSource).toContain("NSForegroundColorAttributeName");
+    expect(editorViewSource).toContain("noteEditor.richText = NO");
+    expect(editorViewSource).toContain("noteEditor.importsGraphics = NO");
     expect(nativeAppSource).toContain('@"Smart categories"');
     expect(nativeAppSource).toContain('@"appearanceMode" : @"dark"');
     expect(nativeAppSource).toContain('@"plainTextEditor" : @YES');
     expect(nativeAppSource).toContain('@"plainTextListFormatting" : @YES');
-    expect(nativeAppSource).toContain('action:@selector(toggleBulletList:)');
-    expect(nativeAppSource).toContain('action:@selector(toggleNumberedList:)');
-    expect(nativeAppSource).toContain('doCommandBySelector:(SEL)commandSelector');
+    expect(editorViewSource).toContain('action:@selector(toggleBulletList:)');
+    expect(editorViewSource).toContain('action:@selector(toggleNumberedList:)');
+    expect(editorViewSource).toContain('doCommandBySelector:(SEL)commandSelector');
     expect(nativeAppSource).toContain('@"Semantic recall"');
     expect(nativeAppSource).toContain("libraryAuthenticateButton.hidden");
     // Refresh title, enabled state, and dispatch are covered by the standalone screen test.
@@ -137,9 +138,9 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain(
       'revision:searchResult ? summary[@"revision"] : nil]',
     );
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Edit current note"');
-    expect(nativeAppSource).toContain('action:@selector(editCurrentNote:)');
-    expect(nativeAppSource).toContain('@"Cited result · Revision %@"');
+    expect(editorViewSource).toContain('buttonWithTitle:@"Edit current note"');
+    expect(editorViewSource).toContain('action:@selector(editCurrentNote:)');
+    expect(editorViewSource).toContain('@"Cited result · Revision %@"');
     expect(nativeAppSource).toContain("SearchResultsByApplyingPage");
     expect(nativeAppSource).toContain("clearSearch:");
     expect(nativeAppSource).toContain('@"SMART CATEGORIES"');
@@ -147,38 +148,38 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("StyleSurface(self.askComposer, AfternoteSurfaceColor(), 10)");
     expect(nativeAppSource).toContain('imageWithSystemSymbolName:@"arrow.right"');
     expect(nativeAppSource).toContain("kAskSubmitButtonSize = 28");
-    expect(nativeAppSource).toContain('imageWithSystemSymbolName:@"checklist"');
-    expect(nativeAppSource).toContain('imageWithSystemSymbolName:@"list.bullet"');
-    expect(nativeAppSource).toContain('imageWithSystemSymbolName:@"list.number"');
-    expect(nativeAppSource).toContain("AfternoteListStyleChecklist");
+    expect(editorViewSource).toContain('imageWithSystemSymbolName:@"checklist"');
+    expect(editorViewSource).toContain('imageWithSystemSymbolName:@"list.bullet"');
+    expect(editorViewSource).toContain('imageWithSystemSymbolName:@"list.number"');
+    expect(editorViewSource).toContain("AfternoteListStyleChecklist");
     expect(nativeAppSource).toContain('preservesMixedLists');
-    expect(nativeAppSource).toContain("AfternoteIndentList");
-    expect(nativeAppSource).toContain("@selector(insertTab:)");
-    expect(nativeAppSource).toContain("@selector(insertBacktab:)");
-    expect(nativeAppSource).toContain("AfternoteNoteTextView");
-    expect(nativeAppSource).toContain("formattingBar, editorScroll");
+    expect(editorViewSource).toContain("AfternoteIndentList");
+    expect(editorViewSource).toContain("@selector(insertTab:)");
+    expect(editorViewSource).toContain("@selector(insertBacktab:)");
+    expect(editorViewSource).toContain("AfternoteNoteTextView");
+    expect(editorViewSource).toContain("formattingBar, editorScroll");
     expect(nativeAppSource).toContain("kAskComposerMaximumHeight");
     expect(nativeAppSource).toContain("NSLineBreakByWordWrapping");
-    expect(nativeAppSource).toContain('action:@selector(returnToMemory:)');
+    expect(editorViewSource).toContain('action:@selector(returnToMemory:)');
     expect(nativeAppSource).toContain('@"Discard this new memory?"');
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Discard changes"');
-    expect(nativeAppSource).toContain("AfternoteEditorHasUnsavedChanges");
-    expect(nativeAppSource).toContain("self.noteEditor.textContainerInset = NSMakeSize(8, 16)");
+    expect(editorViewSource).toContain('buttonWithTitle:@"Discard changes"');
+    expect(editorViewSource).toContain("AfternoteEditorHasUnsavedChanges");
+    expect(editorViewSource).toContain("self.noteEditor.textContainerInset = NSMakeSize(8, 16)");
     expect(nativeAppSource).toContain("noteColumn.width = 600");
     expect(nativeAppSource).toContain("NSTableViewLastColumnOnlyAutoresizingStyle");
     expect(nativeAppSource).toContain("self.noteTable.style = NSTableViewStylePlain");
     expect(nativeAppSource).toContain("[content.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:8]");
     expect(nativeAppSource).toContain("[content.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor constant:-8]");
-    expect(nativeAppSource).toContain('imageWithSystemSymbolName:@"checkmark"');
+    expect(editorViewSource).toContain('imageWithSystemSymbolName:@"checkmark"');
     expect(noteEditorStateSource).toContain('presentation.title = @"Saved locally"');
-    expect(nativeAppSource).toContain("setEditorSaveButtonState:");
+    expect(nativeAppSource).toContain("[self.noteEditorView setSaveState:");
     expect(nativeAppSource).toContain('containsObject:@"--preview-saved"');
     expect(nativeAppSource).toContain("editorSaveConfirmationPending");
-    expect(nativeAppSource).toContain("constraintEqualToConstant:132");
+    expect(editorViewSource).toContain("constraintEqualToConstant:132");
     expect(nativeAppSource).not.toContain("showEditorSavedState");
-    expect(nativeAppSource).toContain("AfternoteHistoricalRevisionRows(");
+    expect(editorViewSource).toContain("AfternoteHistoricalRevisionRows(");
     expect(noteEditorStateSource).toContain("number.integerValue == currentRevision");
-    expect(nativeAppSource).toContain("- (void)textDidChange:(NSNotification *)notification");
+    expect(editorViewSource).toContain("- (void)textDidChange:(NSNotification *)notification");
     expect(nativeAppSource).not.toContain(
       '// Search citations identify the evidence revision, but editing always opens',
     );
@@ -436,7 +437,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("requestSequence != self.libraryNoteRequestSequence");
     expect(nativeAppSource).toContain("requestSequence != self.libraryRevisionRequestSequence");
     expect(nativeAppSource).toContain("if (!NSThread.isMainThread)");
-    expect(nativeAppSource).toContain("noteEditor.undoManager removeAllActions");
+    expect(editorViewSource).toContain("noteEditor.undoManager removeAllActions");
     expect(nativeAppSource).toContain("librarySensitiveAlert");
     expect(ownerBrokerSource).toContain("resetConnection");
     expect(ownerBrokerSource).toContain("invalid_response");
