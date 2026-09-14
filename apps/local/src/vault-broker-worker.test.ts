@@ -29,6 +29,44 @@ afterEach(() => {
 });
 
 describe("vault broker worker protocol", () => {
+  it("preserves lock and replay precedence before method/role dispatch", async () => {
+    const { worker } = workerFixture();
+    const connection = { connectionId: randomUUID(), peerPid: 39001 };
+    await ownerRequest(worker, connection, "lifecycle.status", {});
+    worker.closeLifecycleAdmissionForTest();
+    const envelope = (method: string, peerRole = "owner-control", id = randomUUID()) => JSON.stringify({
+      kind: "client", peerRole, ...connection,
+      payload: { protocolVersion: 1, requestId: id, method, params: {} },
+    });
+    const blockedOwnerRequest = envelope("owner.unknown");
+    expect(JSON.parse(await worker.handleSerialized(blockedOwnerRequest)).error.code).toBe("vault_locked");
+    expect(JSON.parse(await worker.handleSerialized(blockedOwnerRequest)).error.code).toBe("replayed");
+    // Wrong role and unknown route still see the existing lock-first error.
+    expect(JSON.parse(await worker.handleSerialized(envelope("client.begin"))).error.code).toBe("vault_locked");
+    expect(JSON.parse(await worker.handleSerialized(envelope("memory.unknown", "memory-client"))).error.code)
+      .toBe("vault_locked");
+    expect(JSON.parse(await worker.handleSerialized(envelope("health"))).ok).toBe(true);
+    expect(JSON.parse(await worker.handleSerialized(envelope("lifecycle.unknown"))).error.code).toBe("not_found");
+    expect(JSON.parse(await worker.handleSerialized(envelope("recovery.unknown"))).error.code).toBe("not_found");
+    expect(JSON.parse(await worker.handleSerialized(envelope("lifecycle.status", "memory-client"))).error.code)
+      .toBe("identity_mismatch");
+  });
+
+  it("preserves malformed-request correlation and health transport limits", async () => {
+    const { worker } = workerFixture();
+    for (const text of ["", "not JSON", "x".repeat(1_048_577)]) {
+      expect(JSON.parse(await worker.handleSerialized(text))).toMatchObject({
+        requestId: null, ok: false, error: { code: "invalid_request" },
+      });
+    }
+    const requestId = randomUUID();
+    const response = JSON.parse(await worker.handleSerialized(JSON.stringify({
+      kind: "client", peerRole: "owner-control", connectionId: randomUUID(), peerPid: 39002,
+      payload: { protocolVersion: 2, requestId, method: "health", params: {} },
+    })));
+    expect(response).toMatchObject({ requestId, ok: false, error: { code: "unsupported_version" } });
+  });
+
   it("owns the retired runtime lock for the full worker lifetime", () => {
     const fixture = workerFixture();
     const lockPath = join(fixture.path.replace(/\/vault\.db$/, ""), ".vault.db.afternote.lock");

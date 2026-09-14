@@ -6,6 +6,25 @@ during release review.
 
 ## Unreleased
 
+### Changed
+
+- Separate native Connections rendering, Note-editor drafts and controls, and submitted
+  retrieval state from the app coordinator, with standalone behavioral tests.
+- Isolate Note schema upgrades and verified backups, native broker result validation,
+  and audit-history pagination in focused modules.
+- Make broker method/role routing explicit while preserving replay, recovery, vault-lock,
+  and handler-authorization ordering. Wire validation and peer-safe errors now have
+  their own tested module.
+- Expand first-run instructions and document module ownership and remaining engineering work.
+
+### Fixed
+
+- Center Connections content and align its action columns; present connector repair as
+  a quieter contextual action alongside revocation.
+
+These changes require a new signed candidate before second-Mac acceptance. See the
+[prelaunch smoke test](docs/PRELAUNCH_SMOKE_TEST.md); Alpha 22 does not contain them.
+
 ## 2.0.0-alpha.22 - 2026-09-13
 
 ### Fixed

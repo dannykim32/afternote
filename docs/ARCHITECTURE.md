@@ -16,7 +16,9 @@ Paths below are relative to the repository root.
 | `apps/local/src/integration-host-policy.ts`, `mcp-client-identity.ts` | Supported signed hosts and Connector identity selection | Note content or natural-language intent verification |
 | `apps/local/native/vault_broker_gateway.mm` | Native caller verification, XPC routing, worker lifecycle | Note mutations or retrieval ranking |
 | `apps/local/src/broker-audit-reader.ts` | Metadata-only audit history, snapshot pagination, cursor signing/validation, and response limits | Approval, audit writes, retention, or database lifetime |
-| `apps/local/src/vault-broker-worker.ts` | Dispatch and coordination of Owner, Connector, and recovery operations | UI rendering |
+| `apps/local/src/broker-wire-protocol.ts` | Gateway/request validation, response envelopes, correlation fallback, and peer-safe error messages | Live sessions, storage, or operation dispatch |
+| `apps/local/src/broker-request-policy.ts` | Admission requirements and the exact method/trusted-role routing allowlist | Session scopes, owner approvals, or operation execution |
+| `apps/local/src/vault-broker-worker.ts` | Ordered admission, operation execution, and coordination of Owner, Connector, and recovery state | Wire-format implementation, routing policy definition, or UI rendering |
 | `apps/local/src/vault-broker.ts` | Pairing, grants, Connections, Work sessions, and authorization audit | Host configuration or UI rendering |
 | `apps/local/src/sqlite-memory.ts` | Canonical Note/Revision operations and retrieval | Schema upgrade/backup implementation |
 | `apps/local/src/note-database.ts` | Database adapter selection, Note schema versions, verified pre-migration backups | Note edits, retrieval, or Keychain access |
@@ -35,6 +37,15 @@ also have focused modules alongside these entry points.
 
 ## Invariants to preserve
 
+- Dispatch has two ordered phases. The worker first consumes protected Owner
+  request IDs, checks recovery, and checks vault-lock admission. Only then does it
+  resolve an exact method and trusted-role route. Unknown methods retain their
+  namespace admission requirements; a recovery/lifecycle exemption does not grant
+  a callable route. Handlers retain all session, scope, and fresh-approval checks.
+- Wire parsing stays staged: a validated gateway can still contain an invalid
+  client request. The worker retains that partial context for request correlation
+  and Library-session invalidation. Parsing does not authenticate a caller; the
+  native gateway supplies the verified role and process binding.
 - Audit inspection is authorized by the existing broker path before reaching the
   reader. The reader borrows the encrypted database; audit writes and their mutation
   transactions remain in authorization. Paging fixes a maximum row ID, rejects
@@ -88,6 +99,15 @@ also have focused modules alongside these entry points.
 
 ## Testing the seams
 
+`broker-request-policy.test.ts` specifies every supported method's role, operation
+group, and admission requirements independently of the production allowlist. It
+also checks unknown methods and object-prototype names. `broker-wire-protocol.test.ts`
+exercises malformed envelopes, peer bindings, request fields, correlation, response
+shape, and error redaction without opening a Vault. Worker tests retain the live
+effects: replay/lock/role precedence, health while locked, malformed-request
+correlation, owner approvals, and disconnect/session cleanup. Recovery and Library
+tests continue through the serialized worker interface.
+
 `broker-audit-reader.test.ts` calls the production reader against real SQLCipher
 storage initialized by the production broker schema. It covers stable pagination
 during inserts, bounded pages, fixed actor labels, query-only reads, tampered and
@@ -136,7 +156,8 @@ lock-time clearing, and stale errors arriving in a newly authenticated session.
 
 The current source separates Note migrations, native broker contracts, Connections
 rendering, editor ownership, retrieval state, audit-history reading, and native
-appearance from their former large callers.
+appearance from their former large callers. Broker wire contracts and the two-phase
+request policy now sit separately from live operation coordination.
 It is not the end of the refactor: the Owner app still combines Notes search/browse
 and broker orchestration, Settings, Recovery, shared lifecycle coordination, and
 substantial conditional test fixtures. Broker dispatch and authorization also

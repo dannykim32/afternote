@@ -1,3 +1,22 @@
+import { brokerDispatchTarget, brokerRequestAdmission } from "./broker-request-policy";
+import {
+  MAXIMUM_MESSAGE_BYTES,
+  BrokerProtocolError,
+  parseGatewayEnvelope,
+  parseBrokerRequest,
+  binding,
+  success,
+  serializedError,
+  requestIdFromEnvelope,
+  assertExactObject,
+  boundedString,
+  uuid,
+  safeErrorMessage,
+  peerSafeErrorMessage,
+  type GatewayEnvelope,
+  type GatewayPeerRole,
+  type BrokerRequest,
+} from "./broker-wire-protocol";
 import {
   createHash,
   generateKeyPairSync,
@@ -105,7 +124,6 @@ import {
 
 declare const AFTERNOTE_ACCEPTANCE_TRACE: boolean | undefined;
 
-const MAXIMUM_MESSAGE_BYTES = 1_048_576;
 const DEFAULT_SESSION_TTL_MS = 4 * 60 * 60 * 1_000;
 const OWNER_SESSION_DEFAULT_TTL_MS = 5 * 60 * 1_000;
 const OWNER_SESSION_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -118,7 +136,6 @@ const OWNER_INSPECTION_SCOPES = [
   "owner.inspect_audit",
 ] as const;
 type OwnerInspectionScope = (typeof OWNER_INSPECTION_SCOPES)[number];
-type GatewayPeerRole = "memory-client" | "owner-control";
 const MAX_TRACKED_OWNER_REQUESTS = 1_024;
 const MAX_PENDING_OWNER_CHALLENGES = 32;
 const LIBRARY_DELETE_CHALLENGE_TTL_MS = 30_000;
@@ -126,21 +143,6 @@ const MAX_LIBRARY_RESPONSE_BYTES = 768 * 1_024;
 const MAX_LIBRARY_QUERY_BYTES = 8 * 1_024;
 const MAX_LIBRARY_SEARCH_MS = 2_000;
 const ADMIN_EXPORT_OPERATION_TIMEOUT_MS = 9 * 60_000;
-
-type GatewayEnvelope = {
-  kind: "client" | "owner-presence" | "connection-closed";
-  peerRole: GatewayPeerRole;
-  connectionId: string;
-  peerPid: number;
-  payload: unknown;
-};
-
-type BrokerRequest = {
-  protocolVersion: number;
-  requestId: string;
-  method: string;
-  params: Record<string, unknown>;
-};
 
 export type VaultBrokerWorkerOptions = {
   applicationVersion: string;
@@ -814,20 +816,11 @@ export class VaultBrokerWorker {
     transportBinding: BrokerTransportBinding,
     peerRole: GatewayPeerRole,
   ): Promise<string> {
-    if (
-      peerRole === "owner-control" &&
-      (request.method.startsWith("owner.") ||
-        request.method.startsWith("library.") ||
-        request.method.startsWith("admin.") ||
-        request.method.startsWith("lifecycle.") ||
-        request.method.startsWith("recovery."))
-    ) {
+    const admission = brokerRequestAdmission(request.method, peerRole);
+    if (admission.consumeOwnerRequestId) {
       this.#consumeOwnerRequestId(request.requestId);
     }
-    if (
-      request.method !== "health" &&
-      !request.method.startsWith("recovery.")
-    ) {
+    if (admission.checkRecovery) {
       if (this.#pendingRecoveryChallengeId) {
         throw new BrokerProtocolError(
           "transition_in_progress",
@@ -853,17 +846,13 @@ export class VaultBrokerWorker {
         }
       }
     }
-    if (
-      request.method !== "health" &&
-      !request.method.startsWith("lifecycle.") &&
-      !request.method.startsWith("recovery.")
-    ) {
+    if (admission.requireUnlockedVault) {
       this.#ensureLifecycleLoaded();
       if (this.#lifecycleState !== "unlocked") {
         throw new BrokerProtocolError("vault_locked", "Afternote vault is locked");
       }
     }
-    switch (request.method) {
+    switch (brokerDispatchTarget(request.method, peerRole)) {
       case "health":
         assertExactObject(request.params, []);
         return success(request.requestId, {
@@ -876,80 +865,47 @@ export class VaultBrokerWorker {
           },
         });
       case "client.begin":
-        assertOrdinaryPeerRole(peerRole);
         return this.#beginClient(request, transportBinding, peerRole);
       case "client.complete_pairing":
-        assertOrdinaryPeerRole(peerRole);
-        return this.#completePairingProof(request, transportBinding, peerRole);
+        return this.#completePairingProof(request, transportBinding, "memory-client");
       case "session.begin":
-        assertOrdinaryPeerRole(peerRole);
         return this.#beginActivation(request, transportBinding);
       case "session.complete":
-        assertOrdinaryPeerRole(peerRole);
-        return this.#completeActivationProofs(request, transportBinding, peerRole);
+        return this.#completeActivationProofs(request, transportBinding, "memory-client");
       case "memory.execute":
-        assertPeerRole(peerRole, "memory-client");
         return await this.#executeMemory(request, transportBinding);
       case "owner.session.begin":
-        assertPeerRole(peerRole, "owner-control");
         return this.#beginOwnerSession(request, transportBinding);
       case "owner.routine_authentication":
-        assertPeerRole(peerRole, "owner-control");
         return this.#routineAuthentication(request);
       case "owner.set_routine_authentication":
-        assertPeerRole(peerRole, "owner-control");
         return this.#setRoutineAuthentication(request);
       case "owner.connector_overview":
-        assertPeerRole(peerRole, "owner-control");
         return this.#connectorOverview(request);
       case "owner.inspect_connections":
-        assertPeerRole(peerRole, "owner-control");
         return this.#inspectConnections(request, transportBinding);
       case "owner.inspect_audit":
-        assertPeerRole(peerRole, "owner-control");
         return this.#inspectAudit(request, transportBinding);
       case "owner.revoke_client":
-        assertPeerRole(peerRole, "owner-control");
         return this.#requestRevocation(request, transportBinding);
       case "owner.revoke_connector":
-        assertPeerRole(peerRole, "owner-control");
         return this.#requestConnectorRevocation(request, transportBinding);
       case "library.session.begin":
-        assertPeerRole(peerRole, "owner-control");
         return this.#beginLibrarySession(request, transportBinding);
-      case "library.views":
-      case "library.browse":
-      case "library.search":
-      case "library.get_note":
-      case "library.list_revisions":
-      case "library.remember":
-      case "library.update_note":
-      case "library.delete":
-        assertPeerRole(peerRole, "owner-control");
+      case "library.execute":
         return await this.#executeLibrary(request, transportBinding);
-      case "admin.export":
-      case "admin.diagnostics":
-      case "admin.prepare_client_rotation":
-        assertPeerRole(peerRole, "owner-control");
+      case "admin.begin":
         return this.#beginAdmin(request, transportBinding);
       case "lifecycle.status":
-        assertPeerRole(peerRole, "owner-control");
         return this.#lifecycleStatus(request);
-      case "lifecycle.lock":
-      case "lifecycle.unlock":
-        assertPeerRole(peerRole, "owner-control");
+      case "lifecycle.transition":
         return this.#beginLifecycleTransition(request, transportBinding);
       case "recovery.status":
-        assertPeerRole(peerRole, "owner-control");
         return this.#recoveryStatus(request);
       case "recovery.migrate":
-        assertPeerRole(peerRole, "owner-control");
         return this.#beginRecoveryMigration(request, transportBinding);
       case "recovery.restore":
-        assertPeerRole(peerRole, "owner-control");
         return this.#beginRecoveryRestore(request, transportBinding);
-      default:
-        throw new BrokerProtocolError("not_found", "Broker method is not available");
     }
   }
 
@@ -3487,69 +3443,6 @@ export async function runVaultBrokerWorkerXpc(
   if (terminateAfterDelivery) process.exit(70);
 }
 
-class BrokerProtocolError extends Error {
-  constructor(readonly code: string, message: string) {
-    super(message);
-  }
-}
-
-function parseGatewayEnvelope(value: unknown): GatewayEnvelope {
-  assertExactObject(value, ["connectionId", "kind", "payload", "peerPid", "peerRole"]);
-  const envelope = value as Record<string, unknown>;
-  if (
-    envelope.kind !== "client" &&
-    envelope.kind !== "owner-presence" &&
-    envelope.kind !== "connection-closed"
-  ) {
-    throw new BrokerProtocolError("invalid_request", "Broker gateway kind is invalid");
-  }
-  if (
-    envelope.peerRole !== "memory-client" &&
-    envelope.peerRole !== "owner-control"
-  ) {
-    throw new BrokerProtocolError("invalid_request", "Broker gateway peer role is invalid");
-  }
-  binding(envelope as GatewayEnvelope);
-  return envelope as GatewayEnvelope;
-}
-
-function parseBrokerRequest(value: unknown): BrokerRequest {
-  assertExactObject(value, ["method", "params", "protocolVersion", "requestId"]);
-  const request = value as Record<string, unknown>;
-  if (request.protocolVersion !== VAULT_BROKER_PROTOCOL_VERSION) {
-    throw new BrokerProtocolError("unsupported_version", "Broker protocol version is invalid");
-  }
-  uuid(request.requestId, "request ID");
-  if (typeof request.method !== "string" || !/^[a-z._]{1,64}$/.test(request.method)) {
-    throw new BrokerProtocolError("invalid_request", "Broker method is invalid");
-  }
-  if (!request.params || typeof request.params !== "object" || Array.isArray(request.params)) {
-    throw new BrokerProtocolError("invalid_request", "Broker request parameters are invalid");
-  }
-  return request as BrokerRequest;
-}
-
-function binding(value: GatewayEnvelope): BrokerTransportBinding {
-  if (
-    typeof value.connectionId !== "string" ||
-    !/^[0-9A-F-]{36}$/i.test(value.connectionId) ||
-    !Number.isSafeInteger(value.peerPid) ||
-    value.peerPid <= 0
-  ) {
-    throw new BrokerProtocolError("invalid_request", "Broker connection identity is invalid");
-  }
-  return { connectionId: value.connectionId, peerPid: value.peerPid };
-}
-
-function success(requestId: string, result: unknown): string {
-  return JSON.stringify({
-    protocolVersion: VAULT_BROKER_PROTOCOL_VERSION,
-    requestId,
-    ok: true,
-    result,
-  });
-}
-
 function ownerPresenceChallenge(
   challengeId: string,
   reason: string,
@@ -3571,52 +3464,9 @@ function isUuid(value: unknown): value is string {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function serializedError(requestId: string | null, code: string, message: string): string {
-  return JSON.stringify({
-    protocolVersion: VAULT_BROKER_PROTOCOL_VERSION,
-    requestId,
-    ok: false,
-    error: { code, message },
-  });
-}
-
-function requestIdFromEnvelope(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const payload = (value as Record<string, unknown>).payload;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-  const requestId = (payload as Record<string, unknown>).requestId;
-  return typeof requestId === "string" && /^[0-9a-f-]{36}$/i.test(requestId)
-    ? requestId
-    : null;
-}
-
-function assertExactObject(value: unknown, keys: string[]): asserts value is object {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new BrokerProtocolError("invalid_request", "Broker request object is invalid");
-  }
-  if (Object.keys(value).sort().join("\n") !== [...keys].sort().join("\n")) {
-    throw new BrokerProtocolError("invalid_request", "Broker request fields are invalid");
-  }
-}
-
-function boundedString(value: unknown, maximum: number, name: string): string {
-  if (typeof value !== "string" || value.length === 0 || value.length > maximum) {
-    throw new BrokerProtocolError("invalid_request", `${name} is invalid`);
-  }
-  return value;
-}
-
 function boundedIdentifier(value: unknown, maximum: number, name: string): string {
   const parsed = boundedString(value, maximum, name);
   if (!/^[A-Za-z0-9._:-]+$/.test(parsed)) {
-    throw new BrokerProtocolError("invalid_request", `${name} is invalid`);
-  }
-  return parsed;
-}
-
-function uuid(value: unknown, name: string): string {
-  const parsed = boundedString(value, 36, name);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed)) {
     throw new BrokerProtocolError("invalid_request", `${name} is invalid`);
   }
   return parsed;
@@ -3999,26 +3849,6 @@ function bindingsEqual(
   return left.connectionId === right.connectionId && left.peerPid === right.peerPid;
 }
 
-function assertPeerRole(actual: GatewayPeerRole, expected: GatewayPeerRole): void {
-  if (actual !== expected) {
-    throw new BrokerProtocolError(
-      "identity_mismatch",
-      "Broker method is unavailable to this trusted client role",
-    );
-  }
-}
-
-function assertOrdinaryPeerRole(
-  role: GatewayPeerRole,
-): asserts role is "memory-client" {
-  if (role !== "memory-client") {
-    throw new BrokerProtocolError(
-      "identity_mismatch",
-      "Broker method is unavailable to this trusted client role",
-    );
-  }
-}
-
 function assertClientKindForRole(
   kind: BrokerClientKind,
   role: GatewayPeerRole,
@@ -4140,49 +3970,6 @@ function validateSource(value: unknown): asserts value is SourceContext {
       throw new BrokerProtocolError("invalid_request", "Source context is invalid");
     }
   }
-}
-
-function safeErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return "Broker request failed";
-  const message = error.message.replace(/[\r\n]/g, " ");
-  return message.length <= 300 ? message : "Broker request failed";
-}
-
-const SAFE_UNTYPED_PEER_ERRORS = new Set([
-  "Broker boot does not match",
-  "Client is revoked",
-  "Client signature is invalid",
-  "Grant is revoked",
-  "Revoked MCP client public keys cannot be paired again",
-  "Codex requires explicit reconnect preparation",
-  "Claude Code requires explicit reconnect preparation",
-  "Claude Desktop requires explicit reconnect preparation",
-  "Request signature is invalid",
-  "Request was replayed",
-  "Request transport does not match the active session",
-  "Session was not found",
-  "Session is expired",
-  "Session is disconnected",
-  "Session is revoked",
-  "Session signature is invalid",
-  "Trusted work session is expired",
-  "Vault encryption migration recovery state is invalid",
-  "Vault restore recovery state is invalid",
-]);
-
-const SAFE_UNTYPED_PEER_ERROR_PATTERNS = [
-  /^Session does not grant memory\.(?:remember|recall|get_note|forget)$/,
-] as const;
-
-function peerSafeErrorMessage(error: unknown): string {
-  if (error instanceof BrokerProtocolError || error instanceof MemoryError) {
-    return safeErrorMessage(error);
-  }
-  const message = safeErrorMessage(error);
-  return SAFE_UNTYPED_PEER_ERRORS.has(message) ||
-      SAFE_UNTYPED_PEER_ERROR_PATTERNS.some((pattern) => pattern.test(message))
-    ? message
-    : "Broker request failed";
 }
 
 function brokerAuditErrorCode(error: unknown): string {
