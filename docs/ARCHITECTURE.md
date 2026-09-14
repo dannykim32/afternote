@@ -15,6 +15,7 @@ Paths below are relative to the repository root.
 | `packages/mcp`, `apps/local/src/mcp-broker-adapter.ts` | MCP adaptation to broker operations | Vault keys or direct database access |
 | `apps/local/src/integration-host-policy.ts`, `mcp-client-identity.ts` | Supported signed hosts and Connector identity selection | Note content or natural-language intent verification |
 | `apps/local/native/vault_broker_gateway.mm` | Native caller verification, XPC routing, worker lifecycle | Note mutations or retrieval ranking |
+| `apps/local/src/broker-audit-reader.ts` | Metadata-only audit history, snapshot pagination, cursor signing/validation, and response limits | Approval, audit writes, retention, or database lifetime |
 | `apps/local/src/vault-broker-worker.ts` | Dispatch and coordination of Owner, Connector, and recovery operations | UI rendering |
 | `apps/local/src/vault-broker.ts` | Pairing, grants, Connections, Work sessions, and authorization audit | Host configuration or UI rendering |
 | `apps/local/src/sqlite-memory.ts` | Canonical Note/Revision operations and retrieval | Schema upgrade/backup implementation |
@@ -34,6 +35,14 @@ also have focused modules alongside these entry points.
 
 ## Invariants to preserve
 
+- Audit inspection is authorized by the existing broker path before reaching the
+  reader. The reader borrows the encrypted database; audit writes and their mutation
+  transactions remain in authorization. Paging fixes a maximum row ID, rejects
+  altered cursors, and does not renew the original ten-minute deadline. Cursor keys
+  belong to one reader lifetime, and signed payloads bind the Vault and broker boot.
+- Audit pages expose event metadata and validated Note references, not Note text,
+  queries, client keys, or caller-supplied display names. Shared client-kind labels
+  keep inspection and revocation presentation consistent.
 - A canonical mutation and its synchronous derived projections share a transaction.
   Embeddings remain disposable; a background failure must not discard the Note.
 - Upgrading an existing on-disk Note schema first creates and verifies a private
@@ -79,6 +88,14 @@ also have focused modules alongside these entry points.
 
 ## Testing the seams
 
+`broker-audit-reader.test.ts` calls the production reader against real SQLCipher
+storage initialized by the production broker schema. It covers stable pagination
+during inserts, bounded pages, fixed actor labels, query-only reads, tampered and
+foreign cursors, expiry without renewal, invalid stored references, and oversized
+responses. `vault-broker.test.ts` retains delegation and closed-broker coverage;
+worker tests still exercise owner approval and inspection scopes. Transactional
+audit-write tests remain with authorization, where that behavior still belongs.
+
 `note-database.test.ts` exercises the migration interface with both real database
 adapters: initialization, upgrade backups, unsupported versions, failed-version
 rollback, and connection ownership. `sqlite-memory.test.ts` and
@@ -118,7 +135,8 @@ lock-time clearing, and stale errors arriving in a newly authenticated session.
 ## Remaining organization work
 
 The current source separates Note migrations, native broker contracts, Connections
-rendering, editor ownership, retrieval state, and native appearance from their former large callers.
+rendering, editor ownership, retrieval state, audit-history reading, and native
+appearance from their former large callers.
 It is not the end of the refactor: the Owner app still combines Notes search/browse
 and broker orchestration, Settings, Recovery, shared lifecycle coordination, and
 substantial conditional test fixtures. Broker dispatch and authorization also

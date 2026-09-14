@@ -837,34 +837,21 @@ describe("VaultBrokerAuthorization", () => {
     expect(elapsedMs).toBeLessThan(1_000);
   });
 
-  it("paginates a fixed redacted audit snapshot without duplicates during inserts", () => {
+  it("delegates audit history while retaining the broker lifetime guard", () => {
     const fixture = brokerFixture();
     fixture.seedAuditEvents(5, "2026-08-28T12:00:00.000Z");
 
     const first = fixture.broker.inspectAudit({ pageSize: 2 });
     expect(first.events.map((event) => event.eventId)).toEqual(["seed-00004", "seed-00003"]);
     expect(first.nextCursor).toEqual(expect.any(String));
-    fixture.seedAuditEvents(2, "2026-08-28T12:01:00.000Z", "concurrent");
-
     const second = fixture.broker.inspectAudit({
       pageSize: 2,
       cursor: first.nextCursor!,
     });
-    const third = fixture.broker.inspectAudit({
-      pageSize: 2,
-      cursor: second.nextCursor!,
-    });
-    expect([...first.events, ...second.events, ...third.events].map((event) => event.eventId))
-      .toEqual(["seed-00004", "seed-00003", "seed-00002", "seed-00001", "seed-00000"]);
-    expect(third.nextCursor).toBeNull();
-
-    const tampered = `${first.nextCursor!.slice(0, -1)}x`;
-    expect(() => fixture.broker.inspectAudit({ pageSize: 2, cursor: tampered }))
-      .toThrow("cursor");
-    const nonCanonical = `${first.nextCursor!}!`;
-    expect(() => fixture.broker.inspectAudit({ pageSize: 2, cursor: nonCanonical }))
-      .toThrow("cursor");
-    expect(() => fixture.broker.inspectAudit({ pageSize: 101 })).toThrow("page size");
+    expect(second.events.map((event) => event.eventId)).toEqual(["seed-00002", "seed-00001"]);
+    fixture.broker.close();
+    expect(() => fixture.broker.inspectAudit({ cursor: second.nextCursor! }))
+      .toThrow("Vault broker is closed");
   });
 
   it("keeps every displayed client's revocation scopes and session summary complete", () => {

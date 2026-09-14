@@ -44,7 +44,10 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
   cursors, and request supersession now have a Foundation-only retrieval module.
   Search/browse layout, category loading, authorized dispatch, and shared lifecycle
   orchestration remain in the app. The editor implementation is approximately 600 lines;
-  storage is approximately 2,800, and broker modules are approximately 3,400–4,200.
+  storage is approximately 2,800, and broker modules are approximately 3,200–4,200.
+  Audit-history reading now owns snapshot pagination, signed cursors, validated
+  metadata, and response limits; authorization retains approvals and transactional
+  audit writes. Reader tests use the real encrypted database and the production schema.
   See [the architecture guide](ARCHITECTURE.md) for ownership and the remaining work.
 - Replace source-text checks with behavioral coverage where the check is intended
   to prove runtime behavior. Keep useful packaging and structural checks identified
