@@ -9,6 +9,8 @@
 #import "broker_recovery_state.h"
 #import "connector_overview.h"
 #import "connector_presentation.h"
+#import "native_appearance.h"
+#import "connections_view.h"
 #import "note_editor_state.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
@@ -40,10 +42,6 @@ constexpr CGFloat kAskIconSize = 15;
 constexpr CGFloat kAskFieldHeight = 20;
 constexpr CGFloat kAskFieldMaximumHeight = 62;
 constexpr CGFloat kAskSubmitButtonSize = 28;
-constexpr CGFloat kConnectionsMaximumWidth = 920;
-constexpr CGFloat kConnectionsPageGutter = 32;
-constexpr CGFloat kConnectionActionsWidth = 280;
-constexpr CGFloat kConnectionColumnGap = 32;
 typedef NS_ENUM(NSInteger, AfternoteLibraryMode) {
   AfternoteLibraryModeWrite = 0,
   AfternoteLibraryModeAsk = 1,
@@ -311,80 +309,6 @@ NSString *TimeLabel(id value) {
   });
   NSDate *date = DateValue(text);
   return date == nil ? @"UNKNOWN TIME" : [output stringFromDate:date];
-}
-
-NSColor *StatusColor(NSString *status) {
-  if ([status isEqualToString:@"active"] || [status isEqualToString:@"paired"] ||
-      [status isEqualToString:@"ready"] || [status isEqualToString:@"installed"] ||
-      [status isEqualToString:@"success"]) {
-    return [NSColor colorWithSRGBRed:0.41 green:0.79 blue:0.60 alpha:1.0];
-  }
-  if ([status isEqualToString:@"revoked"] || [status isEqualToString:@"denied"] ||
-      [status isEqualToString:@"error"]) {
-    return [NSColor colorWithSRGBRed:0.88 green:0.44 blue:0.42 alpha:1.0];
-  }
-  return [NSColor colorWithSRGBRed:0.84 green:0.66 blue:0.37 alpha:1.0];
-}
-
-NSColor *AfternoteCanvasColor() {
-  return [NSColor colorWithSRGBRed:0.043 green:0.051 blue:0.055 alpha:1.0];
-}
-
-NSColor *AfternoteSidebarColor() {
-  return [NSColor colorWithSRGBRed:0.055 green:0.063 blue:0.067 alpha:1.0];
-}
-
-NSColor *AfternoteSurfaceColor() {
-  return [NSColor colorWithSRGBRed:0.078 green:0.086 blue:0.094 alpha:1.0];
-}
-
-NSColor *AfternoteRaisedSurfaceColor() {
-  return [NSColor colorWithSRGBRed:0.110 green:0.118 blue:0.129 alpha:1.0];
-}
-
-NSColor *AfternoteBorderColor() {
-  return [NSColor colorWithSRGBRed:0.176 green:0.188 blue:0.204 alpha:1.0];
-}
-
-NSColor *AfternoteTextColor() {
-  return [NSColor colorWithSRGBRed:0.949 green:0.941 blue:0.914 alpha:1.0];
-}
-
-NSColor *AfternoteMutedTextColor() {
-  return [NSColor colorWithSRGBRed:0.573 green:0.592 blue:0.588 alpha:1.0];
-}
-
-NSColor *AfternoteAccentColor() {
-  return [NSColor colorWithSRGBRed:47.0 / 255.0
-                            green:154.0 / 255.0
-                             blue:163.0 / 255.0
-                            alpha:1.0];
-}
-
-NSColor *AfternoteBrandCaptureColor() {
-  return [NSColor colorWithSRGBRed:47.0 / 255.0
-                            green:154.0 / 255.0
-                             blue:163.0 / 255.0
-                            alpha:1.0];
-}
-
-NSColor *AfternoteAccentWashColor() {
-  return [AfternoteAccentColor() colorWithAlphaComponent:0.14];
-}
-
-NSColor *AfternoteBrandCaptureWashColor() {
-  return [AfternoteBrandCaptureColor() colorWithAlphaComponent:0.14];
-}
-
-NSColor *AfternoteMemoryThreadColor() {
-  return [AfternoteAccentColor() colorWithAlphaComponent:0.72];
-}
-
-void StyleSurface(NSView *view, NSColor *color, CGFloat cornerRadius = 0) {
-  view.wantsLayer = YES;
-  view.layer.backgroundColor = color.CGColor;
-  view.layer.cornerRadius = cornerRadius;
-  view.layer.masksToBounds = cornerRadius > 0;
 }
 
 NSArray<NSDictionary *> *SearchResultsByApplyingPage(
@@ -698,15 +622,6 @@ NSString *FreshOwnerApprovalDescription() {
 #endif
 }
 
-@interface FlippedStackView : NSStackView
-@end
-
-@implementation FlippedStackView
-- (BOOL)isFlipped {
-  return YES;
-}
-@end
-
 @interface AfternoteAskComposerView : NSView
 @property(nonatomic) BOOL afternoteFocused;
 @end
@@ -780,115 +695,6 @@ NSString *FreshOwnerApprovalDescription() {
                                      withString:replacement];
     [self didChangeText];
   }
-}
-
-@end
-
-@interface AfternoteButton : NSButton
-@property(nonatomic, strong) NSColor *afternoteFillColor;
-@property(nonatomic, strong) NSColor *afternoteHoverColor;
-@property(nonatomic, strong) NSColor *afternotePressedColor;
-@property(nonatomic, strong) NSColor *afternoteBorderColor;
-@property(nonatomic) CGFloat afternoteCornerRadius;
-@property(nonatomic) BOOL afternotePointerInside;
-@property(nonatomic, strong) NSTrackingArea *afternoteTrackingArea;
-@end
-
-@implementation AfternoteButton
-
-+ (instancetype)buttonWithTitle:(NSString *)title
-                          target:(id)target
-                          action:(SEL)action {
-  AfternoteButton *button = [[self alloc] init];
-  button.title = title;
-  button.target = target;
-  button.action = action;
-  button.buttonType = NSButtonTypeMomentaryPushIn;
-  return button;
-}
-
-+ (instancetype)buttonWithImage:(NSImage *)image
-                          target:(id)target
-                          action:(SEL)action {
-  AfternoteButton *button = [[self alloc] init];
-  button.image = image;
-  button.target = target;
-  button.action = action;
-  button.buttonType = NSButtonTypeMomentaryPushIn;
-  return button;
-}
-
-- (instancetype)init {
-  self = [super init];
-  if (self == nil) return nil;
-  self.wantsLayer = YES;
-  self.bordered = NO;
-  self.focusRingType = NSFocusRingTypeExterior;
-  self.afternoteCornerRadius = 6;
-  return self;
-}
-
-- (BOOL)wantsUpdateLayer {
-  return YES;
-}
-
-- (NSSize)intrinsicContentSize {
-  NSSize size = [super intrinsicContentSize];
-  if (self.afternoteFillColor == nil && self.afternoteBorderColor == nil) return size;
-  return NSMakeSize(size.width + 18, MAX(30, size.height + 8));
-}
-
-- (void)updateTrackingAreas {
-  if (self.afternoteTrackingArea != nil) {
-    [self removeTrackingArea:self.afternoteTrackingArea];
-  }
-  self.afternoteTrackingArea = [[NSTrackingArea alloc]
-      initWithRect:NSZeroRect
-           options:NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow |
-                   NSTrackingInVisibleRect
-             owner:self
-          userInfo:nil];
-  [self addTrackingArea:self.afternoteTrackingArea];
-  [super updateTrackingAreas];
-}
-
-- (void)mouseEntered:(NSEvent *)event {
-  (void)event;
-  self.afternotePointerInside = YES;
-  [self setNeedsDisplay:YES];
-}
-
-- (void)mouseExited:(NSEvent *)event {
-  (void)event;
-  self.afternotePointerInside = NO;
-  [self setNeedsDisplay:YES];
-}
-
-- (void)setHighlighted:(BOOL)highlighted {
-  [super setHighlighted:highlighted];
-  [self setNeedsDisplay:YES];
-}
-
-- (void)setEnabled:(BOOL)enabled {
-  [super setEnabled:enabled];
-  [self setNeedsDisplay:YES];
-}
-
-- (void)updateLayer {
-  NSColor *fill = self.afternoteFillColor ?: NSColor.clearColor;
-  if (!self.enabled) {
-    fill = [fill colorWithAlphaComponent:0.42];
-  } else if (self.highlighted && self.afternotePressedColor != nil) {
-    fill = self.afternotePressedColor;
-  } else if (self.afternotePointerInside && self.afternoteHoverColor != nil) {
-    fill = self.afternoteHoverColor;
-  }
-  self.layer.backgroundColor = fill.CGColor;
-  self.layer.borderColor = (self.afternoteBorderColor ?: NSColor.clearColor).CGColor;
-  self.layer.borderWidth = self.afternoteBorderColor == nil ? 0 : 1;
-  self.layer.cornerRadius = self.afternoteCornerRadius;
-  self.layer.masksToBounds = YES;
-  self.alphaValue = self.enabled ? 1 : 0.72;
 }
 
 @end
@@ -984,20 +790,17 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   return descriptors;
 }
 
-@interface OwnerControlDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSOpenSavePanelDelegate>
+@interface OwnerControlDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSOpenSavePanelDelegate, AfternoteConnectionsActions>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) NSTabView *surfaceTabs;
 @property(nonatomic, strong) AfternoteProductSurfaceRouter *surfaceRouter;
 @property(nonatomic, strong) NSSegmentedControl *surfaceSelector;
 @property(nonatomic, strong) NSButton *memoryNavigationButton;
 @property(nonatomic, strong) NSButton *connectionsNavigationButton;
-@property(nonatomic, strong) NSStackView *content;
+@property(nonatomic, strong) AfternoteConnectionsView *connectionsView;
 @property(nonatomic, strong) NSStackView *setupContent;
 @property(nonatomic, strong) NSView *setupBanner;
 @property(nonatomic) BOOL setupGuideDismissed;
-@property(nonatomic, strong) NSTextField *statusLabel;
-@property(nonatomic, strong) NSProgressIndicator *progress;
-@property(nonatomic, strong) NSButton *authenticateButton;
 @property(nonatomic, strong) NSStackView *recoveryContent;
 @property(nonatomic, strong) NSTextField *recoveryStatusLabel;
 @property(nonatomic, strong) NSProgressIndicator *recoveryProgress;
@@ -1396,14 +1199,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (NSTextField *)label:(NSString *)text size:(CGFloat)size weight:(NSFontWeight)weight {
-  NSTextField *label = [NSTextField labelWithString:text];
-  label.font = [NSFont systemFontOfSize:size weight:weight];
-  label.textColor = AfternoteTextColor();
-  label.maximumNumberOfLines = 0;
-  label.lineBreakMode = NSLineBreakByWordWrapping;
-  label.cell.wraps = YES;
-  label.cell.usesSingleLineMode = NO;
-  return label;
+  return AfternoteLabel(text, size, weight);
 }
 
 - (void)stylePrimaryButton:(NSButton *)button {
@@ -1425,24 +1221,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)styleSecondaryButton:(NSButton *)button {
-  button.bordered = NO;
-  button.controlSize = NSControlSizeRegular;
-  button.contentTintColor = AfternoteTextColor();
-  button.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-  if ([button isKindOfClass:[AfternoteButton class]]) {
-    AfternoteButton *flatButton = (AfternoteButton *)button;
-    flatButton.afternoteFillColor = AfternoteRaisedSurfaceColor();
-    flatButton.afternoteHoverColor = [AfternoteRaisedSurfaceColor()
-        blendedColorWithFraction:0.08 ofColor:NSColor.whiteColor];
-    flatButton.afternotePressedColor = AfternoteSurfaceColor();
-    flatButton.afternoteBorderColor = AfternoteBorderColor();
-    [flatButton invalidateIntrinsicContentSize];
-    [flatButton setNeedsDisplay:YES];
-  } else {
-    button.bordered = YES;
-    button.bezelStyle = NSBezelStyleInline;
-    button.bezelColor = AfternoteRaisedSurfaceColor();
-  }
+  AfternoteStyleSecondaryButton(button);
 }
 
 - (void)styleToolButton:(NSButton *)button {
@@ -1462,9 +1241,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)styleDestructiveButton:(NSButton *)button {
-  button.bordered = NO;
-  button.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
-  button.contentTintColor = StatusColor(@"error");
+  AfternoteStyleDestructiveButton(button);
 }
 
 - (void)styleNavigationButton:(NSButton *)button selected:(BOOL)selected {
@@ -2100,7 +1877,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self.surfaceSelector setEnabled:NO forSegment:0];
   [self.surfaceSelector setEnabled:NO forSegment:1];
   self.libraryAuthenticateButton.enabled = NO;
-  self.authenticateButton.enabled = NO;
+  [self.connectionsView setRefreshEnabled:NO];
 
   navigation.translatesAutoresizingMaskIntoConstraints = NO;
   self.surfaceTabs.translatesAutoresizingMaskIntoConstraints = NO;
@@ -2119,91 +1896,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (NSView *)buildConnectionsView {
-  NSView *root = [[NSView alloc] init];
-  StyleSurface(root, AfternoteCanvasColor());
-  NSTextField *title = [self label:@"Connections" size:32 weight:NSFontWeightSemibold];
-  NSTextField *subtitle = [self label:@"Access and recent activity for local tools. Note text and queries never appear here."
-                                     size:15 weight:NSFontWeightRegular];
-  subtitle.textColor = AfternoteMutedTextColor();
-  self.statusLabel = [self label:@"Loading broker state…" size:13 weight:NSFontWeightMedium];
-  self.statusLabel.textColor = AfternoteMutedTextColor();
-  self.statusLabel.accessibilityLabel = @"Broker status";
-  self.progress = [[NSProgressIndicator alloc] init];
-  self.progress.style = NSProgressIndicatorStyleSpinning;
-  self.progress.controlSize = NSControlSizeSmall;
-  [self.progress startAnimation:nil];
-  self.authenticateButton = [AfternoteButton buttonWithTitle:@"Refresh"
-                                               target:self
-                                               action:@selector(refreshConnections:)];
-  [self styleSecondaryButton:self.authenticateButton];
-  self.authenticateButton.keyEquivalent = @"r";
-  self.authenticateButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
-  self.authenticateButton.accessibilityLabel = @"Refresh connections";
-
-  NSStackView *headingRow = [NSStackView stackViewWithViews:@[
-    title, [NSView new], self.authenticateButton
-  ]];
-  headingRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  headingRow.alignment = NSLayoutAttributeCenterY;
-  headingRow.spacing = 16;
-  headingRow.identifier = @"ConnectionsHeading";
-  [title setContentCompressionResistancePriority:NSLayoutPriorityRequired
-                                 forOrientation:NSLayoutConstraintOrientationHorizontal];
-
-  NSStackView *statusRow = [NSStackView stackViewWithViews:@[
-    self.progress, self.statusLabel
-  ]];
-  statusRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  statusRow.spacing = 10;
-  statusRow.alignment = NSLayoutAttributeCenterY;
-  [self.statusLabel setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
-                                            forOrientation:NSLayoutConstraintOrientationHorizontal];
-
-  self.content = [FlippedStackView stackViewWithViews:@[]];
-  self.content.orientation = NSUserInterfaceLayoutOrientationVertical;
-  self.content.alignment = NSLayoutAttributeLeading;
-  self.content.spacing = 16;
-  self.content.edgeInsets = NSEdgeInsetsMake(18, 0, 32, 0);
-
-  NSScrollView *scroll = [[NSScrollView alloc] init];
-  scroll.hasVerticalScroller = YES;
-  scroll.drawsBackground = NO;
-  scroll.documentView = self.content;
-  scroll.autohidesScrollers = YES;
-  scroll.identifier = @"ConnectionsScroll";
-
-  NSStackView *layout = [NSStackView stackViewWithViews:@[
-    headingRow, subtitle, statusRow, scroll
-  ]];
-  layout.orientation = NSUserInterfaceLayoutOrientationVertical;
-  layout.alignment = NSLayoutAttributeLeading;
-  layout.spacing = 12;
-  layout.translatesAutoresizingMaskIntoConstraints = NO;
-  layout.identifier = @"ConnectionsColumn";
-  [root addSubview:layout];
-  NSLayoutConstraint *preferredConnectionsWidth =
-      [layout.widthAnchor constraintEqualToAnchor:root.widthAnchor
-                                        constant:-2 * kConnectionsPageGutter];
-  // Fill the available width without resizing the user's window to satisfy it.
-  preferredConnectionsWidth.priority = NSLayoutPriorityWindowSizeStayPut - 1;
-  preferredConnectionsWidth.active = YES;
-  [NSLayoutConstraint activateConstraints:@[
-    [layout.centerXAnchor constraintEqualToAnchor:root.centerXAnchor],
-    [layout.leadingAnchor constraintGreaterThanOrEqualToAnchor:root.leadingAnchor constant:kConnectionsPageGutter],
-    [layout.trailingAnchor constraintLessThanOrEqualToAnchor:root.trailingAnchor constant:-kConnectionsPageGutter],
-    [layout.topAnchor constraintEqualToAnchor:root.topAnchor constant:30],
-    [layout.bottomAnchor constraintEqualToAnchor:root.bottomAnchor constant:-16],
-    [layout.widthAnchor constraintLessThanOrEqualToConstant:kConnectionsMaximumWidth],
-    // Use the viewport's width so header actions align with row dividers even
-    // when macOS is configured to reserve space for an always-visible scrollbar.
-    [headingRow.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
-    [subtitle.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
-    [statusRow.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
-    [scroll.widthAnchor constraintEqualToAnchor:layout.widthAnchor],
-    [scroll.heightAnchor constraintGreaterThanOrEqualToConstant:120],
-    [self.content.widthAnchor constraintEqualToAnchor:scroll.contentView.widthAnchor],
-  ]];
-  return root;
+  self.connectionsView = [[AfternoteConnectionsView alloc] initWithActionTarget:self];
+  return self.connectionsView;
 }
 
 - (NSView *)buildRecoveryView {
@@ -2863,7 +2557,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         [self.revocationTargets removeAllObjects];
         [self clearLibraryPlaintext:
             @"Authentication frequency changed. Authenticate again to reopen Notes."];
-        if (self.content != nil) [self render];
+        if (self.connectionsView != nil) [self render];
         [self setBusy:NO status:
             @"Authentication frequency changed. Authenticate again to inspect connections."];
       }
@@ -2944,7 +2638,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.connectionsNavigationButton.enabled = ready;
   if (!ready) {
     self.libraryAuthenticateButton.enabled = NO;
-    self.authenticateButton.enabled = NO;
+    [self.connectionsView setRefreshEnabled:NO];
   }
 }
 
@@ -2963,7 +2657,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.auditCursor = nil;
   [self.auditEvents removeAllObjects];
   [self.revocationTargets removeAllObjects];
-  if (self.content != nil) [self render];
+  if (self.connectionsView != nil) [self render];
   [self displaySurface:AfternoteProductSurfaceRecovery recoveryReady:YES];
   [self setRecoveryBusy:NO status:status];
   [self renderRecoveryState];
@@ -2996,7 +2690,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.auditCursor = nil;
   [self.auditEvents removeAllObjects];
   [self.revocationTargets removeAllObjects];
-  if (self.content != nil) [self render];
+  if (self.connectionsView != nil) [self render];
   [self setBusy:NO status:@"The broker restarted. Reconnecting…"];
   [self attemptBrokerRecoveryForSequence:sequence attempt:1];
 }
@@ -3025,7 +2719,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       [self.surfaceRouter finishBrokerRecoveryWithVaultLocked:self.vaultLocked];
   [self displaySurface:surface recoveryReady:YES];
   self.libraryAuthenticateButton.enabled = YES;
-  self.authenticateButton.enabled = YES;
+  [self.connectionsView setRefreshEnabled:YES];
   self.libraryAuthenticateButton.title = self.vaultLocked
       ? @"Unlock vault" : @"Authenticate & Open";
   [self setLibraryBusy:NO status:self.vaultLocked
@@ -4623,48 +4317,6 @@ doCommandBySelector:(SEL)commandSelector {
   return box;
 }
 
-- (NSView *)connectionDetailRowWithTitle:(NSString *)title
-                                  status:(NSString *)status
-                                    body:(NSArray<NSString *> *)body
-                                  button:(NSButton *)button {
-  NSTextField *heading = [self label:title size:16 weight:NSFontWeightSemibold];
-  NSTextField *badge = [self label:[status uppercaseString] size:10 weight:NSFontWeightBold];
-  badge.textColor = StatusColor(status);
-  badge.accessibilityLabel = [NSString stringWithFormat:@"Status: %@", status];
-  NSMutableArray<NSView *> *headingViews = [NSMutableArray arrayWithObjects:heading, badge, [NSView new], nil];
-  if (button != nil) [headingViews addObject:button];
-  NSStackView *header = [NSStackView stackViewWithViews:headingViews];
-  header.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  header.alignment = NSLayoutAttributeCenterY;
-  header.spacing = 8;
-  NSMutableArray<NSView *> *rows = [NSMutableArray arrayWithObject:header];
-  for (NSString *line in body) {
-    NSTextField *label = [self label:line size:12 weight:NSFontWeightRegular];
-    label.textColor = AfternoteMutedTextColor();
-    [rows addObject:label];
-  }
-  NSStackView *content = [NSStackView stackViewWithViews:rows];
-  content.orientation = NSUserInterfaceLayoutOrientationVertical;
-  content.alignment = NSLayoutAttributeLeading;
-  content.spacing = 6;
-  content.edgeInsets = NSEdgeInsetsMake(15, 0, 15, 0);
-  NSBox *divider = [[NSBox alloc] init];
-  divider.boxType = NSBoxSeparator;
-  NSStackView *group = [NSStackView stackViewWithViews:@[ content, divider ]];
-  group.orientation = NSUserInterfaceLayoutOrientationVertical;
-  group.alignment = NSLayoutAttributeLeading;
-  group.spacing = 0;
-  [content.widthAnchor constraintEqualToAnchor:group.widthAnchor].active = YES;
-  [header.widthAnchor constraintEqualToAnchor:content.widthAnchor].active = YES;
-  [divider.widthAnchor constraintEqualToAnchor:group.widthAnchor].active = YES;
-  return group;
-}
-
-- (void)addCard:(NSView *)card {
-  [self.content addArrangedSubview:card];
-  [card.widthAnchor constraintEqualToAnchor:self.content.widthAnchor].active = YES;
-}
-
 - (NSString *)packagedCommandPath {
   NSString *installed = AfternoteInstalledCommandPath();
   if (AfternoteIsAuthenticInstalledCommand(installed)) return installed;
@@ -4868,67 +4520,9 @@ doCommandBySelector:(SEL)commandSelector {
   [alert beginSheetModalForWindow:self.window completionHandler:nil];
 }
 
-- (NSButton *)integrationActionForKind:(NSString *)kind
-                            displayName:(NSString *)displayName
-                           presentation:(AfternoteConnectorPresentation *)presentation {
-  NSButton *button = nil;
-  if (presentation.action == AfternoteConnectorActionGetTool) {
-    NSString *title = [kind isEqualToString:@"codex"]
-        ? @"Get Codex"
-        : [kind isEqualToString:@"claude-desktop"]
-        ? @"Get Claude Desktop"
-        : @"Get Claude Code";
-    button = [AfternoteButton buttonWithTitle:title
-                                       target:self
-                                       action:@selector(openIntegrationDownload:)];
-  } else if (presentation.action == AfternoteConnectorActionConnect) {
-    button = [AfternoteButton buttonWithTitle:@"Connect Afternote"
-                                       target:self
-                                       action:@selector(installIntegration:)];
-  } else if (presentation.action == AfternoteConnectorActionPrepareReconnect) {
-    button = [AfternoteButton buttonWithTitle:@"Prepare reconnect"
-                                       target:self
-                                       action:@selector(reconnectIntegration:)];
-  } else if (presentation.action == AfternoteConnectorActionRepair) {
-    button = [AfternoteButton buttonWithTitle:@"Repair Afternote"
-                                       target:self
-                                       action:@selector(installIntegration:)];
-  } else if (presentation.action == AfternoteConnectorActionCheckAgain) {
-    button = [AfternoteButton buttonWithTitle:@"Check again"
-                                       target:self
-                                       action:@selector(refreshIntegrationStatusFromButton:)];
-  } else if (presentation.action == AfternoteConnectorActionReviewSetup) {
-    button = [AfternoteButton buttonWithTitle:@"Review setup"
-                                       target:self
-                                       action:@selector(reviewIntegrationSetup:)];
-  }
-  if (button == nil) return nil;
-  button.identifier = kind;
-  button.accessibilityLabel = [NSString stringWithFormat:@"%@ in %@",
-      button.title, displayName];
-  if (presentation.action == AfternoteConnectorActionRepair) {
-    // Repair is contextual maintenance, not the primary onboarding action.
-    // Match the page's text actions; reveal a surface only on interaction.
-    button.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
-    button.contentTintColor = AfternoteBrandCaptureColor();
-    AfternoteButton *repair = (AfternoteButton *)button;
-    repair.afternoteHoverColor = AfternoteSurfaceColor();
-    repair.afternotePressedColor = AfternoteRaisedSurfaceColor();
-  } else {
-    [self styleSecondaryButton:button];
-  }
-  return button;
-}
-
 - (void)setBusy:(BOOL)busy status:(NSString *)status {
   dispatch_async(dispatch_get_main_queue(), ^{
-    self.authenticateButton.title = @"Refresh";
-    [self styleSecondaryButton:self.authenticateButton];
-    self.authenticateButton.enabled = !busy;
-    self.statusLabel.stringValue = status;
-    self.progress.hidden = !busy;
-    if (busy) [self.progress startAnimation:nil];
-    else [self.progress stopAnimation:nil];
+    [self.connectionsView setBusy:busy status:status];
   });
 }
 
@@ -5022,13 +4616,6 @@ doCommandBySelector:(SEL)commandSelector {
   self.auditCursor = [cursor isKindOfClass:[NSString class]] ? cursor : nil;
   [self render];
   [self setBusy:NO status:[NSString stringWithFormat:@"Authenticated until %@", DateLabel(self.ownerExpiresAt)]];
-}
-
-- (void)clearContent {
-  for (NSView *view in [self.content.arrangedSubviews copy]) {
-    [self.content removeArrangedSubview:view];
-    [view removeFromSuperview];
-  }
 }
 
 - (void)clearSetupContent {
@@ -5259,23 +4846,7 @@ doCommandBySelector:(SEL)commandSelector {
   return ConnectorLifecycleHistory(clients, grants, events);
 }
 
-- (NSView *)connectorFactWithTitle:(NSString *)title value:(NSString *)value {
-  NSTextField *heading = [self label:title size:10 weight:NSFontWeightSemibold];
-  heading.textColor = AfternoteMutedTextColor();
-  NSTextField *copy = [self label:value size:12 weight:NSFontWeightRegular];
-  copy.textColor = AfternoteTextColor();
-  NSStackView *fact = [NSStackView stackViewWithViews:@[ heading, copy ]];
-  fact.orientation = NSUserInterfaceLayoutOrientationVertical;
-  fact.alignment = NSLayoutAttributeLeading;
-  fact.spacing = 3;
-  [heading.widthAnchor constraintEqualToAnchor:fact.widthAnchor].active = YES;
-  [copy.widthAnchor constraintEqualToAnchor:fact.widthAnchor].active = YES;
-  [copy setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
-                                forOrientation:NSLayoutConstraintOrientationHorizontal];
-  return fact;
-}
-
-- (NSView *)connectorRowForCommandKind:(NSString *)commandKind
+- (AfternoteConnectionRow *)connectorRowForCommandKind:(NSString *)commandKind
                              brokerKind:(NSString *)brokerKind
                             displayName:(NSString *)displayName
                                 clients:(NSArray<NSDictionary *> *)clients
@@ -5333,174 +4904,25 @@ doCommandBySelector:(SEL)commandSelector {
   NSArray<NSString *> *historyLines = [self connectorHistoryForKind:brokerKind
                                                             clients:clients
                                                              grants:grants];
-  NSMutableArray<NSView *> *connectionViews = [NSMutableArray array];
-  NSTextField *connectionLabel = [self label:@"Current connection"
-                                         size:10
-                                       weight:NSFontWeightSemibold];
-  connectionLabel.textColor = AfternoteMutedTextColor();
-  NSTextField *connectionValue = [self label:presentation.connectionTitle
-                                         size:12
-                                       weight:NSFontWeightSemibold];
-  NSTextField *connectionCopy = [self label:presentation.connectionDetail
-                                        size:11
-                                      weight:NSFontWeightRegular];
-  connectionCopy.textColor = AfternoteMutedTextColor();
-  [connectionViews addObjectsFromArray:@[
-    connectionLabel, connectionValue, connectionCopy
-  ]];
-  if (commandKind.length > 0) {
-    NSButton *setup = [self integrationActionForKind:commandKind
-                                          displayName:displayName
-                                        presentation:presentation];
-    if (setup != nil) [connectionViews addObject:setup];
-  }
   if (connected) {
-    NSArray *scopes = overview != nil
-        ? overview.activeScopes : ArrayValue(current[@"activeScopes"]);
-    NSButton *revoke = [AfternoteButton buttonWithTitle:@"Revoke access"
-                                                   target:self
-                                                   action:@selector(confirmRevocation:)];
-    [self styleDestructiveButton:revoke];
     self.revocationTargets[brokerKind] = @{
-      @"kind" : brokerKind,
-      @"displayLabel" : displayName,
-      @"scopes" : scopes,
+      @"kind": brokerKind, @"displayLabel": displayName,
+      @"scopes": overview != nil ? overview.activeScopes : ArrayValue(current[@"activeScopes"]),
     };
-    revoke.identifier = brokerKind;
-    revoke.accessibilityLabel = [NSString stringWithFormat:@"Revoke %@ access", displayName];
-    [connectionViews addObject:revoke];
   }
-
-  NSTextField *heading = [self label:displayName size:16 weight:NSFontWeightSemibold];
-  NSTextField *badge = [self label:[presentation.badge uppercaseString]
-                                 size:10 weight:NSFontWeightBold];
-  badge.textColor = StatusColor(presentation.tone);
-  badge.accessibilityLabel = [NSString stringWithFormat:@"Status: %@", presentation.badge];
-  NSStackView *header = [NSStackView stackViewWithViews:@[ heading, badge, [NSView new] ]];
-  header.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  header.alignment = NSLayoutAttributeCenterY;
-  header.spacing = 8;
-
-  NSTextField *state = [self label:presentation.summary size:12 weight:NSFontWeightRegular];
-  state.textColor = AfternoteMutedTextColor();
-  NSStackView *facts = [NSStackView stackViewWithViews:@[
-    [self connectorFactWithTitle:@"Permissions" value:ScopesLabel(visibleScopes)],
-    [self connectorFactWithTitle:@"Recent activity" value:activityValue],
-  ]];
-  facts.orientation = NSUserInterfaceLayoutOrientationVertical;
-  facts.alignment = NSLayoutAttributeLeading;
-  facts.spacing = 12;
-  [facts setHuggingPriority:NSLayoutPriorityRequired
-            forOrientation:NSLayoutConstraintOrientationVertical];
-  NSStackView *currentConnection = [NSStackView stackViewWithViews:connectionViews];
-  currentConnection.orientation = NSUserInterfaceLayoutOrientationVertical;
-  currentConnection.alignment = NSLayoutAttributeLeading;
-  currentConnection.spacing = 4;
-  currentConnection.identifier = @"ConnectionActions";
-  [currentConnection.widthAnchor constraintEqualToConstant:kConnectionActionsWidth].active = YES;
-  for (NSView *view in connectionViews) {
-    if ([view isKindOfClass:[NSTextField class]]) {
-      [view.widthAnchor constraintEqualToAnchor:currentConnection.widthAnchor].active = YES;
-      [view setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
-                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
-    }
-  }
-  facts.identifier = @"ConnectionFacts";
-  for (NSView *fact in facts.arrangedSubviews) {
-    [fact.widthAnchor constraintEqualToAnchor:facts.widthAnchor].active = YES;
-  }
-  NSStackView *details = [NSStackView stackViewWithViews:@[
-    facts, currentConnection
-  ]];
-  details.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  details.alignment = NSLayoutAttributeTop;
-  details.spacing = kConnectionColumnGap;
-  [facts.widthAnchor constraintEqualToAnchor:details.widthAnchor
-                                  constant:-(kConnectionActionsWidth + kConnectionColumnGap)].active = YES;
-
-  NSMutableArray<NSView *> *rows = [NSMutableArray arrayWithObjects:header, state, details, nil];
-  BOOL expanded = [self.expandedConnectorKinds containsObject:brokerKind];
-  NSImage *image = [NSImage imageWithSystemSymbolName:expanded ? @"chevron.down" : @"chevron.right"
-                            accessibilityDescription:expanded ? @"Hide history" : @"Show history"];
-  NSButton *history = [AfternoteButton buttonWithTitle:@"Connection history"
-                                                target:self
-                                                action:@selector(toggleConnectorHistory:)];
-  history.identifier = brokerKind;
-  history.image = image;
-  history.imagePosition = NSImageLeft;
-  history.imageHugsTitle = YES;
-  history.bordered = NO;
-  history.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
-  history.contentTintColor = AfternoteBrandCaptureColor();
-  history.accessibilityLabel = [NSString stringWithFormat:@"%@ %@ connection history",
-                                 expanded ? @"Hide" : @"Show", displayName];
-  NSString *historyCountText = self.ownerExpiresAt.length > 0
-      ? [NSString stringWithFormat:@"%lu event%@",
-          (unsigned long)historyLines.count, historyLines.count == 1 ? @"" : @"s"]
-      : @"Authenticate to view";
-  NSTextField *historyCount = [self label:historyCountText
-                                         size:10
-                                       weight:NSFontWeightRegular];
-  historyCount.textColor = AfternoteMutedTextColor();
-  NSStackView *historyDisclosure = [NSStackView stackViewWithViews:@[
-    history, historyCount, [NSView new]
-  ]];
-  historyDisclosure.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  historyDisclosure.alignment = NSLayoutAttributeCenterY;
-  historyDisclosure.spacing = 8;
-  [rows addObject:historyDisclosure];
-  if (expanded) {
-    NSTextView *historyText = [[NSTextView alloc]
-        initWithFrame:NSMakeRect(0, 0, 820, 104)];
-    historyText.editable = NO;
-    historyText.selectable = YES;
-    historyText.richText = NO;
-    historyText.drawsBackground = NO;
-    historyText.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-    historyText.textColor = AfternoteMutedTextColor();
-    historyText.textContainerInset = NSMakeSize(0, 6);
-    historyText.autoresizingMask = NSViewWidthSizable;
-    historyText.string = historyLines.count > 0
-        ? [historyLines componentsJoinedByString:@"\n"]
-        : @"No connection history yet.";
-    historyText.accessibilityLabel = [NSString stringWithFormat:@"%@ access history", displayName];
-    NSScrollView *historyScroll = [[NSScrollView alloc] init];
-    historyScroll.documentView = historyText;
-    historyScroll.hasVerticalScroller = YES;
-    historyScroll.drawsBackground = NO;
-    historyScroll.borderType = NSNoBorder;
-    [historyScroll.heightAnchor constraintEqualToConstant:104].active = YES;
-    [rows addObject:historyScroll];
-    if (self.auditCursor != nil) {
-      NSButton *older = [AfternoteButton buttonWithTitle:@"Show older events"
-                                                   target:self
-                                                   action:@selector(loadMore:)];
-      older.bordered = NO;
-      older.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
-      older.contentTintColor = AfternoteMutedTextColor();
-      older.accessibilityLabel = [NSString stringWithFormat:
-          @"Show older redacted %@ connection events", displayName];
-      [rows addObject:older];
-    }
-  }
-  NSStackView *content = [NSStackView stackViewWithViews:rows];
-  content.orientation = NSUserInterfaceLayoutOrientationVertical;
-  content.alignment = NSLayoutAttributeLeading;
-  content.spacing = 10;
-  content.edgeInsets = NSEdgeInsetsMake(15, 0, 15, 0);
-  NSBox *divider = [[NSBox alloc] init];
-  divider.boxType = NSBoxSeparator;
-  NSStackView *group = [NSStackView stackViewWithViews:@[ content, divider ]];
-  group.orientation = NSUserInterfaceLayoutOrientationVertical;
-  group.alignment = NSLayoutAttributeLeading;
-  group.spacing = 0;
-  [content.widthAnchor constraintEqualToAnchor:group.widthAnchor].active = YES;
-  [header.widthAnchor constraintEqualToAnchor:content.widthAnchor].active = YES;
-  [divider.widthAnchor constraintEqualToAnchor:group.widthAnchor].active = YES;
-  for (NSView *row in rows) {
-    if (row != header) [row.widthAnchor constraintEqualToAnchor:content.widthAnchor].active = YES;
-  }
-  return group;
+  AfternoteConnectionRow *row = [[AfternoteConnectionRow alloc] init];
+  row.commandKind = commandKind;
+  row.brokerKind = brokerKind;
+  row.displayName = displayName;
+  row.presentation = presentation;
+  row.connected = connected;
+  row.permissions = ScopesLabel(visibleScopes);
+  row.activity = activityValue;
+  row.historyLines = historyLines;
+  row.historyAuthorized = self.ownerExpiresAt.length > 0;
+  row.historyExpanded = [self.expandedConnectorKinds containsObject:brokerKind];
+  row.hasOlderHistory = self.auditCursor != nil;
+  return row;
 }
 
 - (void)toggleConnectorHistory:(NSButton *)sender {
@@ -5520,14 +4942,14 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)render {
   [self renderSetupGuide];
-  [self clearContent];
+  NSMutableArray<AfternoteConnectionRow *> *rows = [NSMutableArray array];
   NSArray *clients = ArrayValue(self.connections[@"clients"]);
   NSArray *grants = ArrayValue(self.connections[@"grants"]);
   [self.revocationTargets removeAllObjects];
   NSMutableSet<NSString *> *renderedKinds = [NSMutableSet set];
   for (AfternoteIntegrationDescriptor *descriptor in IntegrationDescriptors()) {
     NSArray *matching = [self clients:clients forKind:descriptor.brokerKind];
-    [self addCard:[self connectorRowForCommandKind:descriptor.commandKind
+    [rows addObject:[self connectorRowForCommandKind:descriptor.commandKind
                                         brokerKind:descriptor.brokerKind
                                        displayName:descriptor.displayName
                                            clients:matching
@@ -5539,13 +4961,14 @@ doCommandBySelector:(SEL)commandSelector {
     if (kind.length == 0 || [renderedKinds containsObject:kind]) continue;
     NSArray *matching = [self clients:clients forKind:kind];
     NSDictionary *current = [self currentClientFromClients:matching];
-    [self addCard:[self connectorRowForCommandKind:nil
+    [rows addObject:[self connectorRowForCommandKind:nil
                                         brokerKind:kind
                                        displayName:StringValue(current[@"displayLabel"], @"Local tool")
                                            clients:matching
                                             grants:grants]];
     [renderedKinds addObject:kind];
   }
+  [self.connectionsView renderRows:rows];
 }
 
 - (void)loadMore:(id)sender {
@@ -5627,11 +5050,7 @@ doCommandBySelector:(SEL)commandSelector {
   }
   dispatch_async(dispatch_get_main_queue(), ^{
     [self setBusy:NO status:message];
-    [self clearContent];
-    [self addCard:[self connectionDetailRowWithTitle:@"Connections unavailable"
-                                              status:@"unavailable"
-                                                body:@[message, @"No web session or local request can substitute for native owner authentication."]
-                                              button:nil]];
+    [self.connectionsView showErrorMessage:message];
   });
 }
 
@@ -6061,9 +5480,7 @@ OwnerControlDelegate *BrokerRecoveryProbeDelegate(
   delegate.libraryStatusLabel = [[NSTextField alloc] init];
   delegate.libraryProgress = [[NSProgressIndicator alloc] init];
   delegate.libraryViews = [NSStackView stackViewWithViews:@[]];
-  delegate.authenticateButton = [[NSButton alloc] init];
-  delegate.statusLabel = [[NSTextField alloc] init];
-  delegate.progress = [[NSProgressIndicator alloc] init];
+  delegate.connectionsView = [[AfternoteConnectionsView alloc] initWithActionTarget:delegate];
   delegate.memoryNavigationButton = [[NSButton alloc] init];
   delegate.connectionsNavigationButton = [[NSButton alloc] init];
   delegate.surfaceSelector = [NSSegmentedControl
@@ -6389,10 +5806,7 @@ int RunLibraryCleanupSmoke() {
     item.label = label;
     [delegate.surfaceTabs addTabViewItem:item];
   }
-  delegate.content = [NSStackView stackViewWithViews:@[]];
-  delegate.authenticateButton = [[NSButton alloc] init];
-  delegate.statusLabel = [[NSTextField alloc] init];
-  delegate.progress = [[NSProgressIndicator alloc] init];
+  delegate.connectionsView = [[AfternoteConnectionsView alloc] initWithActionTarget:delegate];
   delegate.recoveryContent = [NSStackView stackViewWithViews:@[]];
   delegate.recoveryStatusLabel = [[NSTextField alloc] init];
   delegate.recoveryProgress = [[NSProgressIndicator alloc] init];
@@ -6461,7 +5875,7 @@ int RunLibraryCleanupSmoke() {
   BOOL staleOwnerReplyRejected = delegate.ownerExpiresAt == nil &&
       delegate.connections == nil;
   BOOL staleRevocationReplyRejected =
-      ![delegate.statusLabel.stringValue containsString:@"Fixture client revoked"];
+      ![((NSTextField *)ConnectionLayoutView(delegate.connectionsView, @"ConnectionsStatus")).stringValue containsString:@"Fixture client revoked"];
   BOOL recoveryErrorPersisted =
       [delegate.recoveryErrorMessage isEqualToString:@"Fixture recovery error remains visible"] &&
       delegate.recoveryContent.arrangedSubviews.count == 2;

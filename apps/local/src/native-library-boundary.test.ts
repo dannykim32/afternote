@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 
 const sourceDirectory = import.meta.dir;
+const nativeAppearanceSource = ["native_appearance.h", "native_appearance.mm"]
+  .map((file) => readFileSync(join(sourceDirectory, "../native", file), "utf8"))
+  .join("\n");
 const nativeAppSource = readFileSync(
   join(sourceDirectory, "../native/owner_control_app.mm"),
   "utf8",
@@ -45,7 +48,7 @@ describe("native Library production boundary", () => {
       "AfternoteBrandCaptureColor",
       "AfternoteMemoryThreadColor",
     ]) {
-      expect(nativeAppSource).toContain(token);
+      expect(nativeAppearanceSource).toContain(token);
     }
     expect(nativeAppSource).toContain("NSAppearanceNameDarkAqua");
     expect(nativeAppSource).toContain("selectedSegmentBezelColor");
@@ -62,7 +65,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('doCommandBySelector:(SEL)commandSelector');
     expect(nativeAppSource).toContain('@"Semantic recall"');
     expect(nativeAppSource).toContain("libraryAuthenticateButton.hidden");
-    expect(nativeAppSource).toContain('self.authenticateButton.title = @"Refresh"');
+    // Refresh title, enabled state, and dispatch are covered by the standalone screen test.
     expect(nativeAppSource).not.toContain("VisibleNoteMetadata");
     expect(nativeAppSource).not.toContain("NSAppearanceNameAqua");
   });
@@ -84,12 +87,12 @@ describe("native Library production boundary", () => {
   });
 
   it("uses quiet flat controls instead of glossy rounded push buttons", () => {
-    expect(nativeAppSource).toContain("@interface AfternoteButton : NSButton");
-    expect(nativeAppSource).toContain("flatButton.afternoteFillColor");
-    expect(nativeAppSource).toContain("flatButton.afternoteHoverColor");
-    expect(nativeAppSource).toContain("flatButton.afternotePressedColor");
-    expect(nativeAppSource).not.toContain("NSBezelStyleRounded");
-    expect(nativeAppSource).not.toContain("NSBezelStyleTexturedRounded");
+    expect(nativeAppearanceSource).toContain("@interface AfternoteButton : NSButton");
+    expect(nativeAppearanceSource).toContain("flatButton.afternoteFillColor");
+    expect(nativeAppearanceSource).toContain("flatButton.afternoteHoverColor");
+    expect(nativeAppearanceSource).toContain("flatButton.afternotePressedColor");
+    expect(nativeAppearanceSource).not.toContain("NSBezelStyleRounded");
+    expect(nativeAppearanceSource).not.toContain("NSBezelStyleTexturedRounded");
   });
 
   it("presents one Notes bank with disposable search results and an editor", () => {
@@ -284,12 +287,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('environment[@"PATH"]');
     expect(nativeAppSource).toContain('"--integration-command-smoke"');
     expect(nativeAppSource).toContain("refreshIntegrationStatuses");
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Connect Afternote"');
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Repair Afternote"');
-    expect(nativeAppSource).toContain('@"Get Codex"');
-    expect(nativeAppSource).toContain('@"Get Claude Code"');
-    expect(nativeAppSource).toContain('@"Get Claude Desktop"');
-    expect(nativeAppSource).toContain('action:@selector(installIntegration:)');
+    // Rendering and action dispatch are exercised by native-connections-view.test.ts.
     expect(nativeAppSource).toContain("AfternoteIntegrationDescriptor");
     expect(nativeAppSource).toContain('displayName:@"Codex"');
     expect(nativeAppSource).toContain('displayName:@"Claude Code"');
@@ -297,17 +295,9 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("connectorRowForCommandKind:");
     expect(nativeAppSource).toContain("toggleConnectorHistory:");
     expect(nativeAppSource).toContain("expandedConnectorKinds");
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Connection history"');
     expect(nativeAppSource).toContain('requestMethod:@"owner.revoke_connector"');
     expect(nativeAppSource).toContain("self.revocationTargets[brokerKind]");
     expect(nativeAppSource).not.toContain("self.revocationTargets[clientId]");
-    expect(nativeAppSource).toContain('@"No connection history yet."');
-    expect(nativeAppSource).toContain('@"Permissions"');
-    expect(nativeAppSource).toContain('@"Recent activity"');
-    expect(nativeAppSource).toContain('@"Current connection"');
-    expect(nativeAppSource).toContain("historyScroll.hasVerticalScroller = YES");
-    expect(nativeAppSource).toContain("historyScroll.heightAnchor constraintEqualToConstant:104");
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Show older events"');
     expect(nativeAppSource).not.toContain('@"Load earlier activity"');
     expect(nativeAppSource).not.toContain("AfternoteMemoryThreadView");
     const connectorHistory = nativeAppSource.slice(
@@ -326,16 +316,6 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain(
       'Connect from Terminal with `afternote codex install` or `afternote claude-code install`.',
     );
-    const connectorRow = nativeAppSource.slice(
-      nativeAppSource.indexOf("- (NSView *)connectorRowForCommandKind:"),
-      nativeAppSource.indexOf("- (void)renderConnections"),
-    );
-    expect(connectorRow).not.toContain(
-      "} else if (commandKind.length > 0) {\n    NSButton *setup",
-    );
-    expect(connectorRow.indexOf("NSButton *setup")).toBeLessThan(
-      connectorRow.indexOf("if (connected)"),
-    );
   });
 
   it("refreshes connector status and share-safe activity without owner presence", () => {
@@ -346,7 +326,7 @@ describe("native Library production boundary", () => {
     expect(refreshAction).toContain("[self refreshIntegrationStatuses];");
     expect(refreshAction).toContain('requestMethod:@"owner.connector_overview"');
     expect(refreshAction).not.toContain('requestMethod:@"owner.session.begin"');
-    expect(nativeAppSource).toContain('@"Authenticate to view"');
+    // The screen's unauthenticated history label is covered through its render interface.
   });
 
   it("refreshes passive connector activity when Afternote returns to the foreground", () => {

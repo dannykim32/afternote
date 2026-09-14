@@ -44,6 +44,8 @@ describeMacos("native integration command runner", () => {
       join(import.meta.dir, "../native/product_surface_router.mm"),
       join(import.meta.dir, "../native/software_update.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
+      join(import.meta.dir, "../native/native_appearance.mm"),
+      join(import.meta.dir, "../native/connections_view.mm"),
       "-o",
       runner,
     ], { stdout: "pipe", stderr: "pipe" });

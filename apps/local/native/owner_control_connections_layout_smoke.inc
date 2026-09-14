@@ -1,5 +1,10 @@
 // Included only by the protocol-test target, after OwnerControlDelegate is defined.
 // Exercises the real AppKit hierarchy with synthetic state; no broker is created.
+// These are acceptance expectations, not imports of implementation constants.
+constexpr CGFloat kConnectionsMaximumWidth = 920;
+constexpr CGFloat kConnectionsPageGutter = 32;
+constexpr CGFloat kConnectionActionsWidth = 280;
+constexpr CGFloat kConnectionColumnGap = 32;
 NSView *ConnectionLayoutView(NSView *root, NSString *identifier) {
   if ([root.identifier isEqualToString:identifier]) return root;
   for (NSView *child in root.subviews) {
@@ -52,11 +57,7 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
   [delegate buildWindow];
   [delegate setPrivilegedSurfacesReady:YES];
   [delegate displaySurface:AfternoteProductSurfaceConnections recoveryReady:YES];
-  // setBusy dispatches asynchronously; this fixture does not run an app event loop.
-  delegate.statusLabel.stringValue = @"Connections are up to date.";
-  delegate.progress.hidden = YES;
-  [delegate.progress stopAnimation:nil];
-  delegate.authenticateButton.enabled = YES;
+  [delegate.connectionsView setBusy:NO status:@"Connections are up to date."];
   NSMutableArray *results = [NSMutableArray array];
   NSArray *cases = @[
     @{ @"name": @"minimum", @"width": @900, @"height": @618, @"legacy": @NO },
@@ -93,8 +94,9 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
     [root layoutSubtreeIfNeeded];
     [root displayIfNeeded];
     NSRect columnFrame = [column convertRect:column.bounds toView:root];
-    NSRect refreshFrame = [delegate.authenticateButton
-        convertRect:delegate.authenticateButton.bounds toView:delegate.content];
+    NSView *refresh = ConnectionLayoutView(root, @"ConnectionsRefresh");
+    NSStackView *content = (NSStackView *)ConnectionLayoutView(root, @"ConnectionsRows");
+    NSRect refreshFrame = [refresh convertRect:refresh.bounds toView:content];
     BOOL columnsAligned = YES;
     BOOL textFits = YES;
     BOOL noOverlap = YES;
@@ -103,7 +105,7 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
     BOOL repairActionPreserved = YES;
     NSUInteger repairActions = 0;
     CGFloat actionX = -1;
-    for (NSView *row in delegate.content.arrangedSubviews) {
+    for (NSView *row in content.arrangedSubviews) {
       NSView *actions = ConnectionLayoutView(row, @"ConnectionActions");
       NSView *facts = ConnectionLayoutView(row, @"ConnectionFacts");
       for (NSView *view in ((NSStackView *)actions).arrangedSubviews) {
@@ -120,20 +122,20 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
             [button.accessibilityLabel isEqualToString:@"Repair Afternote in Claude Code"] &&
             button.focusRingType == NSFocusRingTypeExterior;
       }
-      NSRect actionFrame = [actions convertRect:actions.bounds toView:delegate.content];
-      NSRect factFrame = [facts convertRect:facts.bounds toView:delegate.content];
+      NSRect actionFrame = [actions convertRect:actions.bounds toView:content];
+      NSRect factFrame = [facts convertRect:facts.bounds toView:content];
       if (actionX < 0) actionX = NSMinX(actionFrame);
       columnsAligned &= fabs(NSMinX(actionFrame) - actionX) < 1 &&
           fabs(NSWidth(actionFrame) - kConnectionActionsWidth) < 1;
       noOverlap &= NSMaxX(factFrame) + kConnectionColumnGap <= NSMinX(actionFrame) + 1;
       textFits &= ConnectionLayoutTextFits(row);
-      actionsReachable &= NSMaxX(actionFrame) <= delegate.content.bounds.size.width + 1;
+      actionsReachable &= NSMaxX(actionFrame) <= content.bounds.size.width + 1;
       NSArray<NSView *> *factViews = ((NSStackView *)facts).arrangedSubviews;
       CGFloat gap = NSMinY(factViews[0].frame) - NSMaxY(factViews[1].frame);
       factSpacing &= fabs(gap - 12) < 1;
     }
     BOOL centered = fabs(NSMidX(columnFrame) - NSMidX(root.bounds)) < 1;
-    BOOL refreshAligned = fabs(NSMaxX(refreshFrame) - delegate.content.bounds.size.width) < 1;
+    BOOL refreshAligned = fabs(NSMaxX(refreshFrame) - content.bounds.size.width) < 1;
     BOOL gutters = NSMinX(columnFrame) >= kConnectionsPageGutter - 1 &&
         NSMaxX(columnFrame) <= NSWidth(root.bounds) - kConnectionsPageGutter + 1;
     BOOL scrollFits = scroll.frame.size.height >= 120 &&

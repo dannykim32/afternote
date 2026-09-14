@@ -22,7 +22,9 @@ Paths below are relative to the repository root.
 | `apps/local/src/derived-index-coordinator.ts` | Derived index initialization, invalidation, and background work coordination | Independent canonical state |
 | `apps/local/native/owner_broker.mm` | Owner-side transport, response correlation, invalidation | Method-specific result schemas |
 | `apps/local/native/owner_broker_contract.mm` | Owner-facing result/error validation and lifecycle epoch consistency | XPC connections, AppKit, or live Vault state |
-| `apps/local/native/owner_control_app.mm` | Native screens and Owner interaction | Direct Vault storage access |
+| `apps/local/native/connections_view.mm` | Connections layout, controls, redacted rows, and transient display state | Broker requests, authorization, host configuration, or navigation |
+| `apps/local/native/native_appearance.mm` | Shared native colors, labels, button appearance, and interaction feedback | Product state or authorization |
+| `apps/local/native/owner_control_app.mm` | Owner interaction, shared lifecycle coordination, Connections display-data assembly, and remaining screens | Direct Vault storage access |
 
 Filenames shortened in a row share its first directory. Connector lifecycle,
 Owner-presence coordination, recovery state, editor state, and software updates
@@ -46,6 +48,13 @@ also have focused modules alongside these entry points.
 - Connector attribution follows verified host identity, not a model-supplied source
   label. Desktop-hosted Claude Code launch chains and terminal Claude Code remain
   distinct cases.
+- Connections rendering accepts redacted display rows, not a broker connection or
+  revocation authority. User actions return to the app coordinator through a weak
+  AppKit target. The coordinator retains history approval, exact revocation scopes,
+  lifecycle generations, and stale-reply checks. Rendering itself performs no operation.
+- The Connections view is main-thread-only. Each render replaces its previous rows;
+  an error replaces the rows with the error state. The view does not own background
+  requests, authentication, or window navigation.
 
 ## Testing the seams
 
@@ -62,14 +71,23 @@ request/result binding, diagnostic redaction, and lifecycle epochs.
 transport recovery and interaction. Source-text tests are structural assertions,
 not substitutes for runtime behavior.
 
+`native-connections-view.test.ts` compiles the Connections view without the app
+coordinator or broker. It exercises actual AppKit buttons for setup, repair,
+reconnect, review, refresh, history, and revocation routing, plus passive rendering,
+history replacement, busy state, error clearing, and weak action-target lifetime.
+The full-app layout fixture separately checks real window sizes and scrollbar modes.
+Together these replace the old source-string checks for the extracted controls.
+
 ## Remaining organization work
 
-The current source separates Note migrations and native broker contracts from their
-former large callers. It is not the end of the refactor: the Owner app still combines
-screen ownership and substantial test fixtures; broker dispatch and authorization
-also remain large.
+The current source separates Note migrations, native broker contracts, Connections
+rendering, and native appearance from their former large callers. It is not the end
+of the refactor: the Owner app still combines Notes, Settings, Recovery, shared
+lifecycle coordination, and substantial conditional test fixtures. Broker dispatch
+and authorization also remain large.
 
-The next useful seam is screen ownership with explicit shared lifecycle coordination.
-Moving methods into arbitrary files without clarifying ownership would only hide the
-coupling. Any such change needs tests for pending edits, lock-time plaintext clearing,
-stale asynchronous replies, and navigation through recovery before it ships.
+The next useful seam is Notes screen ownership with explicit shared lifecycle
+coordination, following the Connections separation. Notes additionally owns pending
+edits and plaintext, so its extraction needs tests for pending edits, lock-time
+plaintext clearing, stale asynchronous replies, and navigation through Recovery.
+Keep those responsibilities explicit rather than splitting methods by file size.
