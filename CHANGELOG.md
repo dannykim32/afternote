@@ -6,6 +6,8 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.23 - 2026-09-14
+
 ### Changed
 
 - Separate native Connections rendering, Note-editor drafts and controls, and submitted
@@ -22,8 +24,9 @@ during release review.
 - Center Connections content and align its action columns; present connector repair as
   a quieter contextual action alongside revocation.
 
-These changes require a new signed candidate before second-Mac acceptance. See the
-[prelaunch smoke test](docs/PRELAUNCH_SMOKE_TEST.md); Alpha 22 does not contain them.
+Release candidate: packaging, notarization, and second-Mac acceptance are pending.
+See the [prelaunch smoke test](docs/PRELAUNCH_SMOKE_TEST.md); Alpha 22 does not contain
+these changes.
 
 ## 2.0.0-alpha.22 - 2026-09-13
 
