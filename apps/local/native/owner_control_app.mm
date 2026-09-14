@@ -12,6 +12,7 @@
 #import "native_appearance.h"
 #import "connections_view.h"
 #import "note_editor_view.h"
+#import "notes_retrieval.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
 #import "product_surface_router.h"
@@ -284,15 +285,19 @@ NSString *TimeLabel(id value) {
   return date == nil ? @"UNKNOWN TIME" : [output stringFromDate:date];
 }
 
-NSArray<NSDictionary *> *SearchResultsByApplyingPage(
-    NSArray<NSDictionary *> *current,
-    NSArray<NSDictionary *> *page,
-    BOOL append) {
-  if (!append) return [page copy];
-  NSMutableArray<NSDictionary *> *combined = [current mutableCopy];
-  [combined addObjectsFromArray:page];
-  return combined;
+#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING) || defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
+void SeedNotesFixture(AfternoteNotesRetrieval *state, NSArray *notes) {
+  AfternoteNotesRequest *request = [state beginAppending:NO];
+  NSMutableArray *matches = [NSMutableArray array];
+  for (NSDictionary *note in notes) {
+    NSMutableDictionary *citation = [note mutableCopy];
+    citation[@"noteId"] = note[@"id"] ?: @"fixture-note";
+    [matches addObject:@{ @"citation": citation }];
+  }
+  [state complete:request result:@{ @"notes": notes, @"results": matches,
+                                   @"nextCursor": NSNull.null } error:nil];
 }
+#endif
 
 BOOL ConnectorHasCurrentAuthority(NSDictionary *client) {
   NSString *status = StringValue(client[@"status"]);
@@ -707,6 +712,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSButton *connectionsNavigationButton;
 @property(nonatomic, strong) AfternoteConnectionsView *connectionsView;
 @property(nonatomic, strong) AfternoteNoteEditorView *noteEditorView;
+@property(nonatomic, strong) AfternoteNotesRetrieval *notesRetrieval;
 @property(nonatomic, strong) NSStackView *setupContent;
 @property(nonatomic, strong) NSView *setupBanner;
 @property(nonatomic) BOOL setupGuideDismissed;
@@ -755,7 +761,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL hasVisibleSmartCategories;
 @property(nonatomic, strong) NSTextField *resultsHeadingLabel;
 @property(nonatomic, strong) NSTableView *noteTable;
-@property(nonatomic, strong) NSMutableArray<NSDictionary *> *noteSummaries;
 @property(nonatomic, strong) NSTextField *searchModeLabel;
 @property(nonatomic, copy) NSString *currentSearchMode;
 @property(nonatomic, strong) NSTextField *semanticSettingsState;
@@ -771,10 +776,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSDictionary *activeNote;
 @property(nonatomic, strong) NSArray<NSDictionary *> *revisionSummaries;
 @property(nonatomic, copy) NSString *libraryExpiresAt;
-@property(nonatomic, copy) NSString *noteCursor;
 @property(nonatomic, copy) NSString *revisionCursor;
-@property(nonatomic, copy) NSString *activeQuery;
-@property(nonatomic, copy) NSString *activeView;
 @property(nonatomic, copy) NSString *activeDeleteTarget;
 @property(nonatomic, strong) NSAlert *librarySensitiveAlert;
 @property(nonatomic, strong) NSTextView *librarySensitiveTextView;
@@ -783,12 +785,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL revisionHistoryLoaded;
 @property(nonatomic) BOOL libraryMutationInFlight;
 @property(nonatomic) BOOL editorSaveConfirmationPending;
-@property(nonatomic) BOOL libraryListInFlight;
 @property(nonatomic) BOOL libraryRefreshPending;
 @property(nonatomic) BOOL vaultLocked;
 @property(nonatomic) BOOL vaultStatusCheckInFlight;
 @property(nonatomic) NSUInteger librarySessionGeneration;
-@property(nonatomic) NSUInteger libraryListRequestSequence;
 @property(nonatomic) NSUInteger libraryNoteRequestSequence;
 @property(nonatomic) NSUInteger libraryRevisionRequestSequence;
 @property(nonatomic) NSUInteger lifecycleStatusRequestSequence;
@@ -800,6 +800,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self = [super init];
   if (self == nil) return nil;
   self.surfaceRouter = [[AfternoteProductSurfaceRouter alloc] init];
+  self.notesRetrieval = [AfternoteNotesRetrieval new];
   return self;
 }
 
@@ -812,9 +813,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.integrationOperations = [NSMutableSet set];
   self.integrationStatusGenerations = [NSMutableDictionary dictionary];
   self.expandedConnectorKinds = [NSMutableSet set];
-  self.noteSummaries = [NSMutableArray array];
   self.revisionSummaries = @[];
-  self.activeQuery = @"";
+  [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
   self.currentSearchMode = @"checking";
   self.setupGuideDismissed = [NSUserDefaults.standardUserDefaults
       boolForKey:kSetupGuideDismissedDefaultsKey];
@@ -891,18 +891,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     @{ @"id" : @"commitments", @"label" : @"Commitments", @"noteCount" : @7 },
     @{ @"id" : @"meetings", @"label" : @"Meetings", @"noteCount" : @4 },
   ]];
-  [self.noteSummaries addObjectsFromArray:@[
-    @{ @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3,
-       @"excerpt" : @"The spare bicycle key is taped beneath the back edge of the green planter on the balcony.",
-       kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @1,
-       @"source" : @{ @"label" : @"Weekend errands", @"application" : @"Afternote" },
-       @"createdAt" : @"2026-08-28T14:00:00.000Z", @"updatedAt" : @"2026-08-28T16:30:00.000Z" },
-    @{ @"id" : @"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", @"revision" : @1,
-       @"excerpt" : @"A backup bicycle key is in the blue tool roll on the garage shelf.",
-       kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @2,
-       @"source" : @{ @"label" : @"Home reminders" },
-       @"createdAt" : @"2026-08-28T13:00:00.000Z", @"updatedAt" : @"2026-08-28T13:00:00.000Z" },
-  ]];
+
   self.activeNote = @{
     @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3,
     @"content" : @"The spare bicycle key is taped beneath the back edge of the green planter on the balcony.\n\nI put it there after the Saturday ride so it would stay dry but remain easy to reach.",
@@ -918,17 +907,30 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.libraryStatusLabel.stringValue = @"Notes open until 5:00 PM";
   self.libraryProgress.hidden = YES;
   [self.libraryProgress stopAnimation:nil];
-  self.activeQuery = @"Where did I put the spare key for my bike?";
-  self.librarySearch.stringValue = self.activeQuery;
+  [self.notesRetrieval selectQuery:@"Where did I put the spare key for my bike?" view:nil];
+  self.librarySearch.stringValue = self.notesRetrieval.query;
   [self updateSearchComposerHeight];
   self.clearSearchButton.hidden = NO;
   [self applySearchMode:@"hybrid"];
+  SeedNotesFixture(self.notesRetrieval, @[
+    @{ @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3,
+       @"excerpt" : @"The spare bicycle key is taped beneath the back edge of the green planter on the balcony.",
+       kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @1,
+       @"source" : @{ @"label" : @"Weekend errands", @"application" : @"Afternote" },
+       @"createdAt" : @"2026-08-28T14:00:00.000Z", @"updatedAt" : @"2026-08-28T16:30:00.000Z" },
+    @{ @"id" : @"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", @"revision" : @1,
+       @"excerpt" : @"A backup bicycle key is in the blue tool roll on the garage shelf.",
+       kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @2,
+       @"source" : @{ @"label" : @"Home reminders" },
+       @"createdAt" : @"2026-08-28T13:00:00.000Z", @"updatedAt" : @"2026-08-28T13:00:00.000Z" },
+  ]);
   [self showLibraryMode:AfternoteLibraryModeAsk loadBrowse:NO];
   self.resultsHeadingLabel.stringValue = @"Results · 2";
   [self.noteTable reloadData];
   [self renderActiveNote];
   [self renderRevisionMenu];
   [self setLibraryBusy:NO status:@"Notes open until 5:00 PM"];
+  NSArray *previewNotes = self.notesRetrieval.notes;
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   if ([arguments containsObject:@"--preview-connector-setup"]) {
     self.connections = @{ @"clients" : @[], @"grants" : @[], @"sessions" : @[] };
@@ -958,7 +960,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self displaySurface:AfternoteProductSurfaceSetup recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-onboarding-banner"]) {
     self.setupGuideDismissed = NO;
-    self.activeQuery = @"";
+    [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
+    SeedNotesFixture(self.notesRetrieval, previewNotes);
     self.librarySearch.stringValue = @"";
     [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:NO];
     [self updateSetupBannerVisibility];
@@ -972,7 +975,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self showLibraryMode:AfternoteLibraryModeWrite loadBrowse:NO];
     [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-browse"]) {
-    self.activeQuery = @"";
+    [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
+    SeedNotesFixture(self.notesRetrieval, previewNotes);
     self.librarySearch.stringValue = @"";
     [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:NO];
     [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
@@ -1031,7 +1035,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     return;
   }
   if (self.libraryExpiresAt.length == 0 ||
-      self.libraryMutationInFlight || self.libraryListInFlight ||
+      self.libraryMutationInFlight || self.notesRetrieval.inFlight ||
       ![surface isEqual:@"library"]) return;
   if (self.libraryModeSelector.selectedSegment == AfternoteLibraryModeWrite) {
     self.libraryRefreshPending = YES;
@@ -1866,7 +1870,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)updateSetupBannerVisibility {
   if (self.setupBanner == nil) return;
   BOOL showingBank = self.libraryModeSelector.selectedSegment == AfternoteLibraryModeBrowse &&
-      self.activeQuery.length == 0;
+      self.notesRetrieval.query.length == 0;
   self.setupBanner.hidden = self.setupGuideDismissed || !showingBank;
 }
 
@@ -2754,7 +2758,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     self.librarySearch.enabled = self.libraryExpiresAt.length > 0;
     self.askButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.noteTable.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
-    self.loadMoreNotesButton.enabled = !controlsBusy && self.noteCursor != nil;
+    self.loadMoreNotesButton.enabled = !controlsBusy && self.notesRetrieval.cursor != nil;
     self.libraryRecentButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.createNoteButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
     self.libraryRefreshButton.enabled = !controlsBusy && self.libraryExpiresAt.length > 0;
@@ -2774,9 +2778,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)showLibraryMode:(AfternoteLibraryMode)mode loadBrowse:(BOOL)loadBrowse {
-  self.libraryListRequestSequence += 1;
-  if (self.libraryListInFlight) {
-    self.libraryListInFlight = NO;
+  BOOL retrievalWasPending = self.notesRetrieval.inFlight;
+  [self.notesRetrieval cancelPendingRequest];
+  if (retrievalWasPending) {
     NSString *status = self.libraryExpiresAt.length > 0
         ? [NSString stringWithFormat:@"Authenticated until %@", DateLabel(self.libraryExpiresAt)]
         : @"Authenticate to open Notes.";
@@ -2802,8 +2806,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   if (asking) {
     self.libraryWorkspaceTitle.stringValue = @"Notes";
     self.libraryWorkspaceSubtitle.stringValue = @"Results from your saved notes.";
-    NSUInteger matchCount = self.noteSummaries.count;
-    self.resultsHeadingLabel.stringValue = self.activeQuery.length == 0
+    NSUInteger matchCount = self.notesRetrieval.notes.count;
+    self.resultsHeadingLabel.stringValue = self.notesRetrieval.query.length == 0
         ? @"Finding results…"
         : matchCount == 0
           ? @"No results"
@@ -2816,15 +2820,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   self.libraryWorkspaceTitle.stringValue = @"Notes";
   self.libraryWorkspaceSubtitle.stringValue = @"Your local notes.";
   self.resultsHeadingLabel.stringValue = @"Recent notes";
-  if (self.activeQuery.length > 0) {
-    self.activeQuery = @"";
+  if (self.notesRetrieval.query.length > 0) {
+    [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
     self.librarySearch.stringValue = @"";
     [self updateSearchComposerHeight];
   }
   self.clearSearchButton.hidden = self.librarySearch.stringValue.length == 0;
   if (loadBrowse) {
-    self.noteCursor = nil;
-    [self.noteSummaries removeAllObjects];
+    [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
     self.loadMoreNotesButton.hidden = YES;
   }
   [self.noteTable reloadData];
@@ -2943,7 +2946,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                        StringValue(view[@"label"], @"View"), view[@"noteCount"] ?: @0];
     NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(selectLibraryView:)];
     button.identifier = StringValue(view[@"id"]);
-    [self styleNavigationButton:button selected:[button.identifier isEqualToString:self.activeView ?: @""]];
+    [self styleNavigationButton:button selected:[button.identifier isEqualToString:self.notesRetrieval.view ?: @""]];
     button.accessibilityLabel = [NSString stringWithFormat:@"%@ smart view, %@ notes",
                                  StringValue(view[@"label"]), view[@"noteCount"] ?: @0];
     [self.libraryViews addArrangedSubview:button];
@@ -2958,13 +2961,12 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)selectLibraryView:(NSButton *)sender {
   self.libraryNoteRequestSequence += 1;
   self.libraryRevisionRequestSequence += 1;
-  self.activeView = sender.identifier.length > 0 ? sender.identifier : nil;
-  self.activeQuery = @"";
+  [self.notesRetrieval selectQuery:@"" view:sender.identifier];
   self.librarySearch.stringValue = @"";
-  [self styleNavigationButton:self.libraryRecentButton selected:self.activeView == nil];
+  [self styleNavigationButton:self.libraryRecentButton selected:self.notesRetrieval.view == nil];
   for (NSButton *button in self.libraryViews.arrangedSubviews) {
     if (![button isKindOfClass:[NSButton class]]) continue;
-    [self styleNavigationButton:button selected:[button.identifier isEqualToString:self.activeView ?: @""]];
+    [self styleNavigationButton:button selected:[button.identifier isEqualToString:self.notesRetrieval.view ?: @""]];
   }
   [self showLibraryMode:AfternoteLibraryModeBrowse loadBrowse:NO];
   [self loadLibraryNotes:NO];
@@ -2979,7 +2981,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self updateSearchComposerHeight];
   NSString *draft = [self.librarySearch.stringValue
       stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  self.clearSearchButton.hidden = self.activeQuery.length == 0 && draft.length == 0;
+  self.clearSearchButton.hidden = self.notesRetrieval.query.length == 0 && draft.length == 0;
 }
 
 - (void)controlTextDidEndEditing:(NSNotification *)notification {
@@ -3024,7 +3026,7 @@ doCommandBySelector:(SEL)commandSelector {
 
 - (void)clearSearch:(id)sender {
   (void)sender;
-  self.activeQuery = @"";
+  [self.notesRetrieval selectQuery:@"" view:self.notesRetrieval.view];
   self.librarySearch.stringValue = @"";
   [self updateSearchComposerHeight];
   self.clearSearchButton.hidden = YES;
@@ -3035,7 +3037,7 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)refreshVisibleLibraryNotes:(id)sender {
   (void)sender;
   if (self.libraryExpiresAt.length == 0 || self.vaultLocked ||
-      self.libraryMutationInFlight || self.libraryListInFlight ||
+      self.libraryMutationInFlight || self.notesRetrieval.inFlight ||
       self.libraryModeSelector.selectedSegment == AfternoteLibraryModeWrite) return;
   [self loadLibraryNotes:NO];
 }
@@ -3044,10 +3046,8 @@ doCommandBySelector:(SEL)commandSelector {
   (void)sender;
   self.libraryNoteRequestSequence += 1;
   self.libraryRevisionRequestSequence += 1;
-  self.activeQuery = [self.librarySearch.stringValue stringByTrimmingCharactersInSet:
-      NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  self.activeView = nil;
-  if (self.activeQuery.length == 0) {
+  [self.notesRetrieval selectQuery:self.librarySearch.stringValue view:nil];
+  if (self.notesRetrieval.query.length == 0) {
     [self clearSearch:nil];
     return;
   }
@@ -3058,77 +3058,32 @@ doCommandBySelector:(SEL)commandSelector {
 }
 
 - (void)loadLibraryNotes:(BOOL)append {
+  if (self.libraryExpiresAt.length == 0 || self.vaultLocked || self.broker == nil) return;
   NSUInteger generation = self.librarySessionGeneration;
-  NSUInteger requestSequence = ++self.libraryListRequestSequence;
-  if (!append) {
-    self.noteCursor = nil;
-    [self.noteSummaries removeAllObjects];
-    [self.noteTable reloadData];
-  }
-  self.libraryListInFlight = YES;
-  [self setLibraryBusy:YES status:self.activeQuery.length > 0 ? @"Searching without logging the query…" : @"Loading notes…"];
-  BOOL searching = self.activeQuery.length > 0;
-  NSString *method = searching ? @"library.search" : @"library.browse";
-  NSDictionary *params = searching
-      ? @{ @"query" : self.activeQuery, @"limit" : @20,
-           @"cursor" : append && self.noteCursor != nil ? self.noteCursor : NSNull.null }
-      : @{ @"view" : self.activeView ?: NSNull.null, @"limit" : @20,
-           @"cursor" : append && self.noteCursor != nil ? self.noteCursor : NSNull.null };
-  [self.broker requestMethod:method params:params reply:^(NSDictionary *result, NSDictionary *error) {
+  AfternoteNotesRequest *request = [self.notesRetrieval beginAppending:append];
+  if (request == nil) return;
+  if (!append) [self.noteTable reloadData];
+  BOOL searching = self.notesRetrieval.query.length > 0;
+  [self setLibraryBusy:YES status:searching ? @"Searching without logging the query…" : @"Loading notes…"];
+  [self.broker requestMethod:request.method params:request.params reply:^(NSDictionary *result, NSDictionary *error) {
     dispatch_async(dispatch_get_main_queue(), ^{
       if (generation != self.librarySessionGeneration ||
-          requestSequence != self.libraryListRequestSequence) return;
+          ![self.notesRetrieval complete:request result:result error:error]) return;
       if (error != nil) {
-        self.libraryListInFlight = NO;
         [self showLibraryError:error];
         return;
       }
-      NSArray *loaded = ArrayValue(result[@"notes"]);
-      if (searching) {
-        [self applySearchMode:StringValue(result[@"searchMode"], @"exact")];
-        NSMutableArray *searchNotes = [NSMutableArray array];
-        NSUInteger rank = 0;
-        for (NSDictionary *searchResult in ArrayValue(result[@"results"])) {
-          NSDictionary *citation = [searchResult[@"citation"] isKindOfClass:[NSDictionary class]]
-              ? searchResult[@"citation"] : @{};
-          NSString *noteId = StringValue(citation[@"noteId"]);
-          if (noteId.length == 0) continue;
-          [searchNotes addObject:@{
-            @"id" : noteId,
-            @"revision" : citation[@"revision"] ?: @0,
-            @"excerpt" : StringValue(citation[@"excerpt"]),
-            @"source" : citation[@"source"] ?: NSNull.null,
-            @"createdAt" : StringValue(citation[@"createdAt"]),
-            @"updatedAt" : StringValue(citation[@"createdAt"]),
-            kLibraryResultKindKey : kLibrarySearchResultKind,
-            @"rank" : @(++rank),
-          }];
-        }
-        loaded = searchNotes;
-      }
-      id cursor = result[@"nextCursor"];
-      NSArray *displayed = SearchResultsByApplyingPage(self.noteSummaries, loaded, append);
-      [self.noteSummaries removeAllObjects];
-      [self.noteSummaries addObjectsFromArray:displayed];
-      self.noteCursor = [cursor isKindOfClass:[NSString class]] ? cursor : nil;
-      self.loadMoreNotesButton.hidden = self.noteCursor == nil;
-      self.loadMoreNotesButton.enabled = YES;
-      self.libraryListInFlight = NO;
+      if (searching) [self applySearchMode:self.notesRetrieval.searchMode];
+      self.loadMoreNotesButton.hidden = self.notesRetrieval.cursor == nil;
       [self.noteTable reloadData];
-      NSUInteger displayedMatchCount = self.noteSummaries.count;
-      self.resultsHeadingLabel.stringValue = displayedMatchCount == 0
+      NSUInteger count = self.notesRetrieval.notes.count;
+      self.resultsHeadingLabel.stringValue = count == 0
           ? (searching ? @"No results" : @"No notes yet")
-          : (searching
-              ? [NSString stringWithFormat:@"Results · %lu",
-                   (unsigned long)displayedMatchCount]
-              : @"Recent notes");
-      NSString *empty = searching ? @"No search results" : @"No notes yet";
-      NSString *status = displayedMatchCount == 0
-          ? empty
+          : (searching ? [NSString stringWithFormat:@"Results · %lu", (unsigned long)count] : @"Recent notes");
+      NSString *status = count == 0
+          ? (searching ? @"No search results" : @"No notes yet")
           : [NSString stringWithFormat:@"%lu %@%@ loaded · authenticated until %@",
-             (unsigned long)displayedMatchCount,
-             searching ? @"match" : @"note",
-             displayedMatchCount == 1 ? @"" : @"s",
+             (unsigned long)count, searching ? @"match" : @"note", count == 1 ? @"" : @"s",
              DateLabel(self.libraryExpiresAt)];
       [self setLibraryBusy:NO status:status];
     });
@@ -3207,7 +3162,7 @@ doCommandBySelector:(SEL)commandSelector {
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView {
-  return tableView == self.noteTable ? self.noteSummaries.count : 0;
+  return tableView == self.noteTable ? self.notesRetrieval.notes.count : 0;
 }
 
 - (NSTableRowView *)tableView:(NSTableView *)tableView rowViewForRow:(NSInteger)row {
@@ -3216,17 +3171,17 @@ doCommandBySelector:(SEL)commandSelector {
 }
 
 - (CGFloat)tableView:(NSTableView *)tableView heightOfRow:(NSInteger)row {
-  if (tableView != self.noteTable || row < 0 || row >= (NSInteger)self.noteSummaries.count) {
+  if (tableView != self.noteTable || row < 0 || row >= (NSInteger)self.notesRetrieval.notes.count) {
     return tableView.rowHeight;
   }
-  NSDictionary *summary = self.noteSummaries[(NSUInteger)row];
+  NSDictionary *summary = self.notesRetrieval.notes[(NSUInteger)row];
   BOOL searchResult = self.libraryModeSelector.selectedSegment == AfternoteLibraryModeAsk &&
       [StringValue(summary[kLibraryResultKindKey]) isEqualToString:kLibrarySearchResultKind];
   if (searchResult) return 112;
   NSString *day = DayLabel(summary[@"createdAt"] ?: summary[@"updatedAt"]);
   BOOL beginsDay = row == 0;
   if (!beginsDay) {
-    NSDictionary *previous = self.noteSummaries[(NSUInteger)row - 1];
+    NSDictionary *previous = self.notesRetrieval.notes[(NSUInteger)row - 1];
     beginsDay = ![DayLabel(previous[@"createdAt"] ?: previous[@"updatedAt"])
         isEqualToString:day];
   }
@@ -3237,8 +3192,8 @@ doCommandBySelector:(SEL)commandSelector {
    viewForTableColumn:(NSTableColumn *)tableColumn
                   row:(NSInteger)row {
   (void)tableColumn;
-  if (tableView != self.noteTable || row < 0 || row >= (NSInteger)self.noteSummaries.count) return nil;
-  NSDictionary *summary = self.noteSummaries[(NSUInteger)row];
+  if (tableView != self.noteTable || row < 0 || row >= (NSInteger)self.notesRetrieval.notes.count) return nil;
+  NSDictionary *summary = self.notesRetrieval.notes[(NSUInteger)row];
   NSTableCellView *cell = [tableView makeViewWithIdentifier:@"LibraryNoteCell" owner:self];
   if (cell == nil) {
     cell = [[NSTableCellView alloc] init];
@@ -3298,7 +3253,7 @@ doCommandBySelector:(SEL)commandSelector {
   NSString *day = DayLabel(summary[@"createdAt"] ?: summary[@"updatedAt"]);
   BOOL beginsDay = row == 0;
   if (!beginsDay) {
-    NSDictionary *previous = self.noteSummaries[(NSUInteger)row - 1];
+    NSDictionary *previous = self.notesRetrieval.notes[(NSUInteger)row - 1];
     beginsDay = ![DayLabel(previous[@"createdAt"] ?: previous[@"updatedAt"]) isEqualToString:day];
   }
   NSNumber *revisionNumber = [summary[@"revision"] isKindOfClass:[NSNumber class]]
@@ -3331,8 +3286,8 @@ doCommandBySelector:(SEL)commandSelector {
 - (void)tableViewSelectionDidChange:(NSNotification *)notification {
   if (notification.object != self.noteTable) return;
   NSInteger row = self.noteTable.selectedRow;
-  if (row < 0 || row >= (NSInteger)self.noteSummaries.count) return;
-  NSDictionary *summary = self.noteSummaries[(NSUInteger)row];
+  if (row < 0 || row >= (NSInteger)self.notesRetrieval.notes.count) return;
+  NSDictionary *summary = self.notesRetrieval.notes[(NSUInteger)row];
   BOOL searchResult = [StringValue(summary[kLibraryResultKindKey])
       isEqualToString:kLibrarySearchResultKind];
   self.inspectingCitation = searchResult;
@@ -3444,8 +3399,8 @@ doCommandBySelector:(SEL)commandSelector {
     NSString *noteId = ActiveNoteIdentifier(self.activeNote);
     if (noteId.length == 0) {
       NSInteger row = self.noteTable.selectedRow;
-      if (row >= 0 && row < (NSInteger)self.noteSummaries.count) {
-        noteId = StringValue(self.noteSummaries[(NSUInteger)row][@"id"]);
+      if (row >= 0 && row < (NSInteger)self.notesRetrieval.notes.count) {
+        noteId = StringValue(self.notesRetrieval.notes[(NSUInteger)row][@"id"]);
       }
     }
     if (noteId.length > 0) [self openNoteId:noteId revision:nil];
@@ -3511,7 +3466,7 @@ doCommandBySelector:(SEL)commandSelector {
       self.revisionSummaries = @[];
     }
     [self renderActiveNote];
-    AfternoteLibraryMode destination = self.activeQuery.length > 0
+    AfternoteLibraryMode destination = self.notesRetrieval.query.length > 0
         ? AfternoteLibraryModeAsk
         : AfternoteLibraryModeBrowse;
     [self showLibraryMode:destination loadBrowse:NO];
@@ -3660,21 +3615,17 @@ doCommandBySelector:(SEL)commandSelector {
   self.librarySensitiveAlert = nil;
   self.librarySensitiveTextView = nil;
   self.libraryExpiresAt = nil;
-  self.noteCursor = nil;
   self.revisionCursor = nil;
-  self.activeQuery = @"";
-  self.activeView = nil;
   self.activeDeleteTarget = nil;
   self.activeNote = nil;
   self.creatingNote = NO;
   self.libraryMutationInFlight = NO;
   self.editorSaveConfirmationPending = NO;
   [self.noteEditorView setSaveState:AfternoteEditorSaveStateDefault animated:NO];
-  self.libraryListInFlight = NO;
   self.libraryRefreshPending = NO;
   self.revisionHistoryLoaded = NO;
   self.revisionSummaries = @[];
-  [self.noteSummaries removeAllObjects];
+  [self.notesRetrieval clear];
   self.librarySearch.stringValue = @"";
   [self updateSearchComposerHeight];
   self.clearSearchButton.hidden = YES;
@@ -4526,6 +4477,7 @@ doCommandBySelector:(SEL)commandSelector {
 
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
 #include "owner_control_connections_layout_smoke.inc"
+#include "owner_control_notes_retrieval_smoke.inc"
 NSTextView *FixtureEditorText(NSView *view) {
   if ([view.identifier isEqualToString:@"note-editor-draft"]) return (NSTextView *)view;
   for (NSView *child in view.subviews) {
@@ -4556,7 +4508,6 @@ int RunRevisionNavigationSmoke() {
     @"revision" : @2,
     @"content" : @"Historical text",
   };
-  delegate.noteSummaries = [NSMutableArray array];
   delegate.noteTable = [[NSTableView alloc] init];
   [delegate selectEditorRevision:nil];
   BOOL historicalRevisionReturnsToCurrent =
@@ -4580,12 +4531,12 @@ int RunCitationInspectorSmoke() {
   [delegate.noteTable addTableColumn:[[NSTableColumn alloc] initWithIdentifier:@"note"]];
   delegate.noteTable.dataSource = delegate;
   delegate.noteTable.delegate = delegate;
-  delegate.noteSummaries = [NSMutableArray arrayWithObject:@{
+  SeedNotesFixture(delegate.notesRetrieval, @[@{
     @"id" : noteId,
     @"revision" : @3,
     @"excerpt" : @"Frozen citation",
     kLibraryResultKindKey : kLibrarySearchResultKind,
-  }];
+  }]);
   [delegate.noteTable reloadData];
   [delegate.noteTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
                   byExtendingSelection:NO];
@@ -4596,11 +4547,11 @@ int RunCitationInspectorSmoke() {
       [delegate.openedNoteId isEqualToString:noteId] &&
       delegate.openedRevision.integerValue == 3;
 
-  delegate.noteSummaries = [NSMutableArray arrayWithObject:@{
+  SeedNotesFixture(delegate.notesRetrieval, @[@{
     @"id" : noteId,
     @"revision" : @4,
     @"excerpt" : @"Current note",
-  }];
+  }]);
   [delegate.noteTable reloadData];
   [delegate.noteTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
                   byExtendingSelection:NO];
@@ -4707,46 +4658,6 @@ int RunLibrarySearchSubmissionSmoke() {
   return typedThroughFieldEditor && pauseDidNotSubmit && explicitActionSubmittedOnce &&
       placeholderMatchesProductCopy && searchIconDoesNotOverlapText && verticallyAligned &&
       focusUsesOuterComposer && multilineEnabled ? 0 : 2;
-}
-
-int RunSearchStateSmoke() {
-  NSDictionary *firstNote = @{
-    @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    @"revision" : @1,
-    @"excerpt" : @"The release phrase is northstar 42.",
-    @"source" : @{ @"application" : @"Codex" },
-    @"createdAt" : @"2026-08-31T01:00:00.000Z",
-    @"updatedAt" : @"2026-08-31T01:00:00.000Z",
-    kLibraryResultKindKey : kLibrarySearchResultKind,
-  };
-  NSDictionary *secondNote = @{
-    @"id" : @"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    @"revision" : @2,
-    @"excerpt" : @"The production push waits for notarization.",
-    @"source" : @{ @"application" : @"Claude Code" },
-    @"createdAt" : @"2026-08-31T02:00:00.000Z",
-    @"updatedAt" : @"2026-08-31T02:00:00.000Z",
-    kLibraryResultKindKey : kLibrarySearchResultKind,
-  };
-  NSArray *firstSearch = SearchResultsByApplyingPage(@[], @[ firstNote ], NO);
-  NSArray *replaced = SearchResultsByApplyingPage(firstSearch, @[ secondNote ], NO);
-  NSArray *appended = SearchResultsByApplyingPage(replaced, @[ firstNote ], YES);
-  BOOL newSearchReplacedResults = replaced.count == 1 &&
-      [StringValue(replaced[0][@"excerpt"])
-          isEqualToString:@"The production push waits for notarization."];
-  BOOL pageAppendPreservedResults = appended.count == 2 &&
-      [StringValue(appended[0][@"excerpt"])
-          isEqualToString:@"The production push waits for notarization."] &&
-      [StringValue(appended[1][@"excerpt"])
-          isEqualToString:@"The release phrase is northstar 42."];
-  NSDictionary *output = @{
-    @"newSearchReplacedResults" : @(newSearchReplacedResults),
-    @"pageAppendPreservedResults" : @(pageAppendPreservedResults),
-  };
-  NSData *data = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
-  fwrite(data.bytes, 1, data.length, stdout);
-  fputc('\n', stdout);
-  return newSearchReplacedResults && pageAppendPreservedResults ? 0 : 2;
 }
 
 int RunConnectorHistorySmoke() {
@@ -4919,11 +4830,11 @@ OwnerControlDelegate *BrokerRecoveryProbeDelegate(
     BrokerRecoveryProbeConnection *broker) {
   OwnerControlDelegate *delegate = [[OwnerControlDelegate alloc] init];
   delegate.broker = broker;
-  delegate.noteSummaries = [NSMutableArray arrayWithObject:@{
+  SeedNotesFixture(delegate.notesRetrieval, @[@{
     @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     @"revision" : @1,
     @"excerpt" : @"Sensitive fixture",
-  }];
+  }]);
   delegate.revisionSummaries = @[];
   delegate.activeNote = @{
     @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -5227,10 +5138,9 @@ int RunLibraryCleanupSmoke() {
   [NSApplication sharedApplication];
   OwnerControlDelegate *delegate = [[OwnerControlDelegate alloc] init];
   NSString *canary = [NSString stringWithFormat:@"PLAINTEXT-%@-%@", @"CLEANUP", @"CANARY"];
-  delegate.noteSummaries = [NSMutableArray arrayWithObject:@{ @"excerpt" : canary }];
   delegate.revisionSummaries = @[ @{ @"revision" : @1, @"excerpt" : canary } ];
-  delegate.activeQuery = canary;
-  delegate.activeView = @"decisions";
+  [delegate.notesRetrieval selectQuery:canary view:nil];
+  SeedNotesFixture(delegate.notesRetrieval, @[@{ @"excerpt" : canary }]);
   delegate.activeDeleteTarget = canary;
   delegate.activeNote = @{ @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                            @"revision" : @1, @"content" : canary };
@@ -5490,8 +5400,8 @@ int RunLibraryCleanupSmoke() {
   [delegate clearLibraryPlaintext:@"Broker disconnected"];
   [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
   BOOL disconnectCleared = delegate.activeNote == nil &&
-      delegate.noteSummaries.count == 0 && delegate.revisionSummaries.count == 0 &&
-      delegate.activeQuery.length == 0 && delegate.activeView == nil &&
+      delegate.notesRetrieval.notes.count == 0 && delegate.revisionSummaries.count == 0 &&
+      delegate.notesRetrieval.query.length == 0 && delegate.notesRetrieval.view == nil &&
       delegate.activeDeleteTarget == nil && delegate.noteEditorView.draft.length == 0 &&
       delegate.librarySearch.stringValue.length == 0 &&
       !FixtureEditorText(delegate.noteEditorView).undoManager.canUndo && !staleReplyApplied &&
@@ -5772,6 +5682,9 @@ int RunDiagnosticContractSmoke(const char *path) {
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--notes-retrieval-smoke") == 0) {
+      return RunNotesRetrievalCoordinatorSmoke();
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "--connections-layout-smoke") == 0) {
       return RunConnectionsLayoutSmoke(argc == 3
           ? [NSString stringWithUTF8String:argv[2]] : nil);
@@ -5848,14 +5761,6 @@ int main(int argc, const char *argv[]) {
       return RunLibrarySearchSubmissionSmoke();
 #else
       fputs("library search submission smoke is unavailable in packaged builds\n", stderr);
-      return 64;
-#endif
-    }
-    if (argc == 2 && strcmp(argv[1], "--search-state-smoke") == 0) {
-#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
-      return RunSearchStateSmoke();
-#else
-      fputs("search state smoke is unavailable in packaged builds\n", stderr);
       return 64;
 #endif
     }

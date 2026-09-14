@@ -125,8 +125,6 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).not.toContain('@"QUESTION"');
     expect(nativeAppSource).not.toContain("conversationThreads");
     expect(nativeAppSource).not.toContain("beginNewConversation:");
-    expect(nativeAppSource).toContain("RunSearchStateSmoke");
-    expect(nativeAppSource).toContain('"--search-state-smoke"');
     expect(nativeAppSource).toContain("RunRevisionNavigationSmoke");
     expect(nativeAppSource).toContain('"--revision-navigation-smoke"');
     expect(nativeAppSource).toContain("RunCitationInspectorSmoke");
@@ -141,7 +139,6 @@ describe("native Library production boundary", () => {
     expect(editorViewSource).toContain('buttonWithTitle:@"Edit current note"');
     expect(editorViewSource).toContain('action:@selector(editCurrentNote:)');
     expect(editorViewSource).toContain('@"Cited result · Revision %@"');
-    expect(nativeAppSource).toContain("SearchResultsByApplyingPage");
     expect(nativeAppSource).toContain("clearSearch:");
     expect(nativeAppSource).toContain('@"SMART CATEGORIES"');
     expect(nativeAppSource).not.toContain("AfternoteMemoryThreadView");
@@ -433,7 +430,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain("clearLibraryPlaintext");
     expect(nativeAppSource).toContain("librarySessionGeneration");
     expect(nativeAppSource).toContain("generation != self.librarySessionGeneration");
-    expect(nativeAppSource).toContain("requestSequence != self.libraryListRequestSequence");
+    expect(nativeAppSource).toContain("![self.notesRetrieval complete:request result:result error:error]");
     expect(nativeAppSource).toContain("requestSequence != self.libraryNoteRequestSequence");
     expect(nativeAppSource).toContain("requestSequence != self.libraryRevisionRequestSequence");
     expect(nativeAppSource).toContain("if (!NSThread.isMainThread)");

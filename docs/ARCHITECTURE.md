@@ -24,6 +24,7 @@ Paths below are relative to the repository root.
 | `apps/local/native/owner_broker_contract.mm` | Owner-facing result/error validation and lifecycle epoch consistency | XPC connections, AppKit, or live Vault state |
 | `apps/local/native/connections_view.mm` | Connections layout, controls, redacted rows, and transient display state | Broker requests, authorization, host configuration, or navigation |
 | `apps/local/native/note_editor_view.mm` | Editor draft, saved baseline, formatting, revision presentation, controls, and undo cleanup | Broker requests, authorization, conflict/delete approval, or navigation |
+| `apps/local/native/notes_retrieval.mm` | Submitted query/view, result rows, pagination cursor, and pending-request identity | Search-field drafts, AppKit, transport, authentication, or editor mutations |
 | `apps/local/native/native_appearance.mm` | Shared native colors, labels, date formatting, button appearance, and interaction feedback | Product state or authorization |
 | `apps/local/native/owner_control_app.mm` | Owner interaction, shared lifecycle coordination, Connections display-data assembly, and remaining screens | Direct Vault storage access |
 
@@ -67,6 +68,14 @@ also have focused modules alongside these entry points.
 - Editor actions carry intent through a weak target, not broker authority. The
   coordinator retains optimistic revision checks, exact deletion targets, sensitive
   confirmation sheets, and the decision to rebase a conflicting draft.
+- Retrieval accepts a completion only for its current pending request, once. A new
+  query, view, or refresh supersedes old work; navigation cancels pending work but
+  retains the displayed rows. Append requires an idle request and a cursor from
+  that selection. Errors preserve prior append-page results for retry.
+- Submitted queries are distinct from search-field drafts. Result application
+  never overwrites text being typed. The coordinator checks its authorization
+  generation before asking retrieval to accept a reply, and clears retrieval on
+  lifecycle invalidation. Request identity is not authorization.
 
 ## Testing the seams
 
@@ -98,17 +107,26 @@ plaintext/undo cleanup, weak action-target lifetime, and three window widths.
 The full-app lifecycle tests use that editor interface while retaining the broker
 recovery, invalidation, sensitive-sheet clearing, and stale-response checks.
 
+`native-notes-retrieval.test.ts` compiles a Foundation-only executable. It exercises
+query replacement, browse/search cursor isolation, exact citation revisions,
+pagination, append errors, navigation cancellation, duplicate/foreign completions,
+and late responses after clearing or reopening a session. It replaces the former
+array-concatenation smoke. The full coordinator also runs a delayed broker-reply
+fixture that checks unsent search text, editor drafts, one-request pagination,
+lock-time clearing, and stale errors arriving in a newly authenticated session.
+
 ## Remaining organization work
 
 The current source separates Note migrations, native broker contracts, Connections
-rendering, editor ownership, and native appearance from their former large callers.
+rendering, editor ownership, retrieval state, and native appearance from their former large callers.
 It is not the end of the refactor: the Owner app still combines Notes search/browse
 and broker orchestration, Settings, Recovery, shared lifecycle coordination, and
 substantial conditional test fixtures. Broker dispatch and authorization also
 remain large.
 
-The next Notes pass should consolidate search/browse state and retrieval
-orchestration without moving shared lifecycle authority into the editor. Preserve
-the generation checks, pending search state, and navigation through Recovery.
-Settings, Recovery, test fixtures, and the broker modules remain separate follow-up
-work; moving methods merely to lower a line count would not settle their ownership.
+Submitted selection and page state now belong to retrieval, but search/browse
+layout, category loading, and authorized request dispatch still live in the app
+coordinator. Those can be separated further without moving shared lifecycle
+authority into a view. Settings, Recovery, test fixtures, and the broker modules
+remain follow-up work; moving methods merely to lower a line count would not
+settle their ownership.

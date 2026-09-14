@@ -34,7 +34,6 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
   delegate.revocationTargets = [NSMutableDictionary dictionary];
   delegate.integrationOperations = [NSMutableSet set];
   delegate.expandedConnectorKinds = [NSMutableSet set];
-  delegate.noteSummaries = [NSMutableArray array];
   delegate.revisionSummaries = @[];
   delegate.setupGuideDismissed = YES;
   delegate.connectorOverviewByKind = @{};

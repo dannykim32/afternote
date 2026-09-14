@@ -107,6 +107,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/native_appearance.mm"),
       join(import.meta.dir, "../native/connections_view.mm"),
       join(import.meta.dir, "../native/note_editor_view.mm"),
+      join(import.meta.dir, "../native/notes_retrieval.mm"),
       "-o",
       ownerControlPath,
     ], { stdout: "pipe", stderr: "pipe" });
@@ -596,6 +597,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/native_appearance.mm"),
       join(import.meta.dir, "../native/connections_view.mm"),
       join(import.meta.dir, "../native/note_editor_view.mm"),
+      join(import.meta.dir, "../native/notes_retrieval.mm"),
       "-o",
       wrongOwnerPath,
     ], { stdout: "pipe", stderr: "pipe" });

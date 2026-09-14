@@ -47,11 +47,21 @@ describeMacos("native integration command runner", () => {
       join(import.meta.dir, "../native/native_appearance.mm"),
       join(import.meta.dir, "../native/connections_view.mm"),
       join(import.meta.dir, "../native/note_editor_view.mm"),
+      join(import.meta.dir, "../native/notes_retrieval.mm"),
       "-o",
       runner,
     ], { stdout: "pipe", stderr: "pipe" });
     expect(build.exitCode, build.stderr.toString()).toBe(0);
   }, 30_000);
+
+  it("keeps late retrieval replies out of drafts and newly authenticated sessions", () => {
+    const smoke = Bun.spawnSync([runner, "--notes-retrieval-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
+    expect(JSON.parse(smoke.stdout.toString())).toEqual({
+      staleIgnored: true, currentApplied: true, draftsPreserved: true, onePageRequest: true,
+      lockCleared: true, staleErrorIgnored: true, freshSession: true,
+    });
+  });
 
   afterAll(() => {
     rmSync(directory, { recursive: true, force: true });
