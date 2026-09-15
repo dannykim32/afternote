@@ -11,7 +11,9 @@ export type EmbeddingModelDescriptor = {
 export interface TextEmbeddingModel {
   readonly descriptor: EmbeddingModelDescriptor;
   readonly minimumSimilarity: number;
-  embed(texts: readonly string[]): Promise<Float32Array[]>;
+  readonly uiMinimumSimilarity?: number;
+  embedQuery?(text: string): Promise<Float32Array>;
+  embed(texts: readonly string[], stopped?: () => boolean): Promise<Float32Array[]>;
 }
 
 export type RetrievalMode = "lexical" | "hybrid";

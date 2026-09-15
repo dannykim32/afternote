@@ -28,6 +28,7 @@ export class DerivedIndexCoordinator<Note> {
   #indexing = 0;
   #lastError: string | null = null;
   #closed = false;
+  #generation = 0;
 
   constructor(adapter: DerivedIndexAdapter<Note>) {
     this.#adapter = adapter;
@@ -39,8 +40,12 @@ export class DerivedIndexCoordinator<Note> {
   }
 
   enableSemanticModel(model: EmbeddingModelDescriptor): void {
-    if (this.#closed || this.#adapter.model) return;
+    if (this.#closed) return;
+    this.#generation += 1;
+    this.#indexing = 0;
+    this.#lastError = null;
     this.#adapter.model = model;
+    this.#adapter.invalidateSemanticCache?.();
     this.#schedule(this.#adapter.missingSemanticNotes());
   }
 
@@ -92,22 +97,29 @@ export class DerivedIndexCoordinator<Note> {
   #schedule(notes: readonly Note[]): void {
     if (!this.#adapter.model || this.#closed || notes.length === 0) return;
     this.#adapter.invalidateSemanticCache?.();
+    const generation = this.#generation;
     this.#indexing += notes.length;
     this.#queue = this.#queue
       .then(async () => {
-        if (this.#closed) return;
-        await this.#adapter.indexSemanticNotes(notes, (error) => {
-          this.#lastError = errorMessage(error);
-        });
-        if (this.#adapter.indexedNotes() === this.#adapter.totalNotes()) {
+        if (this.#closed || generation !== this.#generation) return;
+        // Commit progress in bounded units so locking/restarting during a large
+        // model rebuild does not discard an entire library's completed inference.
+        const batchSize = 32;
+        for (let offset = 0; offset < notes.length; offset += batchSize) {
+          if (this.#closed || generation !== this.#generation) return;
+          await this.#adapter.indexSemanticNotes(notes.slice(offset, offset + batchSize), (error) => {
+            if (generation === this.#generation) this.#lastError = errorMessage(error);
+          });
+        }
+        if (generation === this.#generation && this.#adapter.indexedNotes() === this.#adapter.totalNotes()) {
           this.#lastError = null;
         }
       })
       .catch((error) => {
-        this.#lastError = errorMessage(error);
+        if (generation === this.#generation) this.#lastError = errorMessage(error);
       })
       .finally(() => {
-        this.#indexing = Math.max(0, this.#indexing - notes.length);
+        if (generation === this.#generation) this.#indexing = Math.max(0, this.#indexing - notes.length);
       });
   }
 }

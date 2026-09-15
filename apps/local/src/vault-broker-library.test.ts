@@ -28,8 +28,9 @@ describe("native Library broker protocol", () => {
     const note = "The launch cannot proceed until the security review is approved.";
     const query = "What is preventing us from shipping?";
     let installed = false;
+    let discoveries = 0;
     const model = new FixtureEmbeddingModel(new Map([[note, [1, 0]], [query, [1, 0]]]));
-    const fixture = workerFixture({ embeddingModelProvider: () => installed ? model : null });
+    const fixture = workerFixture({ embeddingModelProvider: () => { discoveries++; return installed ? model : null; } });
     const connection = { connectionId: randomUUID(), peerPid: 51007 };
     expect((await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES])).searchMode).toBe("exact");
     const saved = (await ownerRequest(fixture.worker, connection, "library.remember", { content: note, source: null })).note;
@@ -39,6 +40,10 @@ describe("native Library broker protocol", () => {
     expect(denied.ok).toBe(false);
     const refreshed = await ownerRequest(fixture.worker, connection, "library.refresh_search", {});
     expect(["indexing", "hybrid"]).toContain(refreshed.searchMode);
+    expect(refreshed.modelId).toBe(model.descriptor.id);
+    const beforePoll = discoveries;
+    await ownerRequest(fixture.worker, connection, "library.refresh_search", { reloadModel: false });
+    expect(discoveries).toBe(beforePoll);
     let searched;
     for (let attempt = 0; attempt < 30; attempt++) {
       searched = await ownerRequest(fixture.worker, connection, "library.search", { cursor: null, limit: 10, query });
@@ -59,6 +64,8 @@ describe("native Library broker protocol", () => {
     expect((await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", {})).ok).toBe(false);
     await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES]);
     expect(await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", { path: "/tmp/untrusted" }))
+      .toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", { reloadModel: "yes" }))
       .toMatchObject({ ok: false, error: { code: "invalid_request" } });
     const session = await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES]);
     now = Date.parse(session.expiresAt) + 1;

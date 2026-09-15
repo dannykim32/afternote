@@ -15,6 +15,7 @@ import {
   parseClaudeDesktopConnectorAction,
 } from "./claude-desktop-connector";
 import { writeExclusivePrivateFile } from "./exclusive-export";
+import { semanticProfile, type SemanticProfileId } from "./semantic-model-catalog";
 import { runRecallEvaluation } from "./recall-eval";
 import { runOrganizationEvaluation } from "./organization-eval";
 import type { TextEmbeddingModel } from "./retrieval";
@@ -48,7 +49,8 @@ const isStandaloneArtifact =
 export type LocalSemanticRuntime = {
   open(vaultPath: string): TextEmbeddingModel | null;
   status(vaultPath: string): unknown;
-  acquire(vaultPath: string): Promise<unknown>;
+  catalog?(vaultPath: string): unknown;
+  acquire(vaultPath: string, options?: { profile?: SemanticProfileId }): Promise<unknown>;
   help: string;
 };
 
@@ -112,7 +114,7 @@ export async function runLocalCli(
       await evaluateOrganization();
       return;
     case "semantic":
-      await manageSemanticSearch(args[1], semanticRuntime);
+      await manageSemanticSearch(args.slice(1), semanticRuntime);
       return;
     case "codex": {
       const action = parseCodexIntegrationAction(args[1]);
@@ -628,25 +630,32 @@ async function evaluateOrganization(): Promise<void> {
 }
 
 async function manageSemanticSearch(
-  action: string | undefined,
+  args: string[],
   semanticRuntime?: LocalSemanticRuntime,
 ): Promise<void> {
   if (!semanticRuntime) {
     throw new Error("Semantic search is not included in this Afternote release");
   }
+  const [action, selection] = args;
+  if (args.length > (action === "install" ? 2 : 1)) throw new Error("Unexpected semantic arguments");
+  const profile = selection === undefined ? undefined : semanticProfile(selection).key;
   const path = vaultPath();
+  if (action === "catalog" && semanticRuntime.catalog) {
+    console.log(JSON.stringify(semanticRuntime.catalog(path), null, 2));
+    return;
+  }
   if (action === "status") {
     console.log(JSON.stringify(semanticRuntime.status(path), null, 2));
     return;
   }
   if (action === "install") {
     console.error(
-      "Downloading the pinned 23 MB semantic index model. Note content is not uploaded.",
+      "Downloading and verifying the selected local search model. Note content is not uploaded.",
     );
-    console.log(JSON.stringify(await semanticRuntime.acquire(path), null, 2));
+    console.log(JSON.stringify(await semanticRuntime.acquire(path, { profile }), null, 2));
     return;
   }
-  throw new Error("Semantic action must be status or install");
+  throw new Error("Semantic action must be status, catalog, or install");
 }
 
 function recallEvaluationScale(args: string[]): {

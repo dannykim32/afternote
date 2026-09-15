@@ -1520,6 +1520,55 @@ describe("SqliteMemory temporal recall", () => {
 });
 
 describe("SqliteMemory hybrid retrieval", () => {
+  it("switches models during indexing and query inference without mixing vectors or editing notes", async () => {
+    const content = "The brass token opens the archive room.";
+    const query = "records storage access credential";
+    const memory = new SqliteMemory(":memory:", localVault);
+    let releaseOldIndex!: () => void;
+    let startedOldIndex!: () => void;
+    const started = new Promise<void>((resolve) => { startedOldIndex = resolve; });
+    const blocked = new Promise<void>((resolve) => { releaseOldIndex = resolve; });
+    const oldModel: TextEmbeddingModel = {
+      descriptor: { id: "old", revision: "1", dimensions: 2 }, minimumSimilarity: 0.8,
+      embed: async (texts, stopped) => {
+        startedOldIndex(); await blocked;
+        expect(stopped?.()).toBe(true);
+        return texts.map(() => new Float32Array([1, 0]));
+      },
+    };
+    let releaseQuery!: () => void;
+    let startedQuery!: () => void;
+    const queryStarted = new Promise<void>((resolve) => { startedQuery = resolve; });
+    const queryBlocked = new Promise<void>((resolve) => { releaseQuery = resolve; });
+    const newModel: TextEmbeddingModel = {
+      descriptor: { id: "new", revision: "1", dimensions: 3 }, minimumSimilarity: 0.8,
+      embed: async (texts) => texts.map(() => new Float32Array([0, 1, 0])),
+      embedQuery: async () => { startedQuery(); await queryBlocked; return new Float32Array([0, 1, 0]); },
+    };
+    try {
+      const note = await memory.remember(localVault, {content});
+      memory.enableSemanticSearch(localVault, oldModel);
+      await started;
+      memory.enableSemanticSearch(localVault, newModel);
+      expect(memory.derivedIndexStatus(localVault)).toMatchObject({state: "indexing", model: newModel.descriptor});
+      expect(await memory.searchNotes(localVault, {query: "brass token", limit: 5})).toMatchObject({results: [{note: {id: note.id}}]});
+      releaseOldIndex(); await memory.waitForDerivedIndex();
+      expect(memory.derivedIndexStatus(localVault)).toMatchObject({state: "ready", indexedNotes: 1, lastError: null});
+      const oldQuery = memory.recall(localVault, query, 5);
+      await queryStarted;
+      const thirdModel: TextEmbeddingModel = {
+        descriptor: {id: "third", revision: "1", dimensions: 2}, minimumSimilarity: 0.8,
+        embed: async (texts) => texts.map(() => new Float32Array([0, 1])),
+      };
+      memory.enableSemanticSearch(localVault, thirdModel);
+      releaseQuery();
+      expect(await oldQuery).toEqual([]);
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, query, 5)).toMatchObject([{note: {id: note.id, content, revision: 1}}]);
+      expect(memory.derivedIndexStatus(localVault)).toMatchObject({state: "ready", model: thirdModel.descriptor});
+    } finally { releaseOldIndex(); releaseQuery?.(); memory.close(); }
+  });
+
   it("enables semantic agent recall on an open exact-search vault", async () => {
     const content = "The brass token opens the archive room.";
     const query = "records storage access credential";

@@ -1,11 +1,22 @@
 # Semantic-search setup in the native app
 
-Baseline: `45f6fca2936350a2bee832f02723ad574c8c6536` (published Alpha 25 plus feed/docs).
+Original baseline: `45f6fca2936350a2bee832f02723ad574c8c6536` (published Alpha 25 plus feed/docs).
+Model-choice/layout revision baseline: `31d83fd`.
 
 ## Scope
 
-- Settings offers an explicit **Install semantic search** action, explains the approximately
-  23 MB local model download, and states that both Notes search and connected-tool Recall use it.
+- Settings uses a full-width, left-aligned **Search by meaning** section. It offers a native
+  Light / Balanced / Large selector, model identity and download size, resource guidance,
+  a recommendation, and aligned action/status rows. Text wraps at the 900-point minimum window.
+- Choices are GIST MiniLM q8 (23.6 MB), EmbeddingGemma q4 (218.7 MB), and Qwen3 Embedding
+  0.6B q8 (625.0 MB). Balanced is the new-install selection and resource recommendation on
+  Macs with at least 8 GB of RAM; Light is recommended below that. Preserve earlier explicit
+  Light installations. Download size is never presented as memory use or a quality guarantee.
+- Only **Download model** / **Use model** commits a selection. Selecting a popup item or opening
+  Settings never downloads a model. Switching rebuilds only the derived index, with exact
+  search available. Installation/verification failure leaves the previous selection intact.
+- The shared local model serves both Notes search and connected-tool Recall. Agent-written
+  search metadata is a separate feature and is not included here.
 - Show checking, downloading/verifying, installed, indexing, active, and retryable failure states.
   Navigation and late status replies must not trigger duplicate installations or hide failures.
 - Use the authentic packaged command and existing pinned-download verification. Never install
@@ -15,7 +26,8 @@ Baseline: `45f6fca2936350a2bee832f02723ad574c8c6536` (published Alpha 25 plus fe
   A locked vault or expired/missing Library session must not be bypassed. Offer normal Notes
   authentication when needed; that existing flow retains its draft/authorization rules.
 - Exact search remains usable while indexing and after failure. The release default stays exact.
-  No agent-generated note metadata, new model, automatic download, or default change is in scope.
+  No agent-generated note metadata or automatic download is in scope. Model quality at scale
+  and signed-build acceptance remain publication gates; a resource recommendation is not a quality claim.
 - Tests cover the existing storage/retrieval and owner-broker boundaries, native Settings action
   flow and stale replies, CLI JSON output, installation failures, and existing lifecycle behavior.
 
@@ -35,11 +47,12 @@ release gates and signed-build acceptance. No release credentials or policies ch
 
 Use a new release version. Keep the accepted Alpha 25 artifacts intact.
 
-1. On a Mac without the model, open Settings. Verify the app offers Install semantic search
-   and does not download until clicked. Confirm the notice covers Notes and connected tools.
+1. On a Mac without a model, open Settings. Verify the recommendation, all three choices,
+   model/download details, and wrapping at normal and minimum window widths. Verify no download until clicked. Confirm the notice covers Notes and connected tools.
 2. Interrupt a download, then retry. Navigate to Notes and back; an installation failure
    must remain visible. Verify the downloaded files and runtime load before accepting readiness.
-3. With an authenticated Notes session and an unsaved editor draft, install the model.
+3. With an authenticated Notes session and an unsaved editor draft, install each model and switch
+   while indexing and while polling status. An old model reply must not mark a new model active.
    Verify indexing completes, the draft remains intact, and existing notes keep their revisions.
 4. With the vault locked or Notes expired, verify installation cannot read/index notes until
    normal Notes authentication. Lock during indexing; late status replies must not restore access.
@@ -48,3 +61,15 @@ Use a new release version. Keep the accepted Alpha 25 artifacts intact.
    a particular paraphrase is not guaranteed to match. Verify exact search continues to work.
 6. Relaunch and confirm the model is reused without downloading again. Recheck signed helper
    execution, doctor, release provenance, update behavior, and the existing connector smoke gates.
+
+## Model-specific runtime contracts
+
+Each profile has a pinned revision and per-file size/SHA-256 allowlist. No user-provided model
+URL or path is accepted by the installer. Model selection is private, bounded local JSON.
+Gemma uses task-specific query/document prefixes and its projected sentence embedding output.
+Qwen uses query instructions, left padding, and last-token pooling. Vectors from different
+models cannot mix: switches invalidate cached vectors, retire queued indexing work, and reject
+in-flight old query results. Indexing cancellation is checked between inference batches.
+Rebuilds commit progress in batches of 32 notes; a restart resumes the missing work.
+The authenticated refresh reply identifies the active model and displays indexed/total counts. Status polls do not reload or
+rehash model weights; an install during a pending poll queues a fresh activation.

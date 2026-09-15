@@ -33,7 +33,7 @@ installation because the two builds cannot share the release Keychain trust doma
 a separate macOS account, or use the signed and notarized DMG when validating an upgrade.
 
 Exact search remains the release default. A user can explicitly run
-`afternote semantic install` to fetch the pinned, digest-verified local model after reviewing
+`afternote semantic install` (or `afternote semantic install light|balanced|large`) to fetch a pinned, digest-verified local model after reviewing
 the additional disk and runtime requirements.
 
 ## Public release

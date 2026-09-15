@@ -796,7 +796,7 @@ export class SqliteMemory implements Memory {
         null,
         semanticTimeoutMs,
         Math.min(
-          this.#embeddingModel.minimumSimilarity,
+          this.#embeddingModel.uiMinimumSimilarity ?? this.#embeddingModel.minimumSimilarity,
           MINIMUM_EXPLORATORY_SEARCH_SIMILARITY,
         ),
       );
@@ -1164,9 +1164,9 @@ export class SqliteMemory implements Memory {
   enableSemanticSearch(vault: VaultContext, model: TextEmbeddingModel): void {
     this.#assertVault(vault);
     if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
-    // Only the absent-to-installed transition is supported. Never replace a live
-    // model beneath an in-flight query or indexing operation.
-    if (this.#embeddingModel) return;
+    const current = this.#embeddingModel?.descriptor;
+    if (current?.id === model.descriptor.id && current.revision === model.descriptor.revision &&
+        current.dimensions === model.descriptor.dimensions) return;
     this.#embeddingModel = model;
     this.#retrievalMode = "hybrid";
     this.#derivedIndexes.enableSemanticModel(model.descriptor);
@@ -1288,7 +1288,9 @@ export class SqliteMemory implements Memory {
     let queryVector: Float32Array;
     try {
       [queryVector] = await withTimeout(
-        model.embed([query + temporalEmbeddingContext(temporal)]),
+        model.embedQuery
+          ? model.embedQuery(query + temporalEmbeddingContext(temporal)).then((vector) => [vector])
+          : model.embed([query + temporalEmbeddingContext(temporal)]),
         semanticTimeoutMs,
       );
       if (!queryVector) {
@@ -1305,6 +1307,9 @@ export class SqliteMemory implements Memory {
       };
     }
 
+    if (this.#embeddingModel !== model) {
+      return { results: this.#limitedTemporalResults(rawLexical, temporal, limit), searchMode: "indexing" };
+    }
     const descriptor = model.descriptor;
     const queryMagnitude = vectorMagnitude(queryVector);
     let semanticIndex: SemanticIndexCache;
@@ -2034,16 +2039,17 @@ export class SqliteMemory implements Memory {
     const vectors = await embedWithRetries(
       model,
       slices.map((slice) => slice.embeddingContent),
-      () => this.#closed,
+      () => this.#closed || this.#embeddingModel !== model,
       reportError,
     );
+    if (this.#closed || this.#embeddingModel !== model) return;
     if (vectors.length !== slices.length) {
       throw new Error(
         `Embedding model ${model.descriptor.id} returned ${vectors.length} vectors for ${slices.length} chunks`,
       );
     }
     vectors.forEach((vector) => validateEmbedding(vector, model.descriptor));
-    if (this.#closed) return;
+    if (this.#closed || this.#embeddingModel !== model) return;
     const descriptor = model.descriptor;
     const currentRevisionStatement = this.#database.query<
       { current_revision: number },
@@ -2552,7 +2558,7 @@ async function embedWithRetries(
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
     if (stopped()) return [];
     try {
-      return await model.embed(texts);
+      return await model.embed(texts, stopped);
     } catch (error) {
       lastError = error;
       if (attempt === EMBEDDING_ATTEMPTS) {

@@ -45,6 +45,26 @@ describe("derived-index coordinator interface", () => {
     expect(semanticRuns).toBe(0);
   });
 
+  it("commits a large rebuild in bounded batches and stops retired work between batches", async () => {
+    const notes = Array.from({length: 100}, (_, index) => ({id: `note-${index}`}));
+    const sizes: number[] = [];
+    let indexed = 0;
+    const coordinator = new DerivedIndexCoordinator<IndexedNote>({
+      model: {id: "fixture", revision: "1", dimensions: 2},
+      rebuildSynchronous: () => undefined, replaceSynchronous: () => undefined,
+      missingSemanticNotes: () => notes,
+      indexSemanticNotes: async (batch) => {
+        sizes.push(batch.length); indexed += batch.length;
+        expect(coordinator.status().indexedNotes).toBe(indexed);
+        if (sizes.length === 2) coordinator.close();
+      },
+      totalNotes: () => notes.length, indexedNotes: () => indexed,
+    });
+    coordinator.initialize(); await coordinator.wait();
+    expect(sizes).toEqual([32, 32]);
+    expect(indexed).toBe(64);
+  });
+
   it("reports disabled, indexing, ready, and degraded states from one owner", async () => {
     let release: (() => void) | undefined;
     const pending = new Promise<void>((resolve) => {

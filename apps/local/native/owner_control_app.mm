@@ -190,8 +190,8 @@ NSDictionary *RunIntegrationCommand(NSString *command, NSArray<NSString *> *argu
         message, @"Afternote could not start its integration helper.") };
   }
   __block BOOL timedOut = NO;
-  NSTimeInterval timeoutSeconds = [arguments isEqualToArray:@[@"semantic", @"install"]]
-      ? 300.0 : kIntegrationCommandTimeoutSeconds;
+  NSTimeInterval timeoutSeconds = arguments.count >= 2 && [arguments[0] isEqualToString:@"semantic"] && [arguments[1] isEqualToString:@"install"]
+      ? 900.0 : kIntegrationCommandTimeoutSeconds;
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
   NSString *testingTimeout = NSProcessInfo.processInfo.environment[
       @"AFTERNOTE_TEST_INTEGRATION_TIMEOUT_MS"];
@@ -770,6 +770,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, copy) NSString *currentSearchMode;
 @property(nonatomic, strong) AfternoteSemanticSettings *semanticSettings;
 @property(nonatomic) BOOL semanticActivationInFlight;
+@property(nonatomic) BOOL semanticReloadPending;
 @property(nonatomic, strong) NSButton *loadMoreNotesButton;
 @property(nonatomic, strong) NSButton *libraryRecentButton;
 @property(nonatomic, strong) NSButton *createNoteButton;
@@ -1417,7 +1418,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     memoryHeading,
     [self settingsRowWithTitle:@"Vault" detail:@"Canonical notes and derived recall data stay encrypted locally." control:vaultState],
     [self settingsRowWithTitle:@"Vault location" detail:@"The broker owns the encrypted database path; connectors never receive it." control:vaultLocationState],
-    [self settingsRowWithTitle:@"Semantic recall" detail:@"Search by meaning in Notes and connected tools. The optional model runs locally; your notes stay on this Mac. Downloading contacts the model host." control:self.semanticSettings],
+    self.semanticSettings,
     [self settingsRowWithTitle:@"Export & diagnostics" detail:@"Lossless export and share-safe diagnostics run through owner-approved native broker actions." control:exportControls],
     securityHeading,
     [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
@@ -1437,6 +1438,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   column.orientation = NSUserInterfaceLayoutOrientationVertical;
   column.alignment = NSLayoutAttributeLeading;
   column.spacing = 4;
+  [column setCustomSpacing:20 afterView:self.semanticSettings];
+  [self.semanticSettings.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
   column.edgeInsets = NSEdgeInsetsMake(30, 0, 30, 0);
   column.translatesAutoresizingMaskIntoConstraints = NO;
   [document addSubview:column];
@@ -2152,7 +2155,15 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 }
 
 - (void)activateSemanticSearch:(BOOL)userInitiated {
-  if (self.semanticActivationInFlight || self.broker == nil) return;
+  [self refreshSemanticSearch:YES userInitiated:userInitiated];
+}
+
+- (void)refreshSemanticSearch:(BOOL)reloadModel userInitiated:(BOOL)userInitiated {
+  if (self.broker == nil) return;
+  if (self.semanticActivationInFlight) {
+    if (reloadModel) self.semanticReloadPending = YES;
+    return;
+  }
   if (self.vaultLocked || self.libraryExpiresAt.length == 0) {
     if (userInitiated) {
       // Normal Notes authentication owns access and any draft-navigation policy.
@@ -2163,22 +2174,29 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   }
   self.semanticActivationInFlight = YES;
   NSUInteger generation = self.librarySessionGeneration;
-  [self.broker requestMethod:@"library.refresh_search" params:@{}
+  [self.broker requestMethod:@"library.refresh_search" params:@{ @"reloadModel": @(reloadModel) }
                        reply:^(NSDictionary *result, NSDictionary *error) {
     dispatch_async(dispatch_get_main_queue(), ^{
       if (generation != self.librarySessionGeneration) return;
       self.semanticActivationInFlight = NO;
+      if (self.semanticReloadPending) {
+        self.semanticReloadPending = NO;
+        [self refreshSemanticSearch:YES userInitiated:NO];
+        return;
+      }
       if (error != nil) {
         [self showLibraryError:error];
         [self.semanticSettings activationFailed];
         return;
       }
       [self applySearchMode:StringValue(result[@"searchMode"], @"exact")];
+      [self.semanticSettings setIndexedNotes:[result[@"indexedNotes"] integerValue] total:[result[@"totalNotes"] integerValue]];
+      [self.semanticSettings activationCompleted:self.currentSearchMode modelId:StringValue(result[@"modelId"], @"")];
       if ([self.currentSearchMode isEqualToString:@"indexing"]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
           if (generation == self.librarySessionGeneration &&
               [self.currentSearchMode isEqualToString:@"indexing"])
-            [self activateSemanticSearch:NO];
+            [self refreshSemanticSearch:NO userInitiated:NO];
         });
       }
     });
@@ -3638,6 +3656,7 @@ doCommandBySelector:(SEL)commandSelector {
   }
   self.librarySessionGeneration += 1;
   self.semanticActivationInFlight = NO;
+  self.semanticReloadPending = NO;
   self.librarySensitiveTextView.string = @"";
   if (self.librarySensitiveAlert != nil) {
     self.librarySensitiveAlert.messageText = @"Notes session ended";

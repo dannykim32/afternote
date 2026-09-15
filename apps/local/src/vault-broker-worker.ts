@@ -1370,13 +1370,15 @@ export class VaultBrokerWorker {
     const authority = this.#authority();
     switch (request.method) {
       case "library.refresh_search": {
-        assertExactObject(request.params, []);
+        const reload = Object.hasOwn(request.params, "reloadModel") ? request.params.reloadModel : true;
+        assertExactObject(request.params, Object.hasOwn(request.params, "reloadModel") ? ["reloadModel"] : []);
+        if (typeof reload !== "boolean") throw new BrokerProtocolError("invalid_request", "Search refresh is invalid");
         const session = this.#librarySession(transportBinding, ["library.search"]);
         const result = await authority.executeNativeLibraryRead(
           session.sessionId,
           request.method,
           async () => {
-            if (!memory.derivedIndexStatus(vault).model) {
+            if (reload) {
               try {
                 const discovery = this.#embeddingModelProvider(this.#vaultConfiguration().vaultPath);
                 this.#semanticDiscoveryFailed = discovery.invalid;
@@ -1385,8 +1387,14 @@ export class VaultBrokerWorker {
                 this.#semanticDiscoveryFailed = true;
               }
             }
+            const index = memory.derivedIndexStatus(vault);
             return {
-              result: { searchMode: librarySearchMode(memory.derivedIndexStatus(vault), this.#semanticDiscoveryFailed) },
+              result: {
+                searchMode: librarySearchMode(index, this.#semanticDiscoveryFailed),
+                modelId: index.model?.id ?? null,
+                indexedNotes: index.indexedNotes,
+                totalNotes: index.totalNotes,
+              },
               noteRefs: [],
             };
           },

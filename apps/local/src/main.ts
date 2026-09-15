@@ -2,17 +2,19 @@ import { runLocalCli } from "./local-cli";
 import {
   acquireLocalEmbeddingModel,
   localEmbeddingStatus,
+  semanticModelCatalog,
   openLocalEmbeddingModel,
 } from "./local-embedding";
 try {
   await runLocalCli(process.argv.slice(2), {
     open: openLocalEmbeddingModel,
     status: localEmbeddingStatus,
+    catalog: semanticModelCatalog,
     acquire: acquireLocalEmbeddingModel,
     help: `
   eval-recall [--semantic] [--noise 10|100] [--notes 10000]
                        Run deterministic Recall quality and noise-scaling gates
-  semantic status|install
+  semantic status|catalog|install [light|balanced|large]
                        Inspect or install the pinned local semantic-search model`,
   });
 } catch (error) {

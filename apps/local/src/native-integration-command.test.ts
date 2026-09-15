@@ -58,7 +58,7 @@ describeMacos("native integration command runner", () => {
   it("activates semantic search without losing drafts or accepting replies from an expired session", () => {
     const smoke = Bun.spawnSync([runner, "--semantic-coordinator-smoke"], { stdout: "pipe", stderr: "pipe" });
     expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
-    expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(7).fill(true));
+    expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(8).fill(true));
   });
 
   it("keeps late retrieval replies out of drafts and newly authenticated sessions", () => {

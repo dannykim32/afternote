@@ -228,13 +228,19 @@ current limits.
 Afternote starts with exact-text and date-aware search. This applies both to Notes in
 Afternote and to Recall calls from Codex, Claude Code, and Claude Desktop.
 
-To enable search by meaning, open **Settings → Semantic recall → Install semantic search**.
-This explicitly downloads a 23 MB, digest-verified model from Hugging Face. Inference and
-indexing run on this Mac; Afternote does not upload notes for embedding or search. Existing
-notes are indexed automatically, and exact search remains available while indexing.
+To enable search by meaning, open **Settings → Search by meaning**. Choose Light
+(23.6 MB), Balanced (218.7 MB), or Large (625.0 MB), then click **Download model**.
+Balanced is recommended for Macs with at least 8 GB of memory; an existing Light installation
+is preserved. The recommendation does not download anything. Download size is not RAM use.
+Models are pinned and verified before selection. Downloads contact Hugging Face; inference and
+indexing run locally without uploading notes. Switching models rebuilds the derived index,
+leaves note revisions intact, and keeps exact search available while indexing.
 If Notes is locked or its session has ended, open it with your usual authentication to
 activate the model. A current Notes session activates it without reopening the vault.
-The command-line equivalent remains `afternote semantic install`.
+CLI equivalents: `afternote semantic catalog`, `afternote semantic status`, and
+`afternote semantic install light|balanced|large`. Omitting the profile reuses the selection.
+See [model comparison and release limits](docs/SEMANTIC_MODEL_COMPARISON.md); these choices
+are development candidates pending real-model scale validation and signed-build acceptance.
 
 Semantic search improves both Notes and connected tools. Agent Recall uses a stricter
 similarity threshold than the Notes search UI to reduce weak matches. The connected model

@@ -18,7 +18,7 @@ describeMacos("native semantic settings", () => {
       expect(build.exitCode, build.stderr.toString()).toBe(0);
       const smoke = Bun.spawnSync([runner], { stdout: "pipe", stderr: "pipe" });
       expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
-      expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(13).fill(true));
+      expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(15).fill(true));
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30_000);
 });
