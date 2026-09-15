@@ -6,12 +6,7 @@ import {
   type TextEmbeddingModel,
 } from "./retrieval";
 
-export const LOCAL_EMBEDDING_MODEL = {
-  id: "onnx-community/GIST-all-MiniLM-L6-v2-ONNX",
-  revision: "c0339fdc3b6e11b7a7e7213695e36e55fcc732d8",
-  dtype: "q8",
-  dimensions: 384,
-} as const;
+export const LOCAL_EMBEDDING_MODEL = SEMANTIC_MODELS.light;
 export const LOCAL_EMBEDDING_PIPELINE_VERSION = 2;
 
 const MAX_CHUNK_CHARACTERS = 800;

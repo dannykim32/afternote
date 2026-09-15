@@ -164,15 +164,17 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 }
 - (void)activationFailed {
   self.failureKind = AfternoteSemanticFailureActivation;
-  self.failure = @"Could not activate. Open Notes to check your vault access, then retry.";
+  self.failure = @"Could not activate the installed model. Open Notes to check vault access, then retry.";
   [self render];
 }
 - (void)performAction:(id)sender {
   (void)sender;
   if (self.busy) return;
   if (self.failureKind == AfternoteSemanticFailureStatus || !self.catalog) { [self refresh]; return; }
-  if ([self.chosenProfile isEqual:self.selectedProfile] && [self.chosenModel[@"state"] isEqual:@"ready"]) {
+  if (self.failureKind == AfternoteSemanticFailureActivation ||
+      ([self.chosenProfile isEqual:self.selectedProfile] && [self.chosenModel[@"state"] isEqual:@"ready"])) {
     self.failure = nil; self.failureKind = AfternoteSemanticFailureNone;
+    [self render];
     if (self.activate) self.activate(YES);
   } else [self runInstalling:YES];
 }

@@ -43,9 +43,11 @@ does not predict workload, memory pressure, battery impact, or retrieval accurac
 
 - Complete real-model evaluation at library scale and on a separate paraphrase/unsupported
   query holdout before claiming either candidate improves recall.
-- Measure initial indexing time, peak RSS and steady query latency independently. The ongoing
-  10,000-note Balanced run already exceeds 20 minutes to build its initial index; that is a
-  material usability limit, even when the model fits in RAM.
+- Measure initial indexing time, peak RSS and steady query latency independently. A 10,000-note Balanced
+  run was stopped without a quality result after more than 20 minutes in initial indexing.
+  It used the earlier whole-library commit path; the final code now commits progress every
+  32 notes. It needs a new measured run. This is a material usability concern even when the
+  model fits in RAM; no scale quality or indexing-time pass is claimed.
 - Revisit retrieval thresholds using separate calibration and evaluation data. UI search is
   more exploratory (0.25 for the new candidates); agent Recall uses 0.30. These are provisional.
 - Verify signed runtime, authentication/lock behavior, model switching, restart/reuse and all

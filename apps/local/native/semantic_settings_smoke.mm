@@ -54,6 +54,10 @@ int main() {
     BOOL active = [view.statusLabel.stringValue containsString:@"Active in Notes and connected tools"];
     [view.modelMenu selectItemAtIndex:2]; [view.modelMenu sendAction:view.modelMenu.action to:view.modelMenu.target];
     BOOL choosingDoesNotDownload = requests.count == 5 && [view.actionButton.title isEqual:@"Download model"];
+    [view activationFailed];
+    [view.actionButton performClick:nil];
+    BOOL activationRetryDoesNotDownload = requests.count == 5 && explicitActivations == 2 &&
+      [view.actionButton.title isEqual:@"Download model"];
     [view.actionButton performClick:nil]; reply(5, status(@"large"), nil);
     [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
     BOOL oldModelNotActive = [view.actionButton.title isEqual:@"Activate model"] &&
@@ -67,7 +71,7 @@ int main() {
       @"retryOffered":@(retryOffered), @"malformedRejected":@(malformedRejected),
       @"installed":@(installed), @"explicitActivation":@(explicitActivation),
       @"indexing":@(indexing), @"active":@(active), @"lockedNotActive":@(lockedNotActive),
-      @"choosingDoesNotDownload":@(choosingDoesNotDownload), @"oldModelNotActive":@(oldModelNotActive) };
+      @"activationRetryDoesNotDownload":@(activationRetryDoesNotDownload), @"choosingDoesNotDownload":@(choosingDoesNotDownload), @"oldModelNotActive":@(oldModelNotActive) };
     NSData *data = [NSJSONSerialization dataWithJSONObject:checks options:0 error:nil];
     fwrite(data.bytes, 1, data.length, stdout);
     for (NSNumber *passed in checks.allValues) if (!passed.boolValue) return 2;

@@ -144,32 +144,30 @@ export async function acquireLocalEmbeddingModel(
 ): Promise<LocalEmbeddingStatus> {
   const profile = semanticProfile(options?.profile ?? selectedSemanticProfile(vaultPath));
   const existing = localEmbeddingStatus(vaultPath, profile.key);
-  if (existing.state === "ready") {
-    selectModel(vaultPath, profile.key);
-    return existing;
-  }
   const cacheDirectory = modelCacheDirectory(vaultPath);
   mkdirSync(cacheDirectory, { recursive: true, mode: 0o700 });
   const snapshot = modelSnapshotPath(vaultPath, profile);
-  const snapshotParent = dirname(snapshot);
-  mkdirSync(snapshotParent, { recursive: true, mode: 0o700 });
-  const staging = mkdtempSync(join(snapshotParent, ".install-"));
-  try {
-    for (const relativePath of Object.keys(profile.files)) {
-      await downloadVerifiedModelFile(
-        staging,
-        relativePath,
-        profile,
-        options?.fetch ?? globalThis.fetch,
-      );
+  if (existing.state !== "ready") {
+    const snapshotParent = dirname(snapshot);
+    mkdirSync(snapshotParent, { recursive: true, mode: 0o700 });
+    const staging = mkdtempSync(join(snapshotParent, ".install-"));
+    try {
+      for (const relativePath of Object.keys(profile.files)) {
+        await downloadVerifiedModelFile(
+          staging,
+          relativePath,
+          profile,
+          options?.fetch ?? globalThis.fetch,
+        );
+      }
+      if (existsSync(snapshot)) {
+        rmSync(snapshot, { recursive: true, force: true });
+      }
+      renameSync(staging, snapshot);
+    } catch (error) {
+      rmSync(staging, { recursive: true, force: true });
+      throw error;
     }
-    if (existsSync(snapshot)) {
-      rmSync(snapshot, { recursive: true, force: true });
-    }
-    renameSync(staging, snapshot);
-  } catch (error) {
-    rmSync(staging, { recursive: true, force: true });
-    throw error;
   }
 
   const model = new TransformersTextEmbeddingModel({
@@ -181,7 +179,7 @@ export async function acquireLocalEmbeddingModel(
   try {
     await model.embed(["Afternote local semantic search installation check."]);
   } catch (error) {
-    rmSync(snapshot, { recursive: true, force: true });
+    // Digest-valid files remain reusable; selection changes only after a successful probe.
     throw new Error("Local embedding model failed its runtime check", {
       cause: error,
     });

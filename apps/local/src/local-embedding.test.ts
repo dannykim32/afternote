@@ -1,13 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import {
   acquireLocalEmbeddingModel,
   localEmbeddingStatus,
   selectedSemanticProfile, semanticModelCatalog,
 } from "./local-embedding";
-import { LOCAL_EMBEDDING_MODEL } from "./transformers-embedding";
+import { SEMANTIC_MODELS } from "./semantic-model-catalog";
+import { createHash } from "node:crypto";
+import { LOCAL_EMBEDDING_MODEL, TransformersTextEmbeddingModel } from "./transformers-embedding";
 
 const directories: string[] = [];
 
@@ -61,6 +63,36 @@ describe("local embedding installation", () => {
     writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
     await expect(acquireLocalEmbeddingModel(vaultPath, { profile: "large", fetch: async () => new Response("bad") })).rejects.toThrow();
     expect(selectedSemanticProfile(vaultPath)).toBe("light");
+  });
+
+  it("runtime-checks a cached model before committing selection, without redownloading", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-model-cached-"));
+    directories.push(directory);
+    const vaultPath = join(directory, "vault.db");
+    const profile = SEMANTIC_MODELS.large;
+    const originalFiles = profile.files;
+    const content = "pinned local test model";
+    // A tiny, genuinely digest-checked fixture exercises the installer workflow;
+    // runtime inference is the failure seam, and no remote files are needed.
+    profile.files = { "config.json": { bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex") } };
+    const runtime = spyOn(TransformersTextEmbeddingModel.prototype, "embed").mockRejectedValue(new Error("runtime unavailable"));
+    try {
+      const snapshot = join(directory, "models", profile.id, profile.revision);
+      mkdirSync(snapshot, {recursive: true});
+      writeFileSync(join(snapshot, "config.json"), content);
+      writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
+      expect(localEmbeddingStatus(vaultPath, "large").state).toBe("ready");
+      let requests = 0;
+      const options = { profile: "large" as const, fetch: async () => { requests++; return new Response(""); } };
+      await expect(acquireLocalEmbeddingModel(vaultPath, options)).rejects.toThrow("failed its runtime check");
+      expect(selectedSemanticProfile(vaultPath)).toBe("light");
+      expect(requests).toBe(0);
+      runtime.mockResolvedValue([new Float32Array(profile.dimensions)]);
+      await acquireLocalEmbeddingModel(vaultPath, options);
+      expect(selectedSemanticProfile(vaultPath)).toBe("large");
+      expect(requests).toBe(0);
+      expect(runtime).toHaveBeenCalledTimes(2);
+    } finally { profile.files = originalFiles; runtime.mockRestore(); }
   });
 
   it("distinguishes an absent model from a partial or tampered installation", () => {
