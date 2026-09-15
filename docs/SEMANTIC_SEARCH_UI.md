@@ -7,7 +7,8 @@ Model-choice/layout revision baseline: `31d83fd`.
 
 - Settings uses a full-width, left-aligned **Search by meaning** section. It offers a native
   Light / Balanced / Large selector, model identity and download size, resource guidance,
-  a recommendation, and aligned action/status rows. Text wraps at the 900-point minimum window.
+  a recommendation, and aligned action/status rows. The selector and action button share
+  the right edge used by other Settings controls; explanatory text stays on the left. Text wraps at the 900-point minimum window.
 - Choices are GIST MiniLM q8 (23.6 MB), EmbeddingGemma q4 (218.7 MB), and Qwen3 Embedding
   0.6B q8 (625.0 MB). Balanced is the new-install selection and resource recommendation on
   Macs with at least 8 GB of RAM; Light is recommended below that. Preserve earlier explicit

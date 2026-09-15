@@ -63,7 +63,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   [_modelMenu.widthAnchor constraintEqualToConstant:220].active = YES;
   NSTextField *modelLabel = CopyLabel(@"Model", 12);
   modelLabel.textColor = AfternoteTextColor();
-  NSStackView *choice = [NSStackView stackViewWithViews:@[modelLabel, _modelMenu]];
+  NSStackView *choice = [NSStackView stackViewWithViews:@[modelLabel, [NSView new], _modelMenu]];
   choice.spacing = 16;
   choice.alignment = NSLayoutAttributeCenterY;
   _modelDetail = CopyLabel(@"Choose a model after checking availability.", 12);
@@ -74,15 +74,15 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   _spinner.style = NSProgressIndicatorStyleSpinning;
   _spinner.controlSize = NSControlSizeSmall;
   _spinner.displayedWhenStopped = NO;
-  NSStackView *actions = [NSStackView stackViewWithViews:@[_actionButton, _spinner]];
+  NSStackView *actions = [NSStackView stackViewWithViews:@[_statusLabel, [NSView new], _spinner, _actionButton]];
   actions.spacing = 10;
   actions.alignment = NSLayoutAttributeCenterY;
-  for (NSView *view in @[header, explanation, choice, _modelDetail, actions, _statusLabel]) [self addArrangedSubview:view];
-  for (NSView *view in @[header, explanation, _modelDetail, _statusLabel])
+  for (NSView *view in @[header, explanation, choice, _modelDetail, actions]) [self addArrangedSubview:view];
+  for (NSView *view in @[header, explanation, choice, _modelDetail, actions])
     [view.widthAnchor constraintEqualToAnchor:self.widthAnchor].active = YES;
   [self setCustomSpacing:8 afterView:header];
   [self setCustomSpacing:6 afterView:choice];
-  [self setCustomSpacing:8 afterView:actions];
+  [_statusLabel.widthAnchor constraintLessThanOrEqualToAnchor:self.widthAnchor constant:-250].active = YES;
   _modelMenu.enabled = NO;
   return self;
 }
