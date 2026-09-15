@@ -7,6 +7,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Afternote</title>
         <item>
             <title>2.0.0</title>
+            <pubDate>Tue, 15 Sep 2026 15:34:54 -0500</pubDate>
+            <sparkle:version>25</sparkle:version>
+            <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.3</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## 2.0.0-alpha.25 - 2026-09-15
+
+### Fixed
+
+- Show persisted reconnect preparation in Connections and the setup guide until the
+  replacement pairs. Refreshing or reopening Afternote no longer offers preparation
+  again after approval; the success message explains how to finish in the AI host.
+- Keep duplicate reconnect actions blocked while the updated broker overview is
+  loading, including failed or malformed replies and when a newer refresh supersedes
+  an older response. A failed refresh offers a status retry, not another preparation.
+
+Published signed and notarized release. Founder reconnect acceptance passed on a second
+Mac. Includes the architecture and reconnect changes from private Alphas 23 and 24.
+]]></description>
+            <enclosure url="https://github.com/dannykim32/afternote/releases/download/v2.0.0-alpha.25/afternote-local-2.0.0-alpha.25-darwin-arm64.dmg" length="72877270" type="application/octet-stream" sparkle:edSignature="2Y2dwQhEl9rWgyKatziCz1yQ+zNdfSEPHQSp+QkwQ08e2vAXnfDJ58DmecYhvWPLbf6druwnJy+asoeKMilxDg=="/>
+        </item>
+        <item>
+            <title>2.0.0</title>
             <pubDate>Sun, 13 Sep 2026 16:24:42 -0600</pubDate>
             <sparkle:version>22</sparkle:version>
             <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
@@ -101,6 +124,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: dh1Jam3GBuWveUAUwRLA5yCMQ7EF2DoH71o8HuFh1J4gZmgEGPAFnhhBzKsbnTN20BMr7E3v2Yax/TYFxEyNDg==
-length: 6203
+edSignature: YZgYJpSkfybHWII7FUTzzNQJDIIHoK+RFfhy+X6dtNaw5HuXj/eOxcky6Us1IuSwdPLKnRpiQlznJGbHy8sqCA==
+length: 7722
 -->

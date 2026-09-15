@@ -17,7 +17,8 @@ during release review.
   loading, including failed or malformed replies and when a newer refresh supersedes
   an older response. A failed refresh offers a status retry, not another preparation.
 
-Private release candidate; signing, notarization, and second-Mac acceptance are pending.
+Published signed and notarized release. Founder reconnect acceptance passed on a second
+Mac. Includes the architecture and reconnect changes from private Alphas 23 and 24.
 
 ## 2.0.0-alpha.24 - 2026-09-15
 
@@ -32,7 +33,7 @@ Private release candidate; signing, notarization, and second-Mac acceptance are 
 - Bind reconnect approval to the current connector authority state, rejecting stale
   approvals after an intervening reconnect and revocation.
 
-Private release candidate; second-Mac reconnect acceptance is pending.
+Private candidate, superseded by the accepted public Alpha 25.
 
 ## 2.0.0-alpha.23 - 2026-09-14
 
@@ -52,9 +53,8 @@ Private release candidate; second-Mac reconnect acceptance is pending.
 - Center Connections content and align its action columns; present connector repair as
   a quieter contextual action alongside revocation.
 
-Release candidate: packaging, notarization, and second-Mac acceptance are pending.
-See the [prelaunch smoke test](docs/PRELAUNCH_SMOKE_TEST.md); Alpha 22 does not contain
-these changes.
+Private candidate, superseded by the accepted public Alpha 25.
+See the [prelaunch smoke test](docs/PRELAUNCH_SMOKE_TEST.md) for the acceptance workflow.
 
 ## 2.0.0-alpha.22 - 2026-09-13
 

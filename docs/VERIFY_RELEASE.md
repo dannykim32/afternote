@@ -11,10 +11,10 @@ In the directory containing the DMG and its `SHA256SUMS`, run:
 
 ```bash
 shasum -a 256 -c SHA256SUMS
-hdiutil verify afternote-local-2.0.0-alpha.22-darwin-arm64.dmg
+hdiutil verify afternote-local-2.0.0-alpha.25-darwin-arm64.dmg
 ```
 
-The filename above is an example for alpha.22: use the filename from the release you
+The filename above is an example for alpha.25: use the filename from the release you
 downloaded. If the checksum names an older DMG, replace `SHA256SUMS` with the file from
 the matching release. Do not rename a checksum entry to make verification pass.
 
@@ -40,7 +40,7 @@ Confirm the release identity recorded in the bundle:
   /Volumes/Afternote/Afternote.app/Contents/Info.plist
 ```
 
-For alpha.22 these values are, in order, `2.0.0-alpha.22`, `2.0.0`, `22`, and `13.3`.
+For alpha.25 these values are, in order, `2.0.0-alpha.25`, `2.0.0`, `25`, and `13.3`.
 For a later alpha, the package and build versions must match that release.
 The first value is Afternote's full package version. The next two are Apple's required numeric
 marketing and build versions.

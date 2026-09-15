@@ -1,6 +1,6 @@
 # Local alpha status and roadmap
 
-Updated 2026-09-13 for [Alpha 22](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-alpha.22).
+Updated 2026-09-15 for [Alpha 25](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-alpha.25).
 This repository is the complete Local Mac product. The earlier hosted application
 and experimental browser/Slack adapters are outside this release.
 
@@ -10,15 +10,17 @@ and experimental browser/Slack adapters are outside this release.
 - Encrypted local notes, immutable revisions, exact and date-aware retrieval,
   optional local semantic retrieval, JSON export/restore, and Markdown export.
 - Codex, Claude Code, and Claude Desktop Remember/Recall connectors with separate
-  identities, attribution, activity counts, and revocation.
+  identities, attribution, activity counts, revocation, and owner-approved reconnect
+  preparation that persists until the replacement pairs.
 - Configurable routine authentication, explicit vault lock/unlock, owner-approved
   diagnostics, and signed updates through the app.
 - Apache-2.0 source, release verification instructions, contribution guidance,
   and a private vulnerability-reporting route.
 
-Alpha 22 passed its release-host test suite, package and performance gates,
-dependency audit, notarization, and focused attribution/counter acceptance on a
-second Mac. Public CI passed for its source and feed commit. Founder acceptance
+Alpha 25 passed its release-host test suite (596 passed, 9 explicit skips), package
+and performance gates, dependency audit, notarization, and founder reconnect
+acceptance on a second Mac. Public source CI passed, and the anonymously downloaded
+DMG matched the accepted checksum. Founder acceptance
 does not replace testing by new users; see [RELEASING.md](RELEASING.md) for the
 release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limits.
 
@@ -34,7 +36,7 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
 
 - Continue splitting large native UI, broker dispatch, authorization, and storage
   modules along their responsibilities. The architecture has explicit interfaces,
-  but large implementation files remain. The next-release source extracts native
+  but large implementation files remain. The released source extracts native
   broker contracts and Note schema migrations with verified backups into focused,
   behaviorally tested modules. Connections rendering and shared native appearance
   now also have focused modules. The Notes editor separately owns its draft,
