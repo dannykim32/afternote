@@ -13,6 +13,7 @@
 #import "connections_view.h"
 #import "note_editor_view.h"
 #import "notes_retrieval.h"
+#import "semantic_settings.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
 #import "product_surface_router.h"
@@ -189,7 +190,8 @@ NSDictionary *RunIntegrationCommand(NSString *command, NSArray<NSString *> *argu
         message, @"Afternote could not start its integration helper.") };
   }
   __block BOOL timedOut = NO;
-  NSTimeInterval timeoutSeconds = kIntegrationCommandTimeoutSeconds;
+  NSTimeInterval timeoutSeconds = [arguments isEqualToArray:@[@"semantic", @"install"]]
+      ? 300.0 : kIntegrationCommandTimeoutSeconds;
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
   NSString *testingTimeout = NSProcessInfo.processInfo.environment[
       @"AFTERNOTE_TEST_INTEGRATION_TIMEOUT_MS"];
@@ -766,7 +768,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSTableView *noteTable;
 @property(nonatomic, strong) NSTextField *searchModeLabel;
 @property(nonatomic, copy) NSString *currentSearchMode;
-@property(nonatomic, strong) NSTextField *semanticSettingsState;
+@property(nonatomic, strong) AfternoteSemanticSettings *semanticSettings;
+@property(nonatomic) BOOL semanticActivationInFlight;
 @property(nonatomic, strong) NSButton *loadMoreNotesButton;
 @property(nonatomic, strong) NSButton *libraryRecentButton;
 @property(nonatomic, strong) NSButton *createNoteButton;
@@ -1199,20 +1202,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   }
   self.searchModeLabel.accessibilityLabel =
       [NSString stringWithFormat:@"Search mode: %@", self.searchModeLabel.stringValue];
-  if ([mode isEqualToString:@"hybrid"]) {
-    self.semanticSettingsState.stringValue = @"Active · local 23 MB model";
-    self.semanticSettingsState.textColor = StatusColor(@"success");
-  } else if ([mode isEqualToString:@"indexing"]) {
-    self.semanticSettingsState.stringValue = @"Indexing locally · exact fallback ready";
-    self.semanticSettingsState.textColor = StatusColor(@"warning");
-  } else if ([mode isEqualToString:@"exact"] || [mode isEqualToString:@"degraded"]) {
-    self.semanticSettingsState.stringValue = @"Exact search active · semantic model unavailable";
-    self.semanticSettingsState.textColor = StatusColor(
-        [mode isEqualToString:@"degraded"] ? @"error" : @"neutral");
-  } else {
-    self.semanticSettingsState.stringValue = @"Checked when Notes opens";
-    self.semanticSettingsState.textColor = AfternoteMutedTextColor();
-  }
+  [self.semanticSettings setSearchMode:self.currentSearchMode];
   [self renderSetupGuide];
 }
 
@@ -1312,9 +1302,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSTextField *memoryHeading = [self label:@"Local memory" size:18 weight:NSFontWeightSemibold];
   NSTextField *vaultState = [self label:@"Encrypted on this Mac" size:12 weight:NSFontWeightMedium];
   vaultState.textColor = StatusColor(@"success");
-  self.semanticSettingsState = [self label:@"Checked when Notes opens"
-                                        size:12 weight:NSFontWeightMedium];
-  self.semanticSettingsState.textColor = AfternoteMutedTextColor();
+  __weak OwnerControlDelegate *weakSelf = self;
+  self.semanticSettings = [[AfternoteSemanticSettings alloc] initWithRunner:
+      ^(NSArray<NSString *> *arguments, AfternoteSemanticCompletion completion) {
+    [weakSelf runPackagedCommand:arguments completion:completion];
+  }];
+  self.semanticSettings.activate = ^(BOOL userInitiated) {
+    [weakSelf activateSemanticSearch:userInitiated];
+  };
   NSTextField *vaultLocationState = [self label:@"Afternote-managed" size:12 weight:NSFontWeightMedium];
   vaultLocationState.textColor = AfternoteMutedTextColor();
   NSButton *exportNotes = [AfternoteButton buttonWithTitle:@"Export notes"
@@ -1422,7 +1417,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     memoryHeading,
     [self settingsRowWithTitle:@"Vault" detail:@"Canonical notes and derived recall data stay encrypted locally." control:vaultState],
     [self settingsRowWithTitle:@"Vault location" detail:@"The broker owns the encrypted database path; connectors never receive it." control:vaultLocationState],
-    [self settingsRowWithTitle:@"Semantic recall" detail:@"Optional local semantic recall can be installed explicitly. Exact search is the release default." control:self.semanticSettingsState],
+    [self settingsRowWithTitle:@"Semantic recall" detail:@"Search by meaning in Notes and connected tools. The optional model runs locally; your notes stay on this Mac. Downloading contacts the model host." control:self.semanticSettings],
     [self settingsRowWithTitle:@"Export & diagnostics" detail:@"Lossless export and share-safe diagnostics run through owner-approved native broker actions." control:exportControls],
     securityHeading,
     [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
@@ -2156,9 +2151,44 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self refreshConnections:nil];
 }
 
+- (void)activateSemanticSearch:(BOOL)userInitiated {
+  if (self.semanticActivationInFlight || self.broker == nil) return;
+  if (self.vaultLocked || self.libraryExpiresAt.length == 0) {
+    if (userInitiated) {
+      // Normal Notes authentication owns access and any draft-navigation policy.
+      [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
+      [self setLibraryBusy:NO status:@"Open Notes with your usual authentication to activate semantic search."];
+    }
+    return;
+  }
+  self.semanticActivationInFlight = YES;
+  NSUInteger generation = self.librarySessionGeneration;
+  [self.broker requestMethod:@"library.refresh_search" params:@{}
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (generation != self.librarySessionGeneration) return;
+      self.semanticActivationInFlight = NO;
+      if (error != nil) {
+        [self showLibraryError:error];
+        [self.semanticSettings activationFailed];
+        return;
+      }
+      [self applySearchMode:StringValue(result[@"searchMode"], @"exact")];
+      if ([self.currentSearchMode isEqualToString:@"indexing"]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+          if (generation == self.librarySessionGeneration &&
+              [self.currentSearchMode isEqualToString:@"indexing"])
+            [self activateSemanticSearch:NO];
+        });
+      }
+    });
+  }];
+}
+
 - (void)openSettings:(id)sender {
   (void)sender;
   [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
+  [self.semanticSettings refresh];
   if (self.broker == nil) return;
   [self refreshRoutineAuthenticationPreference];
   NSUInteger requestSequence = ++self.lifecycleStatusRequestSequence;
@@ -2890,6 +2920,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         }
       });
       [self loadLibraryViewsAndNotes];
+      [self.semanticSettings refresh];
     });
   }];
 }
@@ -3606,6 +3637,7 @@ doCommandBySelector:(SEL)commandSelector {
     return;
   }
   self.librarySessionGeneration += 1;
+  self.semanticActivationInFlight = NO;
   self.librarySensitiveTextView.string = @"";
   if (self.librarySensitiveAlert != nil) {
     self.librarySensitiveAlert.messageText = @"Notes session ended";
@@ -4526,6 +4558,7 @@ doCommandBySelector:(SEL)commandSelector {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
 #include "owner_control_connections_layout_smoke.inc"
 #include "owner_control_notes_retrieval_smoke.inc"
+#include "owner_control_semantic_smoke.inc"
 #include "owner_control_reconnect_smoke.inc"
 NSTextView *FixtureEditorText(NSView *view) {
   if ([view.identifier isEqualToString:@"note-editor-draft"]) return (NSTextView *)view;
@@ -5731,6 +5764,9 @@ int RunDiagnosticContractSmoke(const char *path) {
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--semantic-coordinator-smoke") == 0) {
+      return RunSemanticCoordinatorSmoke();
+    }
     if (argc == 2 && strcmp(argv[1], "--notes-retrieval-smoke") == 0) {
       return RunNotesRetrievalCoordinatorSmoke();
     }

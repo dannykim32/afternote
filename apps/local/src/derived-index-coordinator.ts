@@ -38,6 +38,12 @@ export class DerivedIndexCoordinator<Note> {
     this.#schedule(this.#adapter.missingSemanticNotes());
   }
 
+  enableSemanticModel(model: EmbeddingModelDescriptor): void {
+    if (this.#closed || this.#adapter.model) return;
+    this.#adapter.model = model;
+    this.#schedule(this.#adapter.missingSemanticNotes());
+  }
+
   replace(note: Note): void {
     this.#adapter.replaceSynchronous(note);
     this.#schedule([note]);

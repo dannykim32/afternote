@@ -640,7 +640,7 @@ async function manageSemanticSearch(
     return;
   }
   if (action === "install") {
-    console.log(
+    console.error(
       "Downloading the pinned 23 MB semantic index model. Note content is not uploaded.",
     );
     console.log(JSON.stringify(await semanticRuntime.acquire(path), null, 2));

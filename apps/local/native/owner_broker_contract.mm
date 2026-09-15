@@ -250,6 +250,9 @@ BOOL IsLibraryResult(NSString *method, NSDictionary *result) {
         IsUUID(result[@"brokerBootId"]) && IsString(result[@"vaultId"], 128, NO) &&
         IsDate(result[@"expiresAt"]) && IsSearchMode(result[@"searchMode"]);
   }
+  if ([method isEqualToString:@"library.refresh_search"]) {
+    return ExactKeys(result, @[ @"searchMode" ]) && IsSearchMode(result[@"searchMode"]);
+  }
   if ([method isEqualToString:@"library.views"]) {
     return ExactKeys(result, @[ @"views" ]) && IsArrayOf(result[@"views"], 20, ^BOOL(id item) {
       if (![item isKindOfClass:[NSDictionary class]]) return NO;

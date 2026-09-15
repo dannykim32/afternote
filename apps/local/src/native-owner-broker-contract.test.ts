@@ -46,6 +46,15 @@ describeMacos("Foundation-only owner broker contract", () => {
     expect(result("recovery.status", { state: "unlocked" })).toBe(false);
   });
 
+  it("validates semantic activation replies", () => {
+    for (const searchMode of ["exact", "indexing", "hybrid", "degraded"]) {
+      expect(result("library.refresh_search", { searchMode })).toBe(true);
+    }
+    expect(result("library.refresh_search", { searchMode: "ready" })).toBe(false);
+    expect(result("library.refresh_search", { searchMode: "hybrid", note: "unexpected" })).toBe(false);
+    expect(result("library.refresh_search", {})).toBe(false);
+  });
+
   it("binds export and identity-rotation acknowledgments to the request", () => {
     const params = { format: "json", destination: "/tmp/export.json" };
     const exported = { exported: true, format: "afternote-vault-v1", destination: params.destination };

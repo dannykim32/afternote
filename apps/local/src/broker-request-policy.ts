@@ -18,6 +18,7 @@ const METHODS = {
   "owner.revoke_client": ["owner-control", "owner.revoke_client"],
   "owner.revoke_connector": ["owner-control", "owner.revoke_connector"],
   "library.session.begin": ["owner-control", "library.session.begin"],
+  "library.refresh_search": ["owner-control", "library.execute"],
   "library.views": ["owner-control", "library.execute"],
   "library.browse": ["owner-control", "library.execute"],
   "library.search": ["owner-control", "library.execute"],

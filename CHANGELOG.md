@@ -6,6 +6,16 @@ during release review.
 
 ## Unreleased
 
+### Added
+
+- Install optional local semantic search from Settings with download/verification progress,
+  retry, and indexing status. Activates for Notes and connected tools without restarting
+  an authenticated vault or changing saved notes. Locked vaults retain normal authentication.
+
+### Fixed
+
+- Keep semantic-install command output machine-readable for the native app.
+
 ## 2.0.0-alpha.25 - 2026-09-15
 
 ### Fixed

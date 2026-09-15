@@ -48,11 +48,18 @@ describeMacos("native integration command runner", () => {
       join(import.meta.dir, "../native/connections_view.mm"),
       join(import.meta.dir, "../native/note_editor_view.mm"),
       join(import.meta.dir, "../native/notes_retrieval.mm"),
+      join(import.meta.dir, "../native/semantic_settings.mm"),
       "-o",
       runner,
     ], { stdout: "pipe", stderr: "pipe" });
     expect(build.exitCode, build.stderr.toString()).toBe(0);
   }, 30_000);
+
+  it("activates semantic search without losing drafts or accepting replies from an expired session", () => {
+    const smoke = Bun.spawnSync([runner, "--semantic-coordinator-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
+    expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(7).fill(true));
+  });
 
   it("keeps late retrieval replies out of drafts and newly authenticated sessions", () => {
     const smoke = Bun.spawnSync([runner, "--notes-retrieval-smoke"], { stdout: "pipe", stderr: "pipe" });

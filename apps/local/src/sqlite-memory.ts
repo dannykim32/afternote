@@ -284,8 +284,8 @@ export class SqliteMemory implements Memory {
   readonly #ownsDatabase: boolean;
   readonly #databasePath: string;
   readonly #encryptionKey: Uint8Array | undefined;
-  readonly #embeddingModel: TextEmbeddingModel | null;
-  readonly #retrievalMode: RetrievalMode;
+  #embeddingModel: TextEmbeddingModel | null;
+  #retrievalMode: RetrievalMode;
   readonly #now: () => Date;
   readonly #timeZone: () => string;
   readonly #derivedIndexes: DerivedIndexCoordinator<Note>;
@@ -1159,6 +1159,17 @@ export class SqliteMemory implements Memory {
           .run(id, expectedRevision);
     if (result.changes > 0) this.#derivedIndexes.remove();
     return result.changes > 0;
+  }
+
+  enableSemanticSearch(vault: VaultContext, model: TextEmbeddingModel): void {
+    this.#assertVault(vault);
+    if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
+    // Only the absent-to-installed transition is supported. Never replace a live
+    // model beneath an in-flight query or indexing operation.
+    if (this.#embeddingModel) return;
+    this.#embeddingModel = model;
+    this.#retrievalMode = "hybrid";
+    this.#derivedIndexes.enableSemanticModel(model.descriptor);
   }
 
   async waitForDerivedIndex(): Promise<void> {

@@ -1520,6 +1520,22 @@ describe("SqliteMemory temporal recall", () => {
 });
 
 describe("SqliteMemory hybrid retrieval", () => {
+  it("enables semantic agent recall on an open exact-search vault", async () => {
+    const content = "The brass token opens the archive room.";
+    const query = "records storage access credential";
+    const memory = new SqliteMemory(":memory:", localVault);
+    try {
+      const note = await memory.remember(localVault, { content });
+      expect(await memory.recall(localVault, query, 5)).toEqual([]);
+      const model = new FixtureEmbeddingModel(new Map([[content, [1, 0]], [query, [1, 0]]]));
+      memory.enableSemanticSearch(localVault, model);
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, query, 5)).toMatchObject([{ note: { id: note.id, content, revision: 1 } }]);
+      memory.enableSemanticSearch(localVault, model);
+      expect(memory.derivedIndexStatus(localVault).state).toBe("ready");
+    } finally { memory.close(); }
+  });
+
   it("invalidates the cached semantic index after saves, edits, and deletes", async () => {
     const first = "The brass token opens the archive room.";
     const second = "The indigo folder contains the vendor renewal.";

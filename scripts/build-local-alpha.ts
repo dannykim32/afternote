@@ -460,6 +460,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     join(repositoryRoot, "apps/local/native/connections_view.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_view.mm"),
     join(repositoryRoot, "apps/local/native/notes_retrieval.mm"),
+    join(repositoryRoot, "apps/local/native/semantic_settings.mm"),
     "-o",
     ownerControlBinaryPath,
   ]);

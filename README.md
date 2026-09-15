@@ -225,9 +225,22 @@ current limits.
 
 ## Retrieval and verification
 
-Exact retrieval uses SQLite FTS5 and date-aware ranking. Optional semantic recall uses a
-locally downloaded, digest-verified model with local ONNX inference. Notes are not sent to an
-Afternote service for embedding or search.
+Afternote starts with exact-text and date-aware search. This applies both to Notes in
+Afternote and to Recall calls from Codex, Claude Code, and Claude Desktop.
+
+To enable search by meaning, open **Settings → Semantic recall → Install semantic search**.
+This explicitly downloads a 23 MB, digest-verified model from Hugging Face. Inference and
+indexing run on this Mac; Afternote does not upload notes for embedding or search. Existing
+notes are indexed automatically, and exact search remains available while indexing.
+If Notes is locked or its session has ended, open it with your usual authentication to
+activate the model. A current Notes session activates it without reopening the vault.
+The command-line equivalent remains `afternote semantic install`.
+
+Semantic search improves both Notes and connected tools. Agent Recall uses a stricter
+similarity threshold than the Notes search UI to reduce weak matches. The connected model
+can reformulate queries, but it cannot reason about a note Afternote has not returned.
+Results remain subject to that connector's approved access. What a connected AI host sends
+to its provider is governed by the host's own behavior.
 
 The repository contains deterministic exact, temporal, semantic, adversarial lifecycle,
 recovery, package, and 10,000-note scale tests. A passing evaluation is evidence for its

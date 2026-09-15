@@ -1369,6 +1369,30 @@ export class VaultBrokerWorker {
     const vault = this.#vaultContext();
     const authority = this.#authority();
     switch (request.method) {
+      case "library.refresh_search": {
+        assertExactObject(request.params, []);
+        const session = this.#librarySession(transportBinding, ["library.search"]);
+        const result = await authority.executeNativeLibraryRead(
+          session.sessionId,
+          request.method,
+          async () => {
+            if (!memory.derivedIndexStatus(vault).model) {
+              try {
+                const discovery = this.#embeddingModelProvider(this.#vaultConfiguration().vaultPath);
+                this.#semanticDiscoveryFailed = discovery.invalid;
+                if (discovery.model) memory.enableSemanticSearch(vault, discovery.model);
+              } catch {
+                this.#semanticDiscoveryFailed = true;
+              }
+            }
+            return {
+              result: { searchMode: librarySearchMode(memory.derivedIndexStatus(vault), this.#semanticDiscoveryFailed) },
+              noteRefs: [],
+            };
+          },
+        );
+        return this.#librarySuccess(request.requestId, result);
+      }
       case "library.views": {
         assertExactObject(request.params, []);
         const session = this.#librarySession(transportBinding, ["library.browse"]);

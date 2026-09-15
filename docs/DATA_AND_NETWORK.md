@@ -68,7 +68,8 @@ DMG from `github.com/dannykim32/afternote/releases`. The feed and DMG carry EdDS
 the app also requires Apple code signing. Development builds contain no update feed or updater
 framework and make no update request.
 
-Apart from approved app updates, an explicit `afternote semantic install` action
+Apart from approved app updates, an explicit **Settings → Semantic recall → Install semantic search** action
+(or `afternote semantic install`)
 fetches a fixed file set from `https://huggingface.co` at the pinned model revision. Every
 file has a byte limit and SHA-256 digest and is verified before publication. The model and
 inference remain local after installation.
