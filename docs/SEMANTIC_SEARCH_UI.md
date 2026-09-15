@@ -30,3 +30,21 @@ connector attribution is attached by Afternote. Search-hint metadata requires a 
 
 Do not replace or retag the accepted Alpha 25 artifact. Ship this in a new version after normal
 release gates and signed-build acceptance. No release credentials or policies change here.
+
+## Signed-build acceptance before publication
+
+Use a new release version. Keep the accepted Alpha 25 artifacts intact.
+
+1. On a Mac without the model, open Settings. Verify the app offers Install semantic search
+   and does not download until clicked. Confirm the notice covers Notes and connected tools.
+2. Interrupt a download, then retry. Navigate to Notes and back; an installation failure
+   must remain visible. Verify the downloaded files and runtime load before accepting readiness.
+3. With an authenticated Notes session and an unsaved editor draft, install the model.
+   Verify indexing completes, the draft remains intact, and existing notes keep their revisions.
+4. With the vault locked or Notes expired, verify installation cannot read/index notes until
+   normal Notes authentication. Lock during indexing; late status replies must not restore access.
+5. Save a synthetic note and try a paraphrase in Notes and through each approved connector.
+   Inspect the returned original citation. Ranking differs between Notes and agent Recall;
+   a particular paraphrase is not guaranteed to match. Verify exact search continues to work.
+6. Relaunch and confirm the model is reused without downloading again. Recheck signed helper
+   execution, doctor, release provenance, update behavior, and the existing connector smoke gates.
