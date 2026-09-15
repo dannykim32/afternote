@@ -62,17 +62,25 @@ int RunConnectionsLayoutSmoke(NSString *previewDirectory) {
     @{ @"name": @"minimum", @"width": @900, @"height": @618, @"legacy": @NO },
     @{ @"name": @"regular", @"width": @1120, @"height": @800, @"legacy": @NO },
     @{ @"name": @"wide", @"width": @1600, @"height": @1000, @"legacy": @NO },
+    @{ @"name": @"reconnect-prepared", @"width": @900, @"height": @618, @"legacy": @NO },
     @{ @"name": @"history-legacy-scrollbar", @"width": @900, @"height": @618, @"legacy": @YES },
     @{ @"name": @"setup", @"width": @1120, @"height": @800, @"legacy": @NO },
   ];
   for (NSDictionary *fixture in cases) {
     NSString *name = fixture[@"name"];
+    if ([name isEqual:@"reconnect-prepared"]) {
+      delegate.connectorOverviewByKind = AfternoteConnectorOverviewByKind(@{@"connectors":@[
+        @{@"kind":@"codex", @"status":@"reconnect-prepared", @"activeScopes":@[],
+          @"lastActivityAt":NSNull.null, @"savedCount":@0, @"readCount":@0, @"verifiedRoundTrip":@NO}
+      ]});
+    }
     if ([name isEqual:@"history-legacy-scrollbar"]) {
       [delegate.expandedConnectorKinds addObject:@"claude"];
       delegate.ownerExpiresAt = @"2099-01-01T00:00:00.000Z";
       delegate.auditCursor = @"synthetic-next-page";
     }
     if ([name isEqual:@"setup"]) {
+      delegate.connectorOverviewByKind = @{};
       [delegate.expandedConnectorKinds removeAllObjects];
       delegate.connections = @{ @"clients": @[], @"grants": @[], @"sessions": @[] };
       for (NSString *kind in delegate.integrationStatuses.allKeys) {

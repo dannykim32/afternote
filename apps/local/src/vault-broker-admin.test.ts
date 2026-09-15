@@ -3,7 +3,7 @@ import { generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto"
 import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import type { VaultContext } from "@afternote/memory";
 import { VaultBrokerWorker } from "./vault-broker-worker";
 
@@ -449,6 +449,72 @@ describe("native owner administration broker protocol", () => {
         params as Record<string, unknown>,
       )).toMatchObject({ ok: false, error: { code: "invalid_request" } });
     }
+  });
+});
+
+describe("prepared reconnect presentation", () => {
+  let nativeDirectory: string;
+  let nativeRunner: string;
+  beforeAll(() => {
+    if (process.platform !== "darwin") return;
+    nativeDirectory = mkdtempSync(join(tmpdir(), "afternote-prepared-presentation-"));
+    nativeRunner = join(nativeDirectory, "presentation");
+    const build = Bun.spawnSync(["clang++", "-std=c++17", "-O2", "-fobjc-arc",
+      "-framework", "Foundation",
+      ...["connector_overview.mm", "connector_presentation.mm", "connector_reconnect_smoke.mm"]
+        .map((file) => join(import.meta.dir, "../native", file)), "-o", nativeRunner],
+      { stdout: "pipe", stderr: "pipe" });
+    expect(build.exitCode, build.stderr.toString()).toBe(0);
+  });
+  afterAll(() => { if (nativeDirectory) rmSync(nativeDirectory, { recursive: true, force: true }); });
+  it.each(["codex", "claude", "claude-desktop"] as const)(
+    "%s overview preserves prepared reconnect across reopen until pairing", async (kind) => {
+    const fixture = await revokedFixture(kind);
+    const { ownerConnection, clientConnection, installIdentity } = fixture;
+    let worker = fixture.worker;
+    const overview = async () => {
+      const result = await ownerRequest(worker, ownerConnection, "owner.connector_overview", {});
+      const item = result.connectors.find((item: any) => item.kind === kind);
+      if (nativeRunner) {
+        const native = Bun.spawnSync([nativeRunner, kind], {
+          stdin: Buffer.from(JSON.stringify(result)), stdout: "pipe", stderr: "pipe",
+        });
+        expect(native.exitCode, native.stderr.toString()).toBe(0);
+        const expected = item.status === "reconnect-prepared"
+          ? { title: "Reconnect prepared", action: 0, hasAuthority: false }
+          : item.status === "revoked"
+          ? { title: "Access revoked", action: 3, hasAuthority: false }
+          : { title: "Connected", action: 0, hasAuthority: true };
+        expect(JSON.parse(native.stdout.toString())).toMatchObject(expected);
+      }
+      return item;
+    };
+    expect(await overview()).toMatchObject({ status: "revoked", activeScopes: [] });
+    const params = { kind, installIdentity, replacementInstallIdentity };
+    const cancelled = await beginOwnerRequest(worker, ownerConnection,
+      "admin.prepare_connector_reconnect", params);
+    await completeOwnerPresence(worker, ownerConnection,
+      cancelled.ownerPresenceChallenge.challengeId, "cancelled");
+    expect(await overview()).toMatchObject({ status: "revoked", activeScopes: [] });
+    await ownerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect", params, true);
+    expect(await overview()).toMatchObject({ status: "reconnect-prepared", activeScopes: [] });
+    worker.close();
+    workers.splice(workers.indexOf(worker), 1);
+    worker = new VaultBrokerWorker({ applicationVersion: "2.0.0-admin-test", standalone: true,
+      vaultPath: fixture.path, vaultKey: fixture.key, vault: fixture.vault,
+      bootId: randomUUID(), trustPath: "production-signed" });
+    workers.push(worker);
+    expect(await overview()).toMatchObject({ status: "reconnect-prepared", activeScopes: [] });
+    const replacement = await pairMcpClient(worker, clientConnection, kind,
+      replacementInstallIdentity, "secure-enclave");
+    expect(replacement.clientId).not.toBe(fixture.paired.clientId);
+    expect(await overview()).toMatchObject({ status: "paired" });
+    await ownerRequest(worker, ownerConnection, "owner.session.begin", {
+      requestedScopes: ["owner.inspect_clients", "owner.inspect_grants", "owner.inspect_sessions"],
+      ttlMs: 60000,
+    }, true);
+    await ownerRequest(worker, ownerConnection, "owner.revoke_connector", { kind }, true);
+    expect(await overview()).toMatchObject({ status: "revoked", activeScopes: [] });
   });
 });
 

@@ -16,6 +16,7 @@
                              status:(NSDictionary *)status
                           connected:(BOOL)connected
                             revoked:(BOOL)revoked
+                  reconnectPrepared:(BOOL)reconnectPrepared
                     lastActiveLabel:(NSString *)lastActiveLabel {
   AfternoteConnectorPresentation *view = [[self alloc] init];
   NSString *uiState = [status[@"uiState"] isKindOfClass:[NSString class]]
@@ -54,9 +55,10 @@
     return view;
   }
   if ([uiState isEqualToString:@"installing"] ||
-      [uiState isEqualToString:@"reconnecting"]) {
-    NSString *verb = [uiState isEqualToString:@"reconnecting"]
-        ? @"Preparing a fresh connection" : @"Connecting Afternote";
+      [uiState isEqualToString:@"reconnecting"] ||
+      [uiState isEqualToString:@"reconnect-refresh"]) {
+    NSString *verb = [uiState isEqualToString:@"installing"]
+        ? @"Connecting Afternote" : @"Preparing a fresh connection";
     [view applyState:AfternoteConnectorStateConnecting
               action:AfternoteConnectorActionNone
                badge:@"Connecting"
@@ -84,6 +86,17 @@
              summary:[NSString stringWithFormat:@"%@ was not found on this Mac.", displayName]
      connectionTitle:@"Unavailable"
     connectionDetail:[NSString stringWithFormat:@"Install %@ first", displayName]];
+    return view;
+  }
+  if (healthy && reconnectPrepared) {
+    [view applyState:AfternoteConnectorStateAvailable
+              action:AfternoteConnectorActionNone
+               badge:[NSString stringWithFormat:@"Finish in %@", displayName]
+                tone:@"warning"
+             summary:@"Your previous connection stays revoked. Finish pairing the replacement in your AI host."
+     connectionTitle:@"Reconnect prepared"
+    connectionDetail:[NSString stringWithFormat:
+        @"Quit and reopen %@, then use Remember or Recall to approve the fresh connection.", displayName]];
     return view;
   }
   if (healthy && revoked) {

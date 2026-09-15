@@ -67,6 +67,15 @@ describeMacos("native integration command runner", () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
+  it("refreshes broker reconnect state before allowing another prepare action", () => {
+    const smoke = Bun.spawnSync([runner, "--reconnect-coordinator-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
+    expect(JSON.parse(smoke.stdout.toString())).toEqual({
+      requestedOverview: true, duplicateBlocked: true, prepared: true, finished: true, preparedRetryBlocked: true,
+      staleOverviewIgnored: true,
+    });
+  });
+
   const writeCommand = (name: string, source: string) => {
     const path = join(directory, name);
     writeFileSync(path, source, { mode: 0o755 });
@@ -105,14 +114,15 @@ describeMacos("native integration command runner", () => {
   });
 
   it("keeps Connections centered and aligned across window sizes and connector states", () => {
-    const smoke = Bun.spawnSync([runner, "--connections-layout-smoke"], {
+    const preview = process.env.AFTERNOTE_RECONNECT_PREVIEW_DIRECTORY;
+    const smoke = Bun.spawnSync([runner, "--connections-layout-smoke", ...(preview ? [preview] : [])], {
       stdout: "pipe", stderr: "pipe",
     });
     expect(smoke.exitCode, smoke.stderr.toString()).toBe(0);
     expect(smoke.stderr.toString()).not.toContain("Unable to simultaneously satisfy constraints");
     const layouts = JSON.parse(smoke.stdout.toString()) as Array<Record<string, unknown>>;
     expect(layouts.map(({ name }) => name)).toEqual([
-      "minimum", "regular", "wide", "history-legacy-scrollbar", "setup",
+      "minimum", "regular", "wide", "reconnect-prepared", "history-legacy-scrollbar", "setup",
     ]);
     for (const layout of layouts) {
       expect(layout, String(layout.name)).toMatchObject({

@@ -6,6 +6,14 @@ during release review.
 
 ## Unreleased
 
+### Fixed
+
+- Show persisted reconnect preparation in Connections and the setup guide until the
+  replacement pairs. Refreshing or reopening Afternote no longer offers preparation
+  again after approval; the success message explains how to finish in the AI host.
+- Keep duplicate reconnect actions blocked while the updated broker overview is
+  loading, including when a newer refresh supersedes an older response.
+
 ## 2.0.0-alpha.24 - 2026-09-15
 
 ### Fixed

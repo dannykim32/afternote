@@ -33,6 +33,7 @@ typedef NS_ENUM(NSInteger, AfternoteConnectorAction) {
                              status:(NSDictionary *)status
                           connected:(BOOL)connected
                             revoked:(BOOL)revoked
+                  reconnectPrepared:(BOOL)reconnectPrepared
                     lastActiveLabel:(NSString *)lastActiveLabel;
 
 @end

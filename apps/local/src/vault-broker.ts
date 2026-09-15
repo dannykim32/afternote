@@ -55,7 +55,7 @@ export type ForgetPolicy = "never" | "confirm_each" | "session";
 
 export type ConnectorOverviewItem = {
   kind: BrokerClientKind;
-  status: "paired" | "active" | "revoked" | "expired";
+  status: "paired" | "active" | "revoked" | "expired" | "reconnect-prepared";
   activeScopes: BrokerCapability[];
   lastActivityAt: string | null;
   savedCount: number;
@@ -1639,6 +1639,7 @@ export class VaultBrokerAuthorization {
     const currentClients = this.#database.query<{
       kind: BrokerClientKind;
       stored_status: "paired" | "revoked";
+      reconnect_prepared: number;
       live_sessions: number;
       live_grants: number;
       last_activity_at: string | null;
@@ -1646,6 +1647,9 @@ export class VaultBrokerAuthorization {
     }, [string, string, string, string]>(`
       with client_state as (
         select c.id, c.kind, c.status as stored_status, c.paired_at,
+               exists(select 1 from broker_connector_reconnects r
+                 where r.vault_id = c.vault_id and r.kind = c.kind
+                   and r.status = 'prepared') as reconnect_prepared,
                (select count(*) from broker_sessions s
                  where s.client_id = c.id and s.status = 'active'
                    and s.expires_at > ?) as live_sessions,
@@ -1670,7 +1674,7 @@ export class VaultBrokerAuthorization {
         ) as position
         from client_state
       )
-      select kind, stored_status, live_sessions, live_grants,
+      select kind, stored_status, reconnect_prepared, live_sessions, live_grants,
              last_activity_at, active_capabilities
       from ranked where position = 1
     `).all(now, now, now, this.#vaultId);
@@ -1731,7 +1735,9 @@ export class VaultBrokerAuthorization {
         return {
           kind,
           status: current.stored_status === "revoked"
-            ? "revoked" as const
+            ? current.reconnect_prepared === 1
+              ? "reconnect-prepared" as const
+              : "revoked" as const
             : current.live_sessions > 0
             ? "active" as const
             : current.live_grants > 0

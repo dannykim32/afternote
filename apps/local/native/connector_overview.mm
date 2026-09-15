@@ -90,7 +90,7 @@ AfternoteConnectorOverviewByKind(id result) {
           @"codex", @"claude", @"claude-desktop", @"local_ui"
         ]) ||
         !IsMember(connector[@"status"], @[
-          @"paired", @"active", @"revoked", @"expired"
+          @"paired", @"active", @"revoked", @"expired", @"reconnect-prepared"
         ]) ||
         !IsScopeList(connector[@"activeScopes"]) ||
         !IsNullableDate(connector[@"lastActivityAt"]) ||

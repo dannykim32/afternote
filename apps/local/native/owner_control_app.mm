@@ -3812,20 +3812,45 @@ doCommandBySelector:(SEL)commandSelector {
     dispatch_async(dispatch_get_main_queue(), ^{
       if (generation != self.connectorOverviewGeneration) return;
       if (error != nil) {
+        [self finishReconnectRefresh:StringValue(error[@"message"], @"Connection status is unavailable.")];
+        [self render];
         [self setBusy:NO status:StringValue(
             error[@"message"], @"Connection status is unavailable.")];
         return;
       }
       NSDictionary *overview = AfternoteConnectorOverviewByKind(result);
       if (overview == nil) {
+        [self finishReconnectRefresh:@"Connection status is unavailable."];
+        [self render];
         [self setBusy:NO status:@"Connection status is unavailable."];
         return;
       }
       self.connectorOverviewByKind = overview;
+      if ([self finishReconnectRefresh:nil]) [self refreshIntegrationStatuses];
       [self render];
+      [self renderSetupGuide];
       [self setBusy:NO status:@"Connections are up to date."];
     });
   }];
+}
+
+- (BOOL)finishReconnectRefresh:(NSString *)errorMessage {
+  BOOL finished = NO;
+  for (NSString *kind in self.integrationOperations.allObjects) {
+    NSDictionary *status = self.integrationStatuses[kind];
+    if (![status[@"uiState"] isEqualToString:@"reconnect-refresh"]) continue;
+    [self.integrationOperations removeObject:kind];
+    NSMutableDictionary *updated = [status mutableCopy];
+    [updated removeObjectForKey:@"uiState"];
+    [updated removeObjectForKey:@"uiError"];
+    if (errorMessage.length > 0) {
+      updated[@"uiState"] = @"error";
+      updated[@"uiError"] = errorMessage;
+    }
+    self.integrationStatuses[kind] = updated;
+    finished = YES;
+  }
+  return finished;
 }
 
 - (void)installIntegration:(NSButton *)sender {
@@ -3879,6 +3904,11 @@ doCommandBySelector:(SEL)commandSelector {
       ![kind isEqualToString:@"claude-code"] &&
       ![kind isEqualToString:@"claude-desktop"]) return;
   if ([self.integrationOperations containsObject:kind]) return;
+  for (AfternoteIntegrationDescriptor *descriptor in IntegrationDescriptors()) {
+    if ([descriptor.commandKind isEqualToString:kind] &&
+        [self.connectorOverviewByKind[descriptor.brokerKind].status isEqualToString:@"reconnect-prepared"])
+      return;
+  }
   AdvanceIntegrationGeneration(self.integrationStatusGenerations, kind);
   [self.integrationOperations addObject:kind];
   NSMutableDictionary *pending = [self.integrationStatuses[kind] mutableCopy]
@@ -3890,8 +3920,8 @@ doCommandBySelector:(SEL)commandSelector {
   [self runPackagedCommand:@[ kind, @"prepare-reconnect" ]
                 completion:^(NSDictionary *result, NSString *errorMessage) {
     (void)result;
-    [self.integrationOperations removeObject:kind];
     if (errorMessage.length > 0) {
+      [self.integrationOperations removeObject:kind];
       NSMutableDictionary *failed = [self.integrationStatuses[kind] mutableCopy]
           ?: [NSMutableDictionary dictionary];
       failed[@"uiState"] = @"error";
@@ -3903,11 +3933,16 @@ doCommandBySelector:(SEL)commandSelector {
       return;
     }
     NSString *displayName = [self integrationDisplayNameForKind:kind];
-    [self refreshIntegrationStatuses];
+    // Hold the operation gate until a current broker overview arrives. A host
+    // configuration check alone cannot distinguish revoked from prepared access.
+    NSMutableDictionary *refreshing = [self.integrationStatuses[kind] mutableCopy];
+    refreshing[@"uiState"] = @"reconnect-refresh";
+    self.integrationStatuses[kind] = refreshing;
+    [self refreshConnections:nil];
     NSAlert *ready = [[NSAlert alloc] init];
     ready.messageText = @"Reconnect prepared";
     ready.informativeText = [NSString stringWithFormat:
-        @"The Afternote MCP server is already installed in %@. Its revoked identity has been replaced. Close any open sessions, start a new one, then use Remember or Recall once to approve the fresh connection.",
+        @"Next, fully quit and reopen %@. In a new chat, use Afternote to save or recall a note and approve the fresh connection. You do not need to prepare reconnect again.",
         displayName];
     [ready addButtonWithTitle:@"Got it"];
     [ready beginSheetModalForWindow:self.window completionHandler:nil];
@@ -4170,16 +4205,19 @@ doCommandBySelector:(SEL)commandSelector {
     }
   }
   AfternoteIntegrationDescriptor *revokedDescriptor = nil;
+  AfternoteIntegrationDescriptor *preparedDescriptor = nil;
   for (AfternoteIntegrationDescriptor *descriptor in IntegrationDescriptors()) {
     NSArray *matching = [self clients:allClients forKind:descriptor.brokerKind];
     AfternoteConnectorOverviewItem *overview =
         self.connectorOverviewByKind[descriptor.brokerKind];
+    if ([overview.status isEqualToString:@"reconnect-prepared"]) preparedDescriptor = descriptor;
     NSDictionary *current = [self currentClientFromClients:matching];
     BOOL revoked = overview != nil
         ? [overview.status isEqualToString:@"revoked"]
         : [[StringValue(current[@"status"]) lowercaseString]
             isEqualToString:@"revoked"];
-    if (revoked && [self.integrationStatuses[descriptor.commandKind][@"healthy"] boolValue]) {
+    if (revoked && ![self.integrationOperations containsObject:descriptor.commandKind] &&
+        [self.integrationStatuses[descriptor.commandKind][@"healthy"] boolValue]) {
       revokedDescriptor = descriptor;
       break;
     }
@@ -4202,11 +4240,14 @@ doCommandBySelector:(SEL)commandSelector {
                        detail:revokedDescriptor != nil
                            ? [NSString stringWithFormat:@"%@ access was revoked. Prepare a fresh identity, then start a new session.",
                                                         revokedDescriptor.displayName]
+                           : preparedDescriptor != nil
+                           ? [NSString stringWithFormat:@"Reconnect is prepared. Quit and reopen %@, then use Remember or Recall to approve the fresh connection.",
+                                                        preparedDescriptor.displayName]
                            : integrationActive
                            ? @"Afternote is available in at least one of your local tools."
                            : @"Choose Codex, Claude Code, or Claude Desktop. Afternote guides the connection for you."
-                        badge:revokedDescriptor != nil ? @"Reconnect" : integrationActive ? @"Active" : @"Next"
-                         tone:integrationActive && revokedDescriptor == nil ? @"success" : @"warning"
+                        badge:revokedDescriptor != nil ? @"Reconnect" : preparedDescriptor != nil ? @"Prepared" : integrationActive ? @"Active" : @"Next"
+                         tone:integrationActive && revokedDescriptor == nil && preparedDescriptor == nil ? @"success" : @"warning"
                        button:connectionsButton]];
 
   BOOL proofComplete = AfternoteHasCorrelatedRecallProof(self.auditEvents);
@@ -4312,6 +4353,7 @@ doCommandBySelector:(SEL)commandSelector {
                                                    status:integrationStatus
                                                 connected:connected
                                                   revoked:explicitlyRevoked
+                                        reconnectPrepared:[overview.status isEqualToString:@"reconnect-prepared"]
                                           lastActiveLabel:lastUsed.length > 0
                                               ? DateLabel(lastUsed) : @""];
   NSString *activityValue = [NSString stringWithFormat:@"%lu saved · %lu recalled",
@@ -4481,6 +4523,7 @@ doCommandBySelector:(SEL)commandSelector {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
 #include "owner_control_connections_layout_smoke.inc"
 #include "owner_control_notes_retrieval_smoke.inc"
+#include "owner_control_reconnect_smoke.inc"
 NSTextView *FixtureEditorText(NSView *view) {
   if ([view.identifier isEqualToString:@"note-editor-draft"]) return (NSTextView *)view;
   for (NSView *child in view.subviews) {
@@ -5687,6 +5730,9 @@ int main(int argc, const char *argv[]) {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
     if (argc == 2 && strcmp(argv[1], "--notes-retrieval-smoke") == 0) {
       return RunNotesRetrievalCoordinatorSmoke();
+    }
+    if (argc == 2 && strcmp(argv[1], "--reconnect-coordinator-smoke") == 0) {
+      return RunReconnectCoordinatorSmoke();
     }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "--connections-layout-smoke") == 0) {
       return RunConnectionsLayoutSmoke(argc == 3

@@ -12,6 +12,7 @@ NSDictionary *Summary(
                                                    status:status
                                                 connected:connected
                                                   revoked:revoked
+                                        reconnectPrepared:NO
                                           lastActiveLabel:@"today at 4:00 PM"];
   return @{
     @"name" : name,

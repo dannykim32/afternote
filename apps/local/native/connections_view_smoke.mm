@@ -55,7 +55,7 @@ AfternoteConnectionRow *Row(NSDictionary *status, BOOL connected, BOOL revoked) 
   row.brokerKind = @"claude";
   row.displayName = @"Claude Code";
   row.presentation = [AfternoteConnectorPresentation presentationForTool:row.displayName
-      status:status connected:connected revoked:revoked lastActiveLabel:@"Yesterday"];
+      status:status connected:connected revoked:revoked reconnectPrepared:NO lastActiveLabel:@"Yesterday"];
   row.connected = connected;
   row.permissions = @"Remember, Recall, Read cited note";
   row.activity = @"3 saved · 2 recalled";

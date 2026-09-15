@@ -107,10 +107,14 @@ tool call must fail; another connector should still work. Reconnect the revoked 
 through the supported UI flow and verify save/recall again. Report a missing repair or
 reconnect control instead of editing host configuration manually.
 
-For the reconnect fix after Alpha 23, test each supported connector: **Prepare reconnect**
+For the reconnect fixes after Alpha 23, test each supported connector: **Prepare reconnect**
 must request fresh Touch ID/password approval. Cancel once and verify access stays
-revoked. Prepare again, approve, then start a fresh host session and verify a real
-save/recall. The old session must remain denied. A healthy CLI status alone proves
+revoked. Prepare again and approve. Before using the host, confirm Connections shows
+**Reconnect prepared** with no Prepare reconnect action. Refresh twice, then quit and
+reopen Afternote: the prepared state and finish-in-host instructions must remain.
+Fully quit and reopen the AI host, then start a fresh chat and verify a real
+save/recall. Connections should now show Connected. The old identity must remain revoked;
+a subsequent explicit revocation must offer Prepare reconnect again. A healthy CLI status alone proves
 installation/tool discovery, not restoration of revoked access.
 
 ## 7. Export and final restart
