@@ -6,11 +6,20 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.24 - 2026-09-15
+
 ### Fixed
 
 - Prepare reconnect now uses a fresh, owner-approved production operation for Codex,
   Claude Code, and Claude Desktop. The development-only identity rotation remains
   restricted; old identities, grants, and sessions stay revoked.
+
+### Security
+
+- Bind reconnect approval to the current connector authority state, rejecting stale
+  approvals after an intervening reconnect and revocation.
+
+Private release candidate; second-Mac reconnect acceptance is pending.
 
 ## 2.0.0-alpha.23 - 2026-09-14
 
