@@ -34,7 +34,7 @@ describe("Claude Desktop connector", () => {
     expect(parseClaudeDesktopConnectorAction("rotate-identity"))
       .toBe("rotate-identity");
     expect(() => parseClaudeDesktopConnectorAction("enable"))
-      .toThrow("install, status, or rotate-identity");
+      .toThrow("install, status, rotate-identity, or prepare-reconnect");
   });
 
   it("resolves only a publisher-verified Claude application", () => {

@@ -251,7 +251,7 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('[actionSlot.widthAnchor constraintEqualToConstant:166]');
     expect(nativeAppSource).toContain('@"Prepare reconnect"');
     expect(nativeAppSource).toContain('action:@selector(reconnectIntegration:)');
-    expect(nativeAppSource).toContain('[self runPackagedCommand:@[ kind, @"rotate-identity" ]');
+    expect(nativeAppSource).toContain('[self runPackagedCommand:@[ kind, @"prepare-reconnect" ]');
     expect(nativeAppSource).toContain('@"The Afternote MCP server is already installed in %@.');
     expect(nativeAppSource).toContain('if (revoked && [self.integrationStatuses[descriptor.commandKind][@"healthy"] boolValue])');
   });

@@ -96,6 +96,7 @@ import {
   type ForgetPolicy,
   type OwnerConnectorRevocationTarget,
   type OwnerClientRotationTarget,
+  type OwnerConnectorReconnectTarget,
   type OwnerRevocationTarget,
   type OwnerTrustPath,
 } from "./vault-broker";
@@ -264,6 +265,11 @@ type PendingPresence =
         | {
             kind: "revoked-client-replacement";
             target: OwnerClientRotationTarget;
+            replacementInstallIdentity: string;
+          }
+        | {
+            kind: "connector-reconnect";
+            target: OwnerConnectorReconnectTarget;
             replacementInstallIdentity: string;
           };
       challengeExpiresAt: number;
@@ -1881,7 +1887,27 @@ export class VaultBrokerWorker {
   ): string {
     let operation: Extract<PendingPresence, { kind: "admin" }>["operation"];
     let reason: string;
-    if (request.method === "admin.prepare_client_rotation") {
+    if (request.method === "admin.prepare_connector_reconnect") {
+      assertExactObject(request.params, [
+        "installIdentity", "kind", "replacementInstallIdentity",
+      ]);
+      const kind = mcpClientKind(request.params.kind);
+      const installIdentity = uuid(request.params.installIdentity, "install identity");
+      const replacementInstallIdentity = uuid(
+        request.params.replacementInstallIdentity, "replacement install identity",
+      );
+      if (replacementInstallIdentity === installIdentity) {
+        throw new BrokerProtocolError("invalid_request", "Replacement install identity must be new");
+      }
+      let target: OwnerConnectorReconnectTarget;
+      try {
+        target = this.#authority().connectorReconnectTarget(kind, installIdentity);
+      } catch {
+        throw new BrokerProtocolError("conflict", "The revoked connector identity cannot be reconnected safely");
+      }
+      operation = { kind: "connector-reconnect", target, replacementInstallIdentity };
+      reason = `Prepare a fresh connection for ${target.displayLabel}? Its old identity, grants, and sessions remain revoked. The replacement must pair again.`;
+    } else if (request.method === "admin.prepare_client_rotation") {
       assertExactObject(request.params, [
         "installIdentity",
         "kind",
@@ -2790,12 +2816,18 @@ export class VaultBrokerWorker {
     const operation = pending.operation;
     if (
       operation.kind === "client-rotation" ||
-      operation.kind === "revoked-client-replacement"
+      operation.kind === "revoked-client-replacement" ||
+      operation.kind === "connector-reconnect"
     ) {
       const target = operation.target;
       if (operation.kind === "client-rotation") {
         this.#authority().revokeClientForRotation(
           target,
+          operation.replacementInstallIdentity,
+        );
+      } else if (operation.kind === "connector-reconnect") {
+        this.#authority().prepareConnectorReconnect(
+          operation.target,
           operation.replacementInstallIdentity,
         );
       } else {
@@ -3746,8 +3778,10 @@ function adminExportFormat(value: unknown): "json" | "markdown" {
 
 function adminOperationMethod(
   operation: Extract<PendingPresence, { kind: "admin" }>["operation"],
-): "admin.export" | "admin.diagnostics" | "admin.prepare_client_rotation" {
-  return operation.kind === "client-rotation" ||
+): "admin.export" | "admin.diagnostics" | "admin.prepare_client_rotation" | "admin.prepare_connector_reconnect" {
+  return operation.kind === "connector-reconnect"
+    ? "admin.prepare_connector_reconnect"
+    : operation.kind === "client-rotation" ||
       operation.kind === "revoked-client-replacement"
     ? "admin.prepare_client_rotation"
     : operation.kind === "export"

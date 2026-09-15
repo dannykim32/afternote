@@ -44,7 +44,7 @@ describe("native owner administration production boundary", () => {
     expect(cliSource).toContain('"--admin-migrate"');
     expect(cliSource).toContain('"--admin-restore"');
     expect(cliSource).toContain(
-      '["--admin-prepare-client-rotation", McpClientIdentityKind, string, string]',
+      '["--admin-prepare-client-rotation" | "--admin-prepare-connector-reconnect", McpClientIdentityKind, string, string]',
     );
     expect(cliSource).toContain("rotateMcpClientIdentity(kind");
     expect(cliSource).toContain(

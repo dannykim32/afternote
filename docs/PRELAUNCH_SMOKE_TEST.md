@@ -106,6 +106,12 @@ tool call must fail; another connector should still work. Reconnect the revoked 
 through the supported UI flow and verify save/recall again. Report a missing repair or
 reconnect control instead of editing host configuration manually.
 
+For the reconnect fix after Alpha 23, test each supported connector: **Prepare reconnect**
+must request fresh Touch ID/password approval. Cancel once and verify access stays
+revoked. Prepare again, approve, then start a fresh host session and verify a real
+save/recall. The old session must remain denied. A healthy CLI status alone proves
+installation/tool discovery, not restoration of revoked access.
+
 ## 7. Export and final restart
 
 Export through Settings to a new private filename and confirm it succeeds after approval.

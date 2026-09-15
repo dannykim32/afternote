@@ -98,6 +98,7 @@ BOOL IsAuditPrincipal(NSDictionary *event) {
          [operation isEqualToString:@"admin.telemetry.disable"] ||
          [operation isEqualToString:@"admin.telemetry.reset"] ||
          [operation isEqualToString:@"admin.prepare_client_rotation"] ||
+         [operation isEqualToString:@"admin.prepare_connector_reconnect"] ||
          [operation isEqualToString:@"lifecycle.authority_invalidate"] ||
          [operation isEqualToString:@"lifecycle.lock"] ||
          [operation isEqualToString:@"lifecycle.unlock"]);
@@ -526,7 +527,8 @@ BOOL IsAdminResult(NSString *method, NSDictionary *result, NSDictionary *params)
         [result[@"format"] isEqual:expectedFormat];
   }
   if ([method isEqualToString:@"admin.diagnostics"]) return IsDiagnosticResult(result);
-  if ([method isEqualToString:@"admin.prepare_client_rotation"]) {
+  if ([method isEqualToString:@"admin.prepare_client_rotation"] ||
+      [method isEqualToString:@"admin.prepare_connector_reconnect"]) {
     return ExactKeys(result, @[
           @"prepared", @"kind", @"installIdentity", @"replacementInstallIdentity",
           @"clientId"
@@ -539,7 +541,10 @@ BOOL IsAdminResult(NSString *method, NSDictionary *result, NSDictionary *params)
         IsUUID(result[@"replacementInstallIdentity"]) &&
         [result[@"replacementInstallIdentity"]
             isEqual:params[@"replacementInstallIdentity"]] &&
-        (result[@"clientId"] == NSNull.null || IsUUID(result[@"clientId"]));
+        (result[@"clientId"] == NSNull.null || IsUUID(result[@"clientId"])) &&
+        (![method isEqualToString:@"admin.prepare_connector_reconnect"] ||
+         (IsUUID(result[@"clientId"]) &&
+          ![result[@"installIdentity"] isEqual:result[@"replacementInstallIdentity"]]));
   }
   return NO;
 }

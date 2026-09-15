@@ -25,7 +25,8 @@ export { CLAUDE_DESKTOP_EXTENSION_ID, createClaudeDesktopPackage };
 export type ClaudeDesktopConnectorAction =
   | "install"
   | "status"
-  | "rotate-identity";
+  | "rotate-identity"
+  | "prepare-reconnect";
 
 export type ClaudeDesktopConnectorProblemCode =
   | "connector_missing"
@@ -68,10 +69,11 @@ export function parseClaudeDesktopConnectorAction(
   if (
     action === "install" ||
     action === "status" ||
-    action === "rotate-identity"
+    action === "rotate-identity" ||
+    action === "prepare-reconnect"
   ) return action;
   throw new Error(
-    "Claude Desktop action must be install, status, or rotate-identity",
+    "Claude Desktop action must be install, status, rotate-identity, or prepare-reconnect",
   );
 }
 
@@ -83,7 +85,7 @@ export async function manageClaudeDesktopConnector(
   changed?: boolean;
   packagePath?: string;
 }> {
-  if (action === "rotate-identity") {
+  if (action === "rotate-identity" || action === "prepare-reconnect") {
     throw new Error("Claude Desktop identity rotation must be routed separately");
   }
   if (!standalone) {

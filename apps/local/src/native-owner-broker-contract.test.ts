@@ -83,6 +83,17 @@ describeMacos("Foundation-only owner broker contract", () => {
     expect(result("admin.diagnostics", unredacted)).toBe(false);
   });
 
+  it("binds production reconnect approval to an exact revoked identity and a new replacement", () => {
+    const params = { kind: "codex", installIdentity: epoch, replacementInstallIdentity: nextEpoch };
+    const prepared = { prepared: true, ...params, clientId: epoch };
+    expect(result("admin.prepare_connector_reconnect", prepared, params)).toBe(true);
+    expect(result("admin.prepare_connector_reconnect", { ...prepared, clientId: null }, params)).toBe(false);
+    expect(result("admin.prepare_connector_reconnect", prepared, { ...params, kind: "claude" })).toBe(false);
+    expect(result("admin.prepare_connector_reconnect", {
+      ...prepared, replacementInstallIdentity: epoch,
+    }, { ...params, replacementInstallIdentity: epoch })).toBe(false);
+  });
+
   it("enforces the existing lifecycle epoch rules", () => {
     function transition(method: string, before: unknown, after: unknown) {
       return accepts({ kind: "lifecycle", method, before, result: after });

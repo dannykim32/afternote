@@ -406,7 +406,9 @@ int RunAdminCommand(int argc, const char *argv[]) {
   } else if (argc == 2 && strcmp(argv[1], "--admin-diagnostics") == 0) {
     method = @"admin.diagnostics";
     params = @{};
-  } else if (argc == 5 && strcmp(argv[1], "--admin-prepare-client-rotation") == 0) {
+  } else if (argc == 5 &&
+             (strcmp(argv[1], "--admin-prepare-client-rotation") == 0 ||
+              strcmp(argv[1], "--admin-prepare-connector-reconnect") == 0)) {
     NSString *kind = [NSString stringWithUTF8String:argv[2]];
     NSString *installIdentity = [NSString stringWithUTF8String:argv[3]];
     NSString *replacementInstallIdentity = [NSString stringWithUTF8String:argv[4]];
@@ -419,7 +421,8 @@ int RunAdminCommand(int argc, const char *argv[]) {
       fputs("invalid client rotation arguments\n", stderr);
       return 64;
     }
-    method = @"admin.prepare_client_rotation";
+    method = strcmp(argv[1], "--admin-prepare-connector-reconnect") == 0
+        ? @"admin.prepare_connector_reconnect" : @"admin.prepare_client_rotation";
     params = @{
       @"kind" : kind,
       @"installIdentity" : installIdentity,
@@ -3884,7 +3887,7 @@ doCommandBySelector:(SEL)commandSelector {
   self.integrationStatuses[kind] = pending;
   [self render];
   [self renderSetupGuide];
-  [self runPackagedCommand:@[ kind, @"rotate-identity" ]
+  [self runPackagedCommand:@[ kind, @"prepare-reconnect" ]
                 completion:^(NSDictionary *result, NSString *errorMessage) {
     (void)result;
     [self.integrationOperations removeObject:kind];

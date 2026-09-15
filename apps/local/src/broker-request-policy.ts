@@ -29,6 +29,7 @@ const METHODS = {
   "admin.export": ["owner-control", "admin.begin"],
   "admin.diagnostics": ["owner-control", "admin.begin"],
   "admin.prepare_client_rotation": ["owner-control", "admin.begin"],
+  "admin.prepare_connector_reconnect": ["owner-control", "admin.begin"],
   "lifecycle.status": ["owner-control", "lifecycle.status"],
   "lifecycle.lock": ["owner-control", "lifecycle.transition"],
   "lifecycle.unlock": ["owner-control", "lifecycle.transition"],

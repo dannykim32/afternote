@@ -430,8 +430,8 @@ describe("vault broker worker protocol", () => {
       ]);
   });
 
-  it("requires explicit reconnect preparation before a revoked MCP connector can pair again", async () => {
-    const fixture = workerFixture();
+  it.each(["development-only", "production-signed"] as const)("requires explicit reconnect preparation on %s before a revoked MCP connector can pair again", async (trustPath) => {
+    const fixture = workerFixture({ trustPath });
     const clientConnection = { connectionId: randomUUID(), peerPid: 40031 };
     const ownerConnection = { connectionId: randomUUID(), peerPid: 40032 };
     const replacementConnection = { connectionId: randomUUID(), peerPid: 40033 };
@@ -449,14 +449,19 @@ describe("vault broker worker protocol", () => {
       displayName: "Codex",
       installIdentity,
       publicKey: durable.publicKey,
-      signingMode: "development-exact-build",
+      signingMode: trustPath === "production-signed" ? "secure-enclave" : "development-exact-build",
       requestedCapabilities,
       forgetPolicy: "never",
     });
-    await request(fixture.worker, clientConnection, "client.complete_pairing", {
+    const originalPaired = await request(fixture.worker, clientConnection, "client.complete_pairing", {
       requestId: pairing.requestId,
       clientSignature: signature(pairing.clientProofTranscript, durable.privateKey),
     }, true);
+
+    const originalSession = p256();
+    const originalActivation = await activateExisting(
+      fixture, clientConnection, durable, originalSession, originalPaired,
+    );
 
     await ownerRequest(fixture.worker, ownerConnection, "owner.session.begin", {
       requestedScopes: [
@@ -474,6 +479,10 @@ describe("vault broker worker protocol", () => {
       true,
     );
 
+    await expect(memoryRequest(fixture, clientConnection, originalActivation,
+      "memory.remember", { content: "Revoked connection must not write" }, originalSession.privateKey))
+      .rejects.toThrow();
+
     const blocked = await rawRequest(
       fixture.worker,
       replacementConnection,
@@ -483,7 +492,7 @@ describe("vault broker worker protocol", () => {
         displayName: "Codex",
         installIdentity: replacementInstallIdentity,
         publicKey: replacementDurable.publicKey,
-        signingMode: "development-exact-build",
+        signingMode: trustPath === "production-signed" ? "secure-enclave" : "development-exact-build",
         requestedCapabilities,
         forgetPolicy: "never",
       },
@@ -499,7 +508,7 @@ describe("vault broker worker protocol", () => {
     const prepared = await ownerRequest(
       fixture.worker,
       ownerConnection,
-      "admin.prepare_client_rotation",
+      "admin.prepare_connector_reconnect",
       { kind: "codex", installIdentity, replacementInstallIdentity },
       true,
     );
@@ -518,7 +527,7 @@ describe("vault broker worker protocol", () => {
         displayName: "Codex",
         installIdentity: replacementInstallIdentity,
         publicKey: replacementDurable.publicKey,
-        signingMode: "development-exact-build",
+        signingMode: trustPath === "production-signed" ? "secure-enclave" : "development-exact-build",
         requestedCapabilities,
         forgetPolicy: "never",
       },
@@ -536,7 +545,20 @@ describe("vault broker worker protocol", () => {
       },
       true,
     );
-    expect(replacement.clientId).not.toBe(pairing.clientId);
+    expect(replacement.clientId).not.toBe(originalPaired.clientId);
+    const replacementSession = p256();
+    const replacementActivation = await activateExisting(
+      fixture, replacementConnection, replacementDurable, replacementSession, replacement,
+    );
+    const saved = await memoryRequest(fixture, replacementConnection, replacementActivation,
+      "memory.remember", { content: "Reconnected connector can save" }, replacementSession.privateKey);
+    expect(saved.note.content).toBe("Reconnected connector can save");
+    const fetched = await memoryRequest(fixture, replacementConnection, replacementActivation,
+      "memory.get_note", { id: saved.note.id }, replacementSession.privateKey);
+    expect(fetched.note.content).toBe("Reconnected connector can save");
+    await expect(memoryRequest(fixture, clientConnection, originalActivation,
+      "memory.remember", { content: "Old connection remains revoked" }, originalSession.privateKey))
+      .rejects.toThrow();
 
     const staleIdentity = await rawRequest(
       fixture.worker,
@@ -547,7 +569,7 @@ describe("vault broker worker protocol", () => {
         displayName: "Codex",
         installIdentity,
         publicKey: durable.publicKey,
-        signingMode: "development-exact-build",
+        signingMode: trustPath === "production-signed" ? "secure-enclave" : "development-exact-build",
         requestedCapabilities,
         forgetPolicy: "never",
       },

@@ -173,6 +173,10 @@ export type OwnerClientRotationTarget = Omit<OwnerRevocationTarget, "clientId"> 
   installIdentity: string;
 };
 
+export type OwnerConnectorReconnectTarget = OwnerClientRotationTarget & {
+  reconnect: ConnectorReconnectRow;
+};
+
 type ActivationRow = {
   id: string;
   vault_id: string;
@@ -1436,7 +1440,7 @@ export class VaultBrokerAuthorization {
 
   #beginNativeOwnerAdminAudit(operation: string): BrokerAuditAuthorization {
     this.#assertOpen();
-    if (!/^(admin\.(export|diagnostics|prepare_client_rotation)|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
+    if (!/^(admin\.(export|diagnostics|prepare_client_rotation|prepare_connector_reconnect)|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
       throw new Error("Native owner administration operation is invalid");
     }
     const authorization: BrokerAuditAuthorization = {
@@ -1988,6 +1992,15 @@ export class VaultBrokerAuthorization {
     target: OwnerClientRotationTarget,
     replacementInstallIdentity: string,
   ): void {
+    this.#database.transaction(() =>
+      this.#prepareRevokedClientReplacement(target, replacementInstallIdentity)
+    )();
+  }
+
+  #prepareRevokedClientReplacement(
+    target: OwnerClientRotationTarget,
+    replacementInstallIdentity: string,
+  ): void {
     assertBounded("replacement install identity", replacementInstallIdentity, 128);
     if (replacementInstallIdentity === target.installIdentity) {
       throw new Error("Replacement MCP client identity must be new");
@@ -1995,34 +2008,60 @@ export class VaultBrokerAuthorization {
     if (target.clientId === null) {
       throw new Error("Revoked MCP client replacement target is invalid");
     }
-    const transaction = this.#database.transaction(() => {
-      const current = this.revokedClientReplacementTarget(
-        target.kind,
-        target.installIdentity,
-      );
-      if (canonicalBrokerTranscript(current) !== canonicalBrokerTranscript(target)) {
-        throw new Error("Revoked MCP client replacement target changed before approval");
-      }
-      const now = new Date(this.#now()).toISOString();
-      this.#setConnectorReconnect(
-        target.kind,
-        "prepared",
-        replacementInstallIdentity,
-        now,
-      );
-      this.#appendAudit({
-        eventId: randomUUID(),
-        occurredAt: now,
-        clientId: target.clientId!,
-        grantId: null,
-        sessionId: null,
-        operation: "client.replace_identity",
-        outcome: "success",
-        errorCode: null,
-        noteRefs: [],
-      });
+    const current = this.revokedClientReplacementTarget(
+      target.kind,
+      target.installIdentity,
+    );
+    if (canonicalBrokerTranscript(current) !== canonicalBrokerTranscript(target)) {
+      throw new Error("Revoked MCP client replacement target changed before approval");
+    }
+    const now = new Date(this.#now()).toISOString();
+    this.#setConnectorReconnect(
+      target.kind,
+      "prepared",
+      replacementInstallIdentity,
+      now,
+    );
+    this.#appendAudit({
+      eventId: randomUUID(),
+      occurredAt: now,
+      clientId: target.clientId!,
+      grantId: null,
+      sessionId: null,
+      operation: "client.replace_identity",
+      outcome: "success",
+      errorCode: null,
+      noteRefs: [],
     });
-    transaction();
+  }
+
+  connectorReconnectTarget(
+    kind: "codex" | "claude" | "claude-desktop",
+    installIdentity: string,
+  ): OwnerConnectorReconnectTarget {
+    const target = this.revokedClientReplacementTarget(kind, installIdentity);
+    const reconnect = this.#database.query<ConnectorReconnectRow, [string, string]>(`
+      select status, replacement_install_identity
+      from broker_connector_reconnects where vault_id = ? and kind = ?
+    `).get(this.#vaultId, kind);
+    if (!reconnect) throw new Error("Connector no longer requires reconnect preparation");
+    return { ...target, reconnect };
+  }
+
+  prepareConnectorReconnect(
+    target: OwnerConnectorReconnectTarget,
+    replacementInstallIdentity: string,
+  ): void {
+    this.#database.transaction(() => {
+      const current = this.connectorReconnectTarget(target.kind, target.installIdentity);
+      if (canonicalBrokerTranscript(current) !== canonicalBrokerTranscript(target)) {
+        throw new Error("Connector reconnect target changed before approval");
+      }
+      // Pin the replacement and audit it in the same transaction as target validation.
+      // No old client, grant, or session is reactivated.
+      const { reconnect: _reconnect, ...revokedTarget } = target;
+      this.#prepareRevokedClientReplacement(revokedTarget, replacementInstallIdentity);
+    })();
   }
 
   #revokedClientRotationTarget(clientId: string): OwnerRevocationTarget {

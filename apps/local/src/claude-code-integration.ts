@@ -22,7 +22,8 @@ export type ClaudeCodeIntegrationAction =
   | "install"
   | "status"
   | "remove"
-  | "rotate-identity";
+  | "rotate-identity"
+  | "prepare-reconnect";
 
 export type ClaudeCodeServer = {
   type?: string;
@@ -174,12 +175,13 @@ export function parseClaudeCodeIntegrationAction(
     action === "install" ||
     action === "status" ||
     action === "remove" ||
-    action === "rotate-identity"
+    action === "rotate-identity" ||
+    action === "prepare-reconnect"
   ) {
     return action;
   }
   throw new Error(
-    "Claude Code action must be install, status, remove, or rotate-identity",
+    "Claude Code action must be install, status, remove, rotate-identity, or prepare-reconnect",
   );
 }
 
@@ -192,7 +194,7 @@ export async function manageClaudeCodeIntegration(
   removed?: boolean;
   backup?: string | null;
 }> {
-  if (action === "rotate-identity") {
+  if (action === "rotate-identity" || action === "prepare-reconnect") {
     throw new Error("Claude Code identity rotation must be routed separately");
   }
   if (!standalone) {

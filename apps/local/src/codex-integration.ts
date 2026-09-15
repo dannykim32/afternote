@@ -27,7 +27,8 @@ export type CodexIntegrationAction =
   | "install"
   | "status"
   | "remove"
-  | "rotate-identity";
+  | "rotate-identity"
+  | "prepare-reconnect";
 
 export type CodexServer = {
   name: string;
@@ -171,12 +172,13 @@ export function parseCodexIntegrationAction(
     action === "install" ||
     action === "status" ||
     action === "remove" ||
-    action === "rotate-identity"
+    action === "rotate-identity" ||
+    action === "prepare-reconnect"
   ) {
     return action;
   }
   throw new Error(
-    "Codex action must be install, status, remove, or rotate-identity",
+    "Codex action must be install, status, remove, rotate-identity, or prepare-reconnect",
   );
 }
 
@@ -189,7 +191,7 @@ export async function manageCodexIntegration(
   removed?: boolean;
   backup?: string | null;
 }> {
-  if (action === "rotate-identity") {
+  if (action === "rotate-identity" || action === "prepare-reconnect") {
     throw new Error("Codex identity rotation must be routed separately");
   }
   if (!standalone) {

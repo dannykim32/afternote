@@ -116,9 +116,9 @@ export async function runLocalCli(
       return;
     case "codex": {
       const action = parseCodexIntegrationAction(args[1]);
-      if (action === "rotate-identity") {
+      if (action === "rotate-identity" || action === "prepare-reconnect") {
         console.log(JSON.stringify(
-          await rotateInstalledMcpClientIdentity("codex"),
+          await rotateInstalledMcpClientIdentity("codex", action),
           null,
           2,
         ));
@@ -149,9 +149,9 @@ export async function runLocalCli(
     }
     case "claude-code": {
       const action = parseClaudeCodeIntegrationAction(args[1]);
-      if (action === "rotate-identity") {
+      if (action === "rotate-identity" || action === "prepare-reconnect") {
         console.log(JSON.stringify(
-          await rotateInstalledMcpClientIdentity("claude"),
+          await rotateInstalledMcpClientIdentity("claude", action),
           null,
           2,
         ));
@@ -182,9 +182,9 @@ export async function runLocalCli(
     }
     case "claude-desktop": {
       const action = parseClaudeDesktopConnectorAction(args[1]);
-      if (action === "rotate-identity") {
+      if (action === "rotate-identity" || action === "prepare-reconnect") {
         console.log(JSON.stringify(
-          await rotateInstalledMcpClientIdentity("claude-desktop"),
+          await rotateInstalledMcpClientIdentity("claude-desktop", action),
           null,
           2,
         ));
@@ -451,6 +451,7 @@ async function changeVaultLifecycle(action: "lock" | "unlock"): Promise<void> {
 
 async function rotateInstalledMcpClientIdentity(
   kind: McpClientIdentityKind,
+  action: "rotate-identity" | "prepare-reconnect" = "rotate-identity",
 ): Promise<Awaited<ReturnType<typeof rotateMcpClientIdentity>>> {
   if (!isStandaloneArtifact) {
     throw new Error(
@@ -465,7 +466,9 @@ async function rotateInstalledMcpClientIdentity(
       replacementInstallIdentity,
     }) =>
       await runNativeAdminCommand([
-        "--admin-prepare-client-rotation",
+        action === "prepare-reconnect"
+          ? "--admin-prepare-connector-reconnect"
+          : "--admin-prepare-client-rotation",
         requestedKind,
         installIdentity,
         replacementInstallIdentity,
@@ -499,7 +502,7 @@ export async function runNativeAdminCommand(
     ["--admin-export", "json" | "markdown", string] |
     ["--admin-migrate", RecoveryCliPolicy, RecoveryCliPolicy] |
     ["--admin-restore", string] |
-    ["--admin-prepare-client-rotation", McpClientIdentityKind, string, string] |
+    ["--admin-prepare-client-rotation" | "--admin-prepare-connector-reconnect", McpClientIdentityKind, string, string] |
     ["--admin-enroll-release-key"] |
     ["--admin-lock" | "--admin-unlock"],
 ): Promise<Record<string, unknown>> {
@@ -689,11 +692,11 @@ Commands:
   unlock               Reopen the vault under a fresh authorization epoch
 ${recallHelp}
   eval-organization    Run automatic organization at the 10,000-note scale gate
-  codex install|status|remove|rotate-identity
+  codex install|status|remove|rotate-identity|prepare-reconnect
                        Configure and validate the Codex MCP integration
-  claude-code install|status|remove|rotate-identity
+  claude-code install|status|remove|rotate-identity|prepare-reconnect
                        Configure and validate the Claude Code MCP integration
-  claude-desktop install|status|rotate-identity
+  claude-desktop install|status|rotate-identity|prepare-reconnect
                        Configure and validate the Claude Desktop MCP connector
   version             Print the artifact version
 

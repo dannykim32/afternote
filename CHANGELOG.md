@@ -6,6 +6,12 @@ during release review.
 
 ## Unreleased
 
+### Fixed
+
+- Prepare reconnect now uses a fresh, owner-approved production operation for Codex,
+  Claude Code, and Claude Desktop. The development-only identity rotation remains
+  restricted; old identities, grants, and sessions stay revoked.
+
 ## 2.0.0-alpha.23 - 2026-09-14
 
 ### Changed

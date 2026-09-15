@@ -14,6 +14,7 @@ const ownerMethods = [
   "library.views", "library.browse", "library.search", "library.get_note",
   "library.list_revisions", "library.remember", "library.update_note", "library.delete",
   "admin.export", "admin.diagnostics", "admin.prepare_client_rotation",
+  "admin.prepare_connector_reconnect",
   "lifecycle.status", "lifecycle.lock", "lifecycle.unlock",
   "recovery.status", "recovery.migrate", "recovery.restore",
 ];
