@@ -1,7 +1,7 @@
 # Prelaunch second-Mac smoke test
 
-Run this against the signed and notarized **2.0.0-alpha.24** candidate containing the
-post-Alpha-22 refactors and production reconnect fix, not the existing Alpha 22 download.
+Run this against the signed and notarized **2.0.0-alpha.25** candidate containing the
+post-Alpha-22 refactors and both production reconnect fixes, not the existing Alpha 22 download.
 Packaging and signing must finish first.
 Record the candidate version and checksum supplied with that build. Allow about 30
 minutes, including a 16-minute connector-session check.

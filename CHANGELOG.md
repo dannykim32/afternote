@@ -6,6 +6,8 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.25 - 2026-09-15
+
 ### Fixed
 
 - Show persisted reconnect preparation in Connections and the setup guide until the
@@ -14,6 +16,8 @@ during release review.
 - Keep duplicate reconnect actions blocked while the updated broker overview is
   loading, including failed or malformed replies and when a newer refresh supersedes
   an older response. A failed refresh offers a status retry, not another preparation.
+
+Private release candidate; signing, notarization, and second-Mac acceptance are pending.
 
 ## 2.0.0-alpha.24 - 2026-09-15
 
