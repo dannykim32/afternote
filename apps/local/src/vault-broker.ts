@@ -175,6 +175,7 @@ export type OwnerClientRotationTarget = Omit<OwnerRevocationTarget, "clientId"> 
 
 export type OwnerConnectorReconnectTarget = OwnerClientRotationTarget & {
   reconnect: ConnectorReconnectRow;
+  connectorAuthorityDigest: string;
 };
 
 type ActivationRow = {
@@ -2045,7 +2046,19 @@ export class VaultBrokerAuthorization {
       from broker_connector_reconnects where vault_id = ? and kind = ?
     `).get(this.#vaultId, kind);
     if (!reconnect) throw new Error("Connector no longer requires reconnect preparation");
-    return { ...target, reconnect };
+    // required/null can recur after a different identity reconnects and is revoked.
+    // Bind approval to the durable client set as well, not a timestamp or audit row
+    // that can collide or be pruned. Pairing/revocation changes this snapshot.
+    const clients = this.#database.query<{
+      id: string; status: string; authority_revision: number;
+    }, [string, string]>(`
+      select id, status, authority_revision from broker_clients
+      where vault_id = ? and kind = ? order by id
+    `).all(this.#vaultId, kind);
+    const connectorAuthorityDigest = createHash("sha256")
+      .update(canonicalBrokerTranscript({ clients }))
+      .digest("hex");
+    return { ...target, reconnect, connectorAuthorityDigest };
   }
 
   prepareConnectorReconnect(
@@ -2059,7 +2072,11 @@ export class VaultBrokerAuthorization {
       }
       // Pin the replacement and audit it in the same transaction as target validation.
       // No old client, grant, or session is reactivated.
-      const { reconnect: _reconnect, ...revokedTarget } = target;
+      const {
+        reconnect: _reconnect,
+        connectorAuthorityDigest: _connectorAuthorityDigest,
+        ...revokedTarget
+      } = target;
       this.#prepareRevokedClientReplacement(revokedTarget, replacementInstallIdentity);
     })();
   }

@@ -452,6 +452,103 @@ describe("native owner administration broker protocol", () => {
   });
 });
 
+it.each(["codex", "claude", "claude-desktop"] as const)(
+  "%s reconnect requires separate approval and never revives the old identity", async (kind) => {
+  const { worker, ownerConnection, clientConnection, installIdentity, paired } =
+    await revokedFixture(kind);
+  const params = { kind, installIdentity, replacementInstallIdentity };
+  await expect(pairMcpClient(worker, clientConnection, kind, replacementInstallIdentity, "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+  const pending = await beginOwnerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect", params);
+  expect(pending.ownerPresenceChallenge).toBeDefined();
+  expect(pending.ownerPresenceChallenge.reason).toContain("remain revoked");
+  // An existing owner inspection session is not reconnect approval.
+  await expect(pairMcpClient(worker, clientConnection, kind, replacementInstallIdentity, "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+  expect(await completeOwnerPresence(worker, ownerConnection,
+    pending.ownerPresenceChallenge.challengeId, "approved")).toMatchObject({
+    ok: true, result: { prepared: true, ...params, clientId: paired.clientId },
+  });
+  expect(await completeOwnerPresence(worker, ownerConnection,
+    pending.ownerPresenceChallenge.challengeId, "approved")).toMatchObject({ ok: false });
+  await expect(pairMcpClient(worker, clientConnection, kind, randomUUID(), "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+  const replacement = await pairMcpClient(worker, clientConnection, kind, replacementInstallIdentity, "secure-enclave");
+  expect(replacement.clientId).not.toBe(paired.clientId);
+  const inspected = await ownerRequest(worker, ownerConnection, "owner.inspect_connections", {});
+  expect(inspected.clients.find((client: any) => client.clientId === paired.clientId).status).toBe("revoked");
+  expect(inspected.grants.filter((grant: any) => grant.clientId === paired.clientId)
+    .every((grant: any) => grant.status === "revoked")).toBe(true);
+  // A historical revocation must not authorize replacing an already reconnected connector.
+  expect(await beginOwnerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect", {
+    ...params, replacementInstallIdentity: randomUUID(),
+  })).toMatchObject({ ok: false });
+});
+
+it.each(["denied", "cancelled", "unavailable", "timed_out"] as const)(
+  "%s approval leaves the connector revoked", async (outcome) => {
+  const { worker, ownerConnection, clientConnection, installIdentity } = await revokedFixture("codex");
+  const pending = await beginOwnerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect",
+    { kind: "codex", installIdentity, replacementInstallIdentity });
+  expect(pending.ownerPresenceChallenge).toBeDefined();
+  expect(await completeOwnerPresence(worker, ownerConnection,
+    pending.ownerPresenceChallenge.challengeId, outcome)).toMatchObject({ ok: false });
+  await expect(pairMcpClient(worker, clientConnection, "codex", replacementInstallIdentity, "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+});
+
+it("rejects connector-role requests and approval from another connection", async () => {
+  const { worker, ownerConnection, clientConnection, installIdentity } = await revokedFixture("codex");
+  const params = { kind: "codex", installIdentity, replacementInstallIdentity };
+  expect(await rawRequest(worker, clientConnection, "memory-client",
+    "admin.prepare_connector_reconnect", params)).toMatchObject({
+    ok: false, error: { code: "identity_mismatch" },
+  });
+  const pending = await beginOwnerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect", params);
+  expect(await completeOwnerPresence(worker, { connectionId: randomUUID(), peerPid: 52199 },
+    pending.ownerPresenceChallenge.challengeId, "approved")).toMatchObject({
+    ok: false, error: { code: "identity_mismatch" },
+  });
+  await expect(pairMcpClient(worker, clientConnection, "codex", replacementInstallIdentity, "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+});
+
+async function revokedFixture(kind: "codex" | "claude" | "claude-desktop") {
+  const fixture = workerFixture({ trustPath: "production-signed" });
+  const clientConnection = { connectionId: randomUUID(), peerPid: 52021 };
+  const ownerConnection = { connectionId: randomUUID(), peerPid: 52022 };
+  const installIdentity = "11111111-1111-4111-8111-111111111111";
+  const paired = await pairMcpClient(fixture.worker, clientConnection, kind, installIdentity, "secure-enclave");
+  await ownerRequest(fixture.worker, ownerConnection, "owner.session.begin", {
+    requestedScopes: ["owner.inspect_clients", "owner.inspect_grants", "owner.inspect_sessions"],
+    ttlMs: 60000,
+  }, true);
+  const revoked = await ownerRequest(fixture.worker, ownerConnection, "owner.revoke_connector", {
+    kind,
+  }, true);
+  expect(revoked.clientIds).toContain(paired.clientId);
+  return { ...fixture, paired, clientConnection, ownerConnection, installIdentity };
+}
+
+it("rejects an old reconnect approval after a replacement is paired and revoked again", async () => {
+  const { worker, ownerConnection, clientConnection, installIdentity } = await revokedFixture("codex");
+  const staleOwner = { connectionId: randomUUID(), peerPid: 52198 };
+  const staleReplacement = randomUUID();
+  const stale = await beginOwnerRequest(worker, staleOwner, "admin.prepare_connector_reconnect", {
+    kind: "codex", installIdentity, replacementInstallIdentity: staleReplacement,
+  });
+  expect(stale.ownerPresenceChallenge).toBeDefined();
+  await ownerRequest(worker, ownerConnection, "admin.prepare_connector_reconnect", {
+    kind: "codex", installIdentity, replacementInstallIdentity,
+  }, true);
+  await pairMcpClient(worker, clientConnection, "codex", replacementInstallIdentity, "secure-enclave");
+  await ownerRequest(worker, ownerConnection, "owner.revoke_connector", { kind: "codex" }, true);
+  expect(await completeOwnerPresence(worker, staleOwner,
+    stale.ownerPresenceChallenge.challengeId, "approved")).toMatchObject({ ok: false });
+  await expect(pairMcpClient(worker, clientConnection, "codex", staleReplacement, "secure-enclave"))
+    .rejects.toThrow("requires explicit reconnect preparation");
+});
+
 function workerFixture(options: {
   trustPath?: "development-only" | "production-signed";
 } = {}) {
@@ -478,6 +575,7 @@ async function pairMcpClient(
   connection: { connectionId: string; peerPid: number },
   kind: "codex" | "claude" | "claude-desktop",
   installIdentity: string,
+  signingMode: "development-exact-build" | "secure-enclave" = "development-exact-build",
 ) {
   const durable = generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
@@ -493,7 +591,7 @@ async function pairMcpClient(
       : "Claude Desktop",
     installIdentity,
     publicKey: durable.publicKey,
-    signingMode: "development-exact-build",
+    signingMode,
     requestedCapabilities: ["memory.remember", "memory.recall", "memory.get_note"],
     forgetPolicy: "never",
   });
