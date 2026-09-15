@@ -29,11 +29,17 @@ int main(int argc, const char *argv[]) {
     BOOL staleIgnored = !view.actionButton.enabled && automaticActivations == 0;
     reply(1, nil, @"Network failed");
     BOOL retryOffered = view.actionButton.enabled && [view.actionButton.title isEqual:@"Retry"];
+    [view setSearchMode:@"exact"];
+    BOOL failureSurvivesSearch = [view.actionButton.title isEqual:@"Retry"];
+    [view refresh];
+    reply(2, status(@"not-installed"), nil);
+    BOOL failureSurvivesNavigation = [view.actionButton.title isEqual:@"Retry"] &&
+        [view.statusLabel.stringValue containsString:@"Installation failed"];
     [view.actionButton performClick:nil];
-    reply(2, @{ @"state": @"ready" }, nil);
+    reply(3, @{ @"state": @"ready" }, nil);
     BOOL malformedRejected = automaticActivations == 0 && [view.actionButton.title isEqual:@"Retry"];
     [view.actionButton performClick:nil];
-    reply(3, status(@"ready"), nil);
+    reply(4, status(@"ready"), nil);
     BOOL installed = automaticActivations == 1 && [view.actionButton.title isEqual:@"Activate semantic search"];
     [view.actionButton performClick:nil];
     BOOL explicitActivation = explicitActivations == 1;
@@ -52,6 +58,7 @@ int main(int argc, const char *argv[]) {
     }
     NSDictionary *checks = @{ @"checkOnly": @(checkOnly), @"explicitInstall": @(explicitInstall),
       @"duplicateBlocked": @(duplicateBlocked), @"staleIgnored": @(staleIgnored),
+      @"failureSurvivesSearch": @(failureSurvivesSearch), @"failureSurvivesNavigation": @(failureSurvivesNavigation),
       @"retryOffered": @(retryOffered), @"malformedRejected": @(malformedRejected),
       @"installed": @(installed), @"explicitActivation": @(explicitActivation),
       @"indexing": @(indexing), @"active": @(active), @"lockedNotActive": @(lockedNotActive) };

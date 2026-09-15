@@ -1,4 +1,12 @@
 #import "semantic_settings.h"
+#import "native_appearance.h"
+
+typedef NS_ENUM(NSInteger, AfternoteSemanticFailure) {
+  AfternoteSemanticFailureNone,
+  AfternoteSemanticFailureStatus,
+  AfternoteSemanticFailureInstall,
+  AfternoteSemanticFailureActivation,
+};
 
 @interface AfternoteSemanticSettings ()
 @property(nonatomic, copy) AfternoteSemanticRunner runner;
@@ -8,6 +16,7 @@
 @property(nonatomic, copy) NSString *modelState;
 @property(nonatomic, copy) NSString *searchMode;
 @property(nonatomic, copy) NSString *failure;
+@property(nonatomic) AfternoteSemanticFailure failureKind;
 @property(nonatomic) BOOL busy;
 @property(nonatomic) NSUInteger generation;
 @end
@@ -24,8 +33,9 @@
   self.spacing = 7;
   _statusLabel = [NSTextField wrappingLabelWithString:@"Check availability to get started."];
   _statusLabel.font = [NSFont systemFontOfSize:12];
-  _statusLabel.textColor = NSColor.secondaryLabelColor;
-  _actionButton = [NSButton buttonWithTitle:@"Check availability" target:self action:@selector(performAction:)];
+  _statusLabel.textColor = AfternoteMutedTextColor();
+  _actionButton = [AfternoteButton buttonWithTitle:@"Check availability" target:self action:@selector(performAction:)];
+  AfternoteStyleSecondaryButton(_actionButton);
   _spinner = [NSProgressIndicator new];
   _spinner.style = NSProgressIndicatorStyleSpinning;
   _spinner.controlSize = NSControlSizeSmall;
@@ -69,10 +79,15 @@
 }
 - (void)setSearchMode:(NSString *)mode {
   _searchMode = [mode copy];
-  self.failure = nil;
+  if (self.failureKind == AfternoteSemanticFailureActivation &&
+      ([_searchMode isEqualToString:@"hybrid"] || [_searchMode isEqualToString:@"indexing"])) {
+    self.failure = nil;
+    self.failureKind = AfternoteSemanticFailureNone;
+  }
   [self render];
 }
 - (void)activationFailed {
+  self.failureKind = AfternoteSemanticFailureActivation;
   self.failure = @"Could not activate. Open Notes to check your vault access, then retry.";
   [self render];
 }
@@ -81,6 +96,7 @@
   if (self.busy) return;
   if ([self.modelState isEqualToString:@"ready"]) {
     self.failure = nil;
+    self.failureKind = AfternoteSemanticFailureNone;
     if (self.activate) self.activate(YES);
   } else {
     [self runInstalling:![self.modelState isEqualToString:@"unknown"]];
@@ -89,7 +105,10 @@
 - (void)refresh { if (!self.busy) [self runInstalling:NO]; }
 - (void)runInstalling:(BOOL)install {
   self.busy = YES;
-  self.failure = nil;
+  if (install || self.failureKind == AfternoteSemanticFailureStatus) {
+    self.failure = nil;
+    self.failureKind = AfternoteSemanticFailureNone;
+  }
   self.actionButton.enabled = NO;
   self.statusLabel.stringValue = install ? @"Downloading and verifying the local model…" : @"Checking local model…";
   [self.spinner startAnimation:nil];
@@ -110,13 +129,22 @@
         [result[@"bytes"] isKindOfClass:NSNumber.class] && [result[@"bytes"] longLongValue] >= 0 &&
         (result[@"reason"] == NSNull.null || [result[@"reason"] isKindOfClass:NSString.class]);
     if (error.length > 0 || !valid || (install && ![state isEqualToString:@"ready"])) {
-      view.failure = install ? @"Installation failed. Check your connection and retry. Exact search is available."
+      if (install || view.failureKind != AfternoteSemanticFailureInstall) {
+        view.failureKind = install ? AfternoteSemanticFailureInstall : AfternoteSemanticFailureStatus;
+        view.failure = install ? @"Installation failed. Check your connection and retry. Exact search is available."
                              : @"Could not check the local model. Retry to check availability.";
+      }
     } else {
       view.modelState = state;
+      if (install || ([state isEqualToString:@"ready"] && view.failureKind == AfternoteSemanticFailureInstall)) {
+        view.failure = nil;
+        view.failureKind = AfternoteSemanticFailureNone;
+      }
     }
     [view render];
-    if (view.failure.length == 0 && [state isEqualToString:@"ready"] && view.activate) view.activate(NO);
+    if (valid && error.length == 0 && [state isEqualToString:@"ready"] &&
+        (view.failure.length == 0 || view.failureKind == AfternoteSemanticFailureActivation) && view.activate)
+      view.activate(NO);
   });
 }
 @end
