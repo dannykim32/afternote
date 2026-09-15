@@ -68,7 +68,8 @@
     connectionDetail:@"This usually takes a few seconds"];
     return view;
   }
-  if ([uiState isEqualToString:@"error"]) {
+  if ([uiState isEqualToString:@"error"] ||
+      [uiState isEqualToString:@"reconnect-refresh-failed"]) {
     [view applyState:AfternoteConnectorStateNeedsAttention
               action:AfternoteConnectorActionCheckAgain
                badge:@"Needs attention"

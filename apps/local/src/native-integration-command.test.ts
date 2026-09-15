@@ -72,6 +72,7 @@ describeMacos("native integration command runner", () => {
     expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
     expect(JSON.parse(smoke.stdout.toString())).toEqual({
       requestedOverview: true, duplicateBlocked: true, prepared: true, finished: true, preparedRetryBlocked: true,
+      failedRefreshBlocked: true, invalidRefreshBlocked: true,
       staleOverviewIgnored: true,
     });
   });

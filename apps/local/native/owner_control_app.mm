@@ -3838,17 +3838,20 @@ doCommandBySelector:(SEL)commandSelector {
   BOOL finished = NO;
   for (NSString *kind in self.integrationOperations.allObjects) {
     NSDictionary *status = self.integrationStatuses[kind];
-    if (![status[@"uiState"] isEqualToString:@"reconnect-refresh"]) continue;
-    [self.integrationOperations removeObject:kind];
+    if (![status[@"uiState"] isEqualToString:@"reconnect-refresh"] &&
+        ![status[@"uiState"] isEqualToString:@"reconnect-refresh-failed"]) continue;
     NSMutableDictionary *updated = [status mutableCopy];
     [updated removeObjectForKey:@"uiState"];
     [updated removeObjectForKey:@"uiError"];
     if (errorMessage.length > 0) {
-      updated[@"uiState"] = @"error";
+      // Keep stale revoked state from offering preparation again until a valid overview arrives.
+      updated[@"uiState"] = @"reconnect-refresh-failed";
       updated[@"uiError"] = errorMessage;
+    } else {
+      [self.integrationOperations removeObject:kind];
+      finished = YES;
     }
     self.integrationStatuses[kind] = updated;
-    finished = YES;
   }
   return finished;
 }

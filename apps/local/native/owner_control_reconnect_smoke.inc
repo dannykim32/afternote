@@ -44,7 +44,28 @@ int RunReconnectCoordinatorSmoke() {
   [delegate reconnectIntegration:sender];
   BOOL duplicateBlocked = delegate.prepareCount == 1;
   BOOL staleOverviewIgnored = NO;
+  BOOL failedRefreshBlocked = YES;
+  BOOL invalidRefreshBlocked = YES;
   if (requestedOverview) {
+    for (NSNumber *invalid in @[@NO, @YES]) {
+      BrokerReply failedReply = broker.requests.lastObject[@"reply"];
+      failedReply(invalid.boolValue ? @{} : nil,
+          invalid.boolValue ? nil : @{@"message":@"Temporary overview failure"});
+      __block BOOL failureHandled = NO;
+      dispatch_async(dispatch_get_main_queue(), ^{ failureHandled = YES; });
+      NSDate *failureDeadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
+      while (!failureHandled && failureDeadline.timeIntervalSinceNow > 0)
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+      AfternoteConnectionRow *failedRow = [delegate connectorRowForCommandKind:@"codex" brokerKind:@"codex"
+          displayName:@"Codex" clients:@[] grants:@[]];
+      [delegate reconnectIntegration:sender];
+      BOOL blocked = failureHandled && [delegate.integrationOperations containsObject:@"codex"] && delegate.prepareCount == 1 &&
+          failedRow.presentation.action == AfternoteConnectorActionCheckAgain;
+      [delegate refreshConnections:nil];
+      blocked = blocked && [delegate.integrationOperations containsObject:@"codex"];
+      if (invalid.boolValue) invalidRefreshBlocked = blocked;
+      else failedRefreshBlocked = blocked;
+    }
     BrokerReply staleReply = broker.requests.lastObject[@"reply"];
     [delegate refreshConnections:nil];
     staleReply(ReconnectOverview(@"revoked"), nil);
@@ -65,7 +86,8 @@ int RunReconnectCoordinatorSmoke() {
   BOOL preparedRetryBlocked = delegate.prepareCount == 1;
   NSDictionary *checks = @{@"requestedOverview":@(requestedOverview), @"duplicateBlocked":@(duplicateBlocked),
     @"prepared":@(prepared), @"finished":@(finished), @"preparedRetryBlocked":@(preparedRetryBlocked),
-    @"staleOverviewIgnored":@(staleOverviewIgnored)};
+    @"staleOverviewIgnored":@(staleOverviewIgnored), @"failedRefreshBlocked":@(failedRefreshBlocked),
+    @"invalidRefreshBlocked":@(invalidRefreshBlocked)};
   NSData *data = [NSJSONSerialization dataWithJSONObject:checks options:0 error:nil];
   fwrite(data.bytes, 1, data.length, stdout);
   fputc('\n', stdout);

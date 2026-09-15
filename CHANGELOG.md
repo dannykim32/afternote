@@ -12,7 +12,8 @@ during release review.
   replacement pairs. Refreshing or reopening Afternote no longer offers preparation
   again after approval; the success message explains how to finish in the AI host.
 - Keep duplicate reconnect actions blocked while the updated broker overview is
-  loading, including when a newer refresh supersedes an older response.
+  loading, including failed or malformed replies and when a newer refresh supersedes
+  an older response. A failed refresh offers a status retry, not another preparation.
 
 ## 2.0.0-alpha.24 - 2026-09-15
 

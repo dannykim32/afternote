@@ -252,8 +252,8 @@ describe("native Library production boundary", () => {
     expect(nativeAppSource).toContain('@"Prepare reconnect"');
     expect(nativeAppSource).toContain('action:@selector(reconnectIntegration:)');
     expect(nativeAppSource).toContain('[self runPackagedCommand:@[ kind, @"prepare-reconnect" ]');
-    expect(nativeAppSource).toContain('@"The Afternote MCP server is already installed in %@.');
-    expect(nativeAppSource).toContain('if (revoked && [self.integrationStatuses[descriptor.commandKind][@"healthy"] boolValue])');
+    expect(nativeAppSource).toContain('You do not need to prepare reconnect again.');
+    expect(nativeAppSource).toContain('![self.integrationOperations containsObject:descriptor.commandKind]');
   });
 
   it("installs and removes the private runtime without asking users to open Terminal", () => {
