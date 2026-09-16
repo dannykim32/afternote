@@ -6,6 +6,21 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.2 - 2026-09-16
+
+### Fixed
+
+- Keep checking indexing progress when a search starts background preparation, and update
+  Notes and Settings automatically when search by meaning is ready.
+- Show indexed-note counts and a progress bar. Distinguish delayed indexing from failed
+  status checks, with a Check again action that does not reload the model.
+- Open included model terms in a selectable offline window inside Afternote.
+
+### Changed
+
+- Explain that search models are included with the app and require no separate download.
+- Remove the static Connector identities and production Build policy rows from Settings.
+
 ## 2.0.0-beta.1 - 2026-09-16
 
 ### Changed
