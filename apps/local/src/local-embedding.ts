@@ -178,6 +178,7 @@ export async function acquireLocalEmbeddingModel(
   });
   try {
     await model.embed(["Afternote local semantic search installation check."]);
+    if (model.reranker) await model.reranker.score("search installation", ["Afternote local semantic search installation check."]);
   } catch (error) {
     // Digest-valid files remain reusable; selection changes only after a successful probe.
     throw new Error("Local embedding model failed its runtime check", {
@@ -198,8 +199,9 @@ async function downloadVerifiedModelFile(
   profile: SemanticModelProfile,
   fetchImpl: ModelFetch,
 ): Promise<void> {
-  const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
-  const url = `https://huggingface.co/${profile.id}/resolve/${profile.revision}/${encodedPath}`;
+  const source = profile.files[relativePath]!.source ?? { id: profile.id, revision: profile.revision, path: relativePath };
+  const encodedPath = source.path.split("/").map(encodeURIComponent).join("/");
+  const url = `https://huggingface.co/${source.id}/resolve/${source.revision}/${encodedPath}`;
   const response = await fetchImpl(url, { redirect: "follow" });
   if (!response.ok) {
     throw new Error(`Local model download failed for ${relativePath}: HTTP ${response.status}`);

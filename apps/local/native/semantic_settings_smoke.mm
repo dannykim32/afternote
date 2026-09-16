@@ -27,10 +27,9 @@ int main() {
     [view refresh]; [view refresh];
     BOOL checkOnly = requests.count == 1 && [requests[0][@"args"] isEqual:@[@"semantic", @"catalog"]];
     reply(0, catalog(), nil);
-    BOOL explicitInstall = automaticActivations == 0 && [view.actionButton.title isEqual:@"Download model"] &&
-      [view.modelMenu.selectedItem.title containsString:@"Recommended"];
+    BOOL explicitInstall = automaticActivations == 0 && [view.actionButton.title isEqual:@"Enable search by meaning"];
     [view.actionButton performClick:nil]; [view.actionButton performClick:nil]; [view refresh];
-    BOOL duplicateBlocked = requests.count == 2 && !view.actionButton.enabled && !view.modelMenu.enabled &&
+    BOOL duplicateBlocked = requests.count == 2 && !view.actionButton.enabled &&
         [requests[1][@"args"] isEqual:@[@"semantic", @"install", @"balanced"]];
     reply(0, catalog(), nil);
     BOOL staleIgnored = !view.actionButton.enabled && automaticActivations == 0;
@@ -44,7 +43,7 @@ int main() {
     [view.actionButton performClick:nil]; reply(3, @{ @"state":@"ready" }, nil);
     BOOL malformedRejected = automaticActivations == 0 && [view.actionButton.title isEqual:@"Retry"];
     [view.actionButton performClick:nil]; reply(4, status(@"balanced"), nil);
-    BOOL installed = automaticActivations == 1 && [view.actionButton.title isEqual:@"Activate model"];
+    BOOL installed = automaticActivations == 1 && [view.actionButton.title isEqual:@"Activate search"];
     [view.actionButton performClick:nil];
     BOOL explicitActivation = explicitActivations == 1;
     [view setIndexedNotes:32 total:100];
@@ -52,26 +51,22 @@ int main() {
     BOOL indexing = [view.statusLabel.stringValue containsString:@"Indexing 32 of 100"];
     [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
     BOOL active = [view.statusLabel.stringValue containsString:@"Active in Notes and connected tools"];
-    [view.modelMenu selectItemAtIndex:2]; [view.modelMenu sendAction:view.modelMenu.action to:view.modelMenu.target];
-    BOOL choosingDoesNotDownload = requests.count == 5 && [view.actionButton.title isEqual:@"Download model"];
+    BOOL oneSearchEngine = ![view respondsToSelector:NSSelectorFromString(@"modelMenu")];
     [view activationFailed];
     [view.actionButton performClick:nil];
-    BOOL activationRetryDoesNotDownload = requests.count == 5 && explicitActivations == 2 &&
-      [view.actionButton.title isEqual:@"Download model"];
-    [view.actionButton performClick:nil]; reply(5, status(@"large"), nil);
-    [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
-    BOOL oldModelNotActive = [view.actionButton.title isEqual:@"Activate model"] &&
-      [requests[5][@"args"] isEqual:@[@"semantic", @"install", @"large"]];
+    BOOL activationRetryDoesNotDownload = requests.count == 5 && explicitActivations == 2;
     [view activationCompleted:@"hybrid" modelId:@"large:q8"];
+    BOOL oldModelNotActive = [view.actionButton.title isEqual:@"Activate search"];
+    [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
     [view setSearchMode:@"checking"];
-    BOOL lockedNotActive = [view.actionButton.title isEqual:@"Activate model"];
+    BOOL lockedNotActive = [view.actionButton.title isEqual:@"Activate search"];
     NSDictionary *checks = @{ @"checkOnly":@(checkOnly), @"explicitInstall":@(explicitInstall),
       @"duplicateBlocked":@(duplicateBlocked), @"staleIgnored":@(staleIgnored),
       @"failureSurvivesSearch":@(failureSurvivesSearch), @"failureSurvivesNavigation":@(failureSurvivesNavigation),
       @"retryOffered":@(retryOffered), @"malformedRejected":@(malformedRejected),
       @"installed":@(installed), @"explicitActivation":@(explicitActivation),
       @"indexing":@(indexing), @"active":@(active), @"lockedNotActive":@(lockedNotActive),
-      @"activationRetryDoesNotDownload":@(activationRetryDoesNotDownload), @"choosingDoesNotDownload":@(choosingDoesNotDownload), @"oldModelNotActive":@(oldModelNotActive) };
+      @"activationRetryDoesNotDownload":@(activationRetryDoesNotDownload), @"oneSearchEngine":@(oneSearchEngine), @"oldModelNotActive":@(oldModelNotActive) };
     NSData *data = [NSJSONSerialization dataWithJSONObject:checks options:0 error:nil];
     fwrite(data.bytes, 1, data.length, stdout);
     for (NSNumber *passed in checks.allValues) if (!passed.boolValue) return 2;

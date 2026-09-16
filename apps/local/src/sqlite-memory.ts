@@ -800,8 +800,9 @@ export class SqliteMemory implements Memory {
           MINIMUM_EXPLORATORY_SEARCH_SIMILARITY,
         ),
       );
+      if (this.#closed) return { results: [], nextCursor: null, searchMode: "degraded" };
       const temporal = this.#queryTemporalAnnotations(input.query);
-      const lexicalIds = temporal.length === 0
+      const lexicalIds = temporal.length === 0 && !this.#embeddingModel.reranker
         ? new Set(this.#allLexicalResults(vault, input.query).map((result) => result.note.id))
         : null;
       const ranked = lexicalIds && lexicalIds.size > 0
@@ -1166,7 +1167,7 @@ export class SqliteMemory implements Memory {
     if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
     const current = this.#embeddingModel?.descriptor;
     if (current?.id === model.descriptor.id && current.revision === model.descriptor.revision &&
-        current.dimensions === model.descriptor.dimensions) return;
+        current.dimensions === model.descriptor.dimensions && this.#embeddingModel?.reranker?.id === model.reranker?.id) return;
     this.#embeddingModel = model;
     this.#retrievalMode = "hybrid";
     this.#derivedIndexes.enableSemanticModel(model.descriptor);
@@ -1264,6 +1265,7 @@ export class SqliteMemory implements Memory {
     this.#assertVault(vault);
     const model = this.#embeddingModel;
     if (!model) return { results: [], searchMode: "degraded" };
+    const deadline = performance.now() + semanticTimeoutMs;
     const temporal = this.#queryTemporalAnnotations(query);
     const rawLexical = this.#allLexicalResults(vault, query);
     const lexical = strongRecallLexicalResults(
@@ -1322,7 +1324,10 @@ export class SqliteMemory implements Memory {
         searchMode: "degraded",
       };
     }
-    const similarityThreshold = minimumSimilarity ?? model.minimumSimilarity;
+    // With a relevance model this is candidate generation, not the final
+    // relevance decision. A strict embedding cutoff would discard paraphrases
+    // before the reranker can read them.
+    const similarityThreshold = model.reranker ? 0.2 : minimumSimilarity ?? model.minimumSimilarity;
     const nativeSimilarities = cosineSimilaritiesNative(
       queryVector,
       semanticIndex.packedVectors,
@@ -1367,10 +1372,16 @@ export class SqliteMemory implements Memory {
       semanticCandidates = this.#withoutSupersededRevisionMatches(query, semanticCandidates);
     }
     const semantic = this.#hydrateSemanticCandidates(
-      limit === null
-        ? semanticCandidates
-        : semanticCandidates.slice(0, MAX_RECALL_RESULTS),
+      model.reranker ? semanticCandidates.slice(0, MAX_RECALL_RESULTS)
+        : limit === null ? semanticCandidates : semanticCandidates.slice(0, MAX_RECALL_RESULTS),
     );
+
+    if (model.reranker) {
+      const reranked = await this.#rerankRecall(query, model, lexical, semantic, Math.max(1, deadline - performance.now()));
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+      const ranked = temporal.length > 0 ? this.#rankTemporalResults(reranked.results, temporal) : reranked.results;
+      return { results: limit === null ? ranked : ranked.slice(0, boundedLimit(limit, DEFAULT_RECALL_RESULTS, MAX_RECALL_RESULTS)), searchMode: reranked.searchMode };
+    }
 
     const fused = new Map<string, { result: RecallResult; score: number }>();
     lexical.forEach((result, index) => {
@@ -1409,6 +1420,62 @@ export class SqliteMemory implements Memory {
         : temporallyRanked.slice(0, boundedLimit(limit, DEFAULT_RECALL_RESULTS, MAX_RECALL_RESULTS)),
       searchMode: "hybrid",
     };
+  }
+
+  async #rerankRecall(
+    query: string,
+    model: TextEmbeddingModel,
+    lexical: readonly RecallResult[],
+    semantic: Array<{ row: HydratedEmbeddingRow; similarity: number }>,
+    timeoutMs: number,
+  ): Promise<HybridRecallExecution> {
+    const reranker = model.reranker!;
+    const phrase = normalizedTextTokens(query).join(" ");
+    // Literal identifiers and phrases remain searchable, including beyond the
+    // bounded reranking window. Two incidental keyword hits are not a phrase.
+    const literal = lexical.filter(result => phrase.length > 0 &&
+      (` ${normalizedTextTokens(result.note.content + " " + (sourceSearchText(result.note.source) ?? "")).join(" ")} `)
+        .includes(` ${phrase} `));
+    const candidates = new Map<string, { result: RecallResult; passage: string }>();
+    for (const candidate of semantic) {
+      const result = semanticRowToResult(candidate.row, candidate.similarity);
+      const start = Math.max(0, candidate.row.content_start - 300);
+      const end = Math.min(result.note.content.length, candidate.row.content_end + 300);
+      candidates.set(result.note.id, { result, passage: result.note.content.slice(start, end) + sourceEmbeddingContext(result.note.source) });
+    }
+    for (const result of lexical.slice(0, MAX_RECALL_RESULTS)) {
+      if (!candidates.has(result.note.id)) {
+        const offset = Math.max(0, result.note.content.indexOf(result.citation.excerpt));
+        candidates.set(result.note.id, { result, passage: result.note.content.slice(Math.max(0, offset - 300), offset + 700) + sourceEmbeddingContext(result.note.source) });
+      }
+    }
+    const selected = [...candidates.values()];
+    let stopped = false;
+    let searchMode: HybridRecallExecution["searchMode"] = "hybrid";
+    const results = new Map(literal.map(result => [result.note.id, { ...result, score: 100 }]));
+    try {
+      const scores = await withTimeout(reranker.score(query, selected.map(candidate => candidate.passage),
+        () => stopped || this.#closed || this.#embeddingModel !== model), timeoutMs);
+      if (scores.length !== selected.length || scores.some(score => !Number.isFinite(score))) throw new Error("Invalid relevance scores");
+      selected.forEach((candidate, index) => {
+        const score = scores[index]!;
+        if (score >= reranker.minimumScore && !results.has(candidate.result.note.id)) {
+          results.set(candidate.result.note.id, { ...candidate.result, score });
+        }
+      });
+    } catch { searchMode = "degraded"; }
+    finally { stopped = true; }
+    if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+    // A note may have been edited or deleted while the model was running.
+    const revision = this.#database.query<{ current_revision: number }, [string]>("select current_revision from notes where id = ?");
+    try {
+      return {
+        results: [...results.values()]
+          .filter(result => revision.get(result.note.id)?.current_revision === result.note.revision)
+          .sort((a, b) => b.score - a.score || b.note.createdAt.localeCompare(a.note.createdAt) || b.note.id.localeCompare(a.note.id)),
+        searchMode,
+      };
+    } finally { closePreparedStatement(revision); }
   }
 
   #hydrateSemanticCandidates(
@@ -1558,6 +1625,8 @@ export class SqliteMemory implements Memory {
     const status = this.derivedIndexStatus(this.vault);
     const hash = createHash("sha256")
       .update(query)
+      .update("\0")
+      .update(this.#embeddingModel?.reranker?.id ?? "embedding-only")
       .update("\0")
       .update(status.state)
       .update("\0")

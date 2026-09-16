@@ -1,3 +1,4 @@
+import { TransformersTextReranker } from "./transformers-reranker";
 import { resolve } from "node:path";
 import { SEMANTIC_MODELS, type SemanticModelProfile } from "./semantic-model-catalog";
 import {
@@ -22,6 +23,7 @@ type FeatureExtractor = (
 ) => Promise<FeatureExtractionOutput>;
 
 export class TransformersTextEmbeddingModel implements TextEmbeddingModel {
+  readonly reranker?: TransformersTextReranker;
   readonly minimumSimilarity: number;
   readonly uiMinimumSimilarity: number;
   readonly descriptor: EmbeddingModelDescriptor;
@@ -51,6 +53,9 @@ export class TransformersTextEmbeddingModel implements TextEmbeddingModel {
       ? resolve(options.localModelPath)
       : null;
     this.#allowRemoteModels = options.allowRemoteModels ?? false;
+    if (this.#profile.key === "balanced" && this.#localModelPath) {
+      this.reranker = new TransformersTextReranker(resolve(this.#localModelPath, "reranker"));
+    }
   }
 
   async embedQuery(text: string): Promise<Float32Array> {

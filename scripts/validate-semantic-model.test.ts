@@ -23,3 +23,18 @@ it("requires calibration abstention before maximizing recall and reports the tra
   expect(chooseCalibrationThreshold(rows)).toEqual(rows[1]);
   expect(rows[0]!.threshold).toBe(.3);
 });
+
+
+it("freezes the fresh retrieval holdout before tuning and keeps it separate from v1", () => {
+  const bytes = readFileSync(new URL("./fixtures/semantic-recall-validation-v2.json", import.meta.url));
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe("97d136b2102ac5d6f7fe44e76268ef8c719f9d4a1ba5d5c7ce4373fd6856b206");
+  const fresh = JSON.parse(bytes.toString());
+  const keys = new Set(fresh.notes.map((note: {key: string}) => note.key));
+  expect(keys.size).toBe(fresh.notes.length);
+  expect(fresh.calibration).toBeUndefined();
+  const oldQueries = new Set([...corpus.calibration, ...corpus.evaluation].map(item => item.query));
+  for (const item of fresh.evaluation) {
+    expect(oldQueries.has(item.query)).toBe(false);
+    if (item.expected !== null) expect(keys.has(item.expected)).toBe(true);
+  }
+});

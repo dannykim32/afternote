@@ -7,7 +7,8 @@ import {
   localEmbeddingStatus,
   selectedSemanticProfile, semanticModelCatalog,
 } from "./local-embedding";
-import { SEMANTIC_MODELS } from "./semantic-model-catalog";
+import { TransformersTextReranker } from "./transformers-reranker";
+import { SEMANTIC_MODELS, LOCAL_RERANKER } from "./semantic-model-catalog";
 import { createHash } from "node:crypto";
 import { LOCAL_EMBEDDING_MODEL, TransformersTextEmbeddingModel } from "./transformers-embedding";
 
@@ -132,9 +133,35 @@ describe("local embedding installation", () => {
           return new Response("tampered", { status: 200 });
         }),
       }),
-    ).rejects.toThrow("failed verification: config.json");
+    ).rejects.toThrow("failed verification: reranker/config.json");
 
     expect(requests).toBe(1);
     expect(localEmbeddingStatus(vaultPath).state).toBe("not-installed");
   });
+});
+
+
+it("pins bundled relevance downloads and commits selection only after the relevance runtime works", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "afternote-relevance-install-"));
+  directories.push(directory);
+  const vaultPath = join(directory, "vault.db");
+  mkdirSync(join(directory, "models"));
+  writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
+  const profile = SEMANTIC_MODELS.balanced, originalFiles = profile.files;
+  const content = "pinned relevance fixture";
+  profile.files = {"reranker/config.json": {bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex"),
+    source: {id: LOCAL_RERANKER.id, revision: LOCAL_RERANKER.revision, path: "config.json"}}};
+  const embed = spyOn(TransformersTextEmbeddingModel.prototype, "embed").mockResolvedValue([new Float32Array(768)]);
+  const score = spyOn(TransformersTextReranker.prototype, "score").mockRejectedValue(new Error("broken scorer"));
+  const urls: string[] = [];
+  const options = {profile: "balanced" as const, fetch: async (url: string | URL | Request) => {urls.push(String(url)); return new Response(content);} };
+  try {
+    await expect(acquireLocalEmbeddingModel(vaultPath, options)).rejects.toThrow("failed its runtime check");
+    expect(selectedSemanticProfile(vaultPath)).toBe("light");
+    expect(urls).toEqual([`https://huggingface.co/${LOCAL_RERANKER.id}/resolve/${LOCAL_RERANKER.revision}/config.json`]);
+    score.mockResolvedValue([4]);
+    await acquireLocalEmbeddingModel(vaultPath, options);
+    expect(selectedSemanticProfile(vaultPath)).toBe("balanced");
+    expect(urls).toHaveLength(1);
+  } finally { profile.files = originalFiles; embed.mockRestore(); score.mockRestore(); }
 });

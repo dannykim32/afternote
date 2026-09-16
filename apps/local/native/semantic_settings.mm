@@ -19,7 +19,6 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 @interface AfternoteSemanticSettings ()
 @property(nonatomic, copy) AfternoteSemanticRunner runner;
 @property(nonatomic, strong) NSButton *actionButton;
-@property(nonatomic, strong) NSPopUpButton *modelMenu;
 @property(nonatomic, strong) NSTextField *statusLabel;
 @property(nonatomic, strong) NSTextField *modelDetail;
 @property(nonatomic, strong) NSTextField *stateLabel;
@@ -54,19 +53,8 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   NSStackView *header = [NSStackView stackViewWithViews:@[heading, [NSView new], _stateLabel]];
   header.alignment = NSLayoutAttributeCenterY;
   NSTextField *explanation = CopyLabel(@"Find notes by meaning in Afternote and connected tools. Processing stays on this Mac.", 12);
-  _modelMenu = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-  [_modelMenu addItemsWithTitles:@[@"Light", @"Balanced", @"Large"]];
-  for (NSUInteger i = 0; i < 3; i++) _modelMenu.itemArray[i].representedObject = @[@"light", @"balanced", @"large"][i];
-  _modelMenu.target = self;
-  _modelMenu.action = @selector(modelChanged:);
-  _modelMenu.accessibilityLabel = @"Search model";
-  [_modelMenu.widthAnchor constraintEqualToConstant:220].active = YES;
-  NSTextField *modelLabel = CopyLabel(@"Model", 12);
-  modelLabel.textColor = AfternoteTextColor();
-  NSStackView *choice = [NSStackView stackViewWithViews:@[modelLabel, [NSView new], _modelMenu]];
-  choice.spacing = 16;
-  choice.alignment = NSLayoutAttributeCenterY;
-  _modelDetail = CopyLabel(@"Choose a model after checking availability.", 12);
+  _chosenProfile = @"balanced";
+  _modelDetail = CopyLabel(@"Download once to enable local search by meaning.", 12);
   _statusLabel = CopyLabel(@"Check availability to get started.", 12);
   _actionButton = [AfternoteButton buttonWithTitle:@"Check availability" target:self action:@selector(performAction:)];
   AfternoteStyleSecondaryButton(_actionButton);
@@ -77,13 +65,11 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   NSStackView *actions = [NSStackView stackViewWithViews:@[_statusLabel, [NSView new], _spinner, _actionButton]];
   actions.spacing = 10;
   actions.alignment = NSLayoutAttributeCenterY;
-  for (NSView *view in @[header, explanation, choice, _modelDetail, actions]) [self addArrangedSubview:view];
-  for (NSView *view in @[header, explanation, choice, _modelDetail, actions])
+  for (NSView *view in @[header, explanation, _modelDetail, actions]) [self addArrangedSubview:view];
+  for (NSView *view in @[header, explanation, _modelDetail, actions])
     [view.widthAnchor constraintEqualToAnchor:self.widthAnchor].active = YES;
   [self setCustomSpacing:8 afterView:header];
-  [self setCustomSpacing:6 afterView:choice];
   [_statusLabel.widthAnchor constraintLessThanOrEqualToAnchor:self.widthAnchor constant:-250].active = YES;
-  _modelMenu.enabled = NO;
   return self;
 }
 - (NSDictionary *)chosenModel { return self.catalog[self.chosenProfile ?: @""]; }
@@ -93,17 +79,10 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   BOOL selected = [self.chosenProfile isEqual:self.selectedProfile];
   BOOL active = selected && [model[@"modelId"] isEqual:self.activeModelId];
   self.actionButton.enabled = !self.busy;
-  self.modelMenu.enabled = !self.busy && self.catalog != nil;
   if (self.busy) return;
   [self.spinner stopAnimation:nil];
-  NSString *activeName = nil;
-  for (NSString *key in self.catalog) {
-    if ([self.catalog[key][@"modelId"] isEqual:self.activeModelId])
-      activeName = [key isEqual:@"light"] ? @"Light" : [key isEqual:@"balanced"] ? @"Balanced" : @"Large";
-  }
-  self.stateLabel.stringValue = activeName && [self.searchMode isEqual:@"hybrid"]
-      ? [@"On · " stringByAppendingString:activeName] : activeName && [self.searchMode isEqual:@"indexing"]
-      ? [@"Indexing · " stringByAppendingString:activeName] : @"Off";
+  self.stateLabel.stringValue = self.activeModelId && [self.searchMode isEqual:@"hybrid"]
+      ? @"On" : self.activeModelId && [self.searchMode isEqual:@"indexing"] ? @"Indexing" : @"Off";
   if (self.failure.length > 0) {
     self.statusLabel.stringValue = self.failure;
     self.actionButton.title = self.failureKind == AfternoteSemanticFailureActivation ? @"Retry activation" : @"Retry";
@@ -120,29 +99,19 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     self.statusLabel.stringValue = [self.searchMode isEqual:@"degraded"]
         ? @"Indexing needs attention. Exact search remains available. Restart Afternote to retry."
         : @"Installed. Open Notes with your usual authentication to activate.";
-    self.actionButton.title = @"Activate model";
+    self.actionButton.title = @"Activate search";
   } else {
     self.statusLabel.stringValue = ready
         ? @"Switching rebuilds the search index. Your saved notes stay the same."
         : @"Downloads from Hugging Face. Note content is never uploaded. Exact search works without a model.";
-    self.actionButton.title = ready ? @"Use model" : [model[@"state"] isEqual:@"invalid"] ? @"Repair model" : @"Download model";
+    self.actionButton.title = ready ? @"Use improved search" : [model[@"state"] isEqual:@"invalid"] ? @"Repair search" : @"Enable search by meaning";
   }
 }
 - (void)updateModelDetail {
   NSDictionary *model = [self chosenModel];
   if (!model) return;
-  NSString *resource = [self.chosenProfile isEqual:@"light"] ? @"Smallest download and memory footprint." :
-      [self.chosenProfile isEqual:@"balanced"] ? @"A middle ground for download size and memory use." :
-      @"Largest download; indexing takes more time and memory.";
-  self.modelDetail.stringValue = [NSString stringWithFormat:@"%@ · %.0f MB download\n%@ Memory use is higher than download size.",
-      model[@"name"], [model[@"downloadBytes"] doubleValue] / 1000000.0, resource];
-}
-- (void)modelChanged:(id)sender {
-  (void)sender;
-  self.chosenProfile = self.modelMenu.selectedItem.representedObject;
-  self.failure = nil;
-  self.failureKind = AfternoteSemanticFailureNone;
-  [self updateModelDetail]; [self render];
+  self.modelDetail.stringValue = [NSString stringWithFormat:@"%.0f MB download. Searches and relevance checks run locally; initial indexing may take several minutes.",
+      [model[@"downloadBytes"] doubleValue] / 1000000.0];
 }
 - (void)setSearchMode:(NSString *)mode {
   _searchMode = [mode copy];
@@ -194,13 +163,6 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   }
   self.catalog = models;
   self.selectedProfile = result[@"selected"];
-  if (!self.chosenProfile) self.chosenProfile = self.selectedProfile;
-  for (NSMenuItem *item in self.modelMenu.itemArray) {
-    NSString *key = item.representedObject;
-    NSString *name = [key isEqual:@"light"] ? @"Light" : [key isEqual:@"balanced"] ? @"Balanced" : @"Large";
-    item.title = [key isEqual:result[@"recommended"]] ? [name stringByAppendingString:@" — Recommended"] : name;
-    if ([key isEqual:self.chosenProfile]) [self.modelMenu selectItem:item];
-  }
   [self updateModelDetail];
   return YES;
 }
@@ -210,8 +172,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     self.failure = nil; self.failureKind = AfternoteSemanticFailureNone;
   }
   self.actionButton.enabled = NO;
-  self.modelMenu.enabled = NO;
-  self.statusLabel.stringValue = install ? @"Downloading and verifying the model. This may take several minutes…" : @"Checking local models…";
+  self.statusLabel.stringValue = install ? @"Downloading and verifying search files. This may take several minutes…" : @"Checking local search…";
   [self.spinner startAnimation:nil];
   NSUInteger generation = ++self.generation;
   NSString *profile = self.chosenProfile;
@@ -240,7 +201,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     if (error.length > 0 || !valid) {
       if (install || view.failureKind != AfternoteSemanticFailureInstall) {
         view.failureKind = install ? AfternoteSemanticFailureInstall : AfternoteSemanticFailureStatus;
-        view.failure = install ? @"Installation failed. Check your connection and retry. Your previous search model is unchanged."
+        view.failure = install ? @"Installation failed. Check your connection and retry. Your existing search remains available."
                              : @"Could not check local models. Retry to check availability.";
       }
     }

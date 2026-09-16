@@ -8,7 +8,6 @@ typedef void (^AfternoteSemanticRunner)(NSArray<NSString *> *, AfternoteSemantic
 @interface AfternoteSemanticSettings : NSStackView
 @property(nonatomic, readonly) NSButton *actionButton;
 @property(nonatomic, readonly) NSTextField *statusLabel;
-@property(nonatomic, readonly) NSPopUpButton *modelMenu;
 @property(nonatomic, copy, nullable) void (^activate)(BOOL userInitiated);
 - (instancetype)initWithRunner:(AfternoteSemanticRunner)runner;
 - (void)refresh;

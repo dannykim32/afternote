@@ -8,7 +8,14 @@ export type EmbeddingModelDescriptor = {
  * Local-only text embedding adapter. Implementations must not make a network
  * request: installation and model acquisition are separate, explicit flows.
  */
+export interface TextReranker {
+  readonly id: string;
+  readonly minimumScore: number;
+  score(query: string, passages: readonly string[], stopped?: () => boolean): Promise<number[]>;
+}
+
 export interface TextEmbeddingModel {
+  readonly reranker?: TextReranker;
   readonly descriptor: EmbeddingModelDescriptor;
   readonly minimumSimilarity: number;
   readonly uiMinimumSimilarity?: number;
