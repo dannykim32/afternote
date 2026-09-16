@@ -32,3 +32,10 @@ The September 16 decision supersedes the Alpha 26 opt-in download flow.
 Useful everyday recall is the product bar. The existing measured limitations in
 [BETA_READINESS.md](BETA_READINESS.md) are accepted. No additional model shopping,
 agent-generated metadata, or perfect synthetic benchmark target is required.
+
+## Native layout
+
+Synthetic-data preview of the Beta 1 settings layout (development preview; release builds
+also expose model terms and signed update controls):
+
+![Search by meaning enabled, with its control aligned to the right](images/afternote-beta-settings.png)

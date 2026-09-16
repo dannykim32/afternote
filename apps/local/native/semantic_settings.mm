@@ -20,6 +20,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 @property(nonatomic, copy) NSString *searchMode;
 @property(nonatomic, copy) NSString *failure;
 @property(nonatomic) BOOL activationFailure;
+@property(nonatomic) BOOL applicationPending;
 @property(nonatomic) BOOL enabledPreference;
 @property(nonatomic) BOOL busy;
 @property(nonatomic) NSInteger indexedNotes;
@@ -87,10 +88,11 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     return;
   }
   BOOL active = self.activeModelId && [self.activeModelId isEqual:self.modelId];
-  if (!self.modelState) self.statusLabel.stringValue = @"Checking local search…";
-  else if (!self.enabledPreference) self.statusLabel.stringValue = active
-      ? @"Turning off. Open Notes to apply this change."
-      : @"Off. Afternote and connected tools use exact search.";
+  if (self.applicationPending) self.statusLabel.stringValue = @"Setting saved. Open Notes to apply this change.";
+  else if (!self.modelState) self.statusLabel.stringValue = @"Checking local search…";
+  else if (!self.enabledPreference) self.statusLabel.stringValue = [self.searchMode isEqual:@"exact"]
+      ? @"Off. Afternote and connected tools use exact search."
+      : @"Setting saved. Open Notes to apply this change.";
   else if (![self.modelState isEqual:@"ready"]) self.statusLabel.stringValue = @"Search files are unavailable. Reinstall Afternote to restore them. Exact search remains available.";
   else if (active && [self.searchMode isEqual:@"hybrid"]) self.statusLabel.stringValue = @"Ready in Notes and connected tools.";
   else if (active && [self.searchMode isEqual:@"indexing"]) self.statusLabel.stringValue = self.totalNotes == 0
@@ -114,6 +116,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   BOOL applied = self.enabledPreference
       ? [self.modelId isEqual:modelId] && [@[@"hybrid", @"indexing"] containsObject:mode]
       : [mode isEqual:@"exact"];
+  if (applied) self.applicationPending = NO;
   if (self.activationFailure && applied) { self.failure = nil; self.activationFailure = NO; }
   [self render];
 }
@@ -168,7 +171,10 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     if (!valid) {
       view.failure = @"Could not update local search. Retry to check the saved setting.";
       view.activationFailure = NO;
-    } else if (!view.activationFailure) view.failure = nil;
+    } else {
+      if (![command isEqual:@"catalog"]) view.applicationPending = YES;
+      if (!view.activationFailure) view.failure = nil;
+    }
     [view render];
     if (valid && view.activate) view.activate(![command isEqual:@"catalog"]);
   });

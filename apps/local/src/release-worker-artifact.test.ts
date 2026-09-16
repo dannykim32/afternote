@@ -86,7 +86,7 @@ describe("public release artifacts", () => {
     const bytes = readFileSync(artifactPath);
     expect(bytes.includes(Buffer.from("development-vault.key"))).toBe(false);
     expect(bytes.includes(Buffer.from(resolve(import.meta.dir, "../../..")))).toBe(false);
-    expect(bytes.includes(Buffer.from("semantic status|catalog|install"))).toBe(true);
+    expect(bytes.includes(Buffer.from("semantic status|catalog|check|enable|disable"))).toBe(true);
     expect(bytes.includes(Buffer.from("onnxruntime_binding.node"))).toBe(true);
     expect(bytes.includes(Buffer.from("/$bunfs/root/onnxruntime_binding"))).toBe(false);
     expect(bytes.includes(Buffer.from("--admin-enroll-release-key"))).toBe(false);

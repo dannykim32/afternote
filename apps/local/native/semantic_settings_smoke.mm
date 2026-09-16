@@ -30,7 +30,7 @@ int main() {
     reply(0, catalog(YES), nil);
     BOOL staleIgnored = !view.toggleButton.enabled;
     reply(1, catalog(NO), nil);
-    BOOL disableApplied = explicitActivations == 1 && view.toggleButton.state == NSControlStateValueOff && [view.statusLabel.stringValue containsString:@"Turning off"];
+    BOOL disableApplied = explicitActivations == 1 && view.toggleButton.state == NSControlStateValueOff && [view.statusLabel.stringValue containsString:@"Open Notes to apply"];
     [view activationCompleted:@"exact" modelId:@""];
     BOOL exact = [view.statusLabel.stringValue containsString:@"Off."];
     [view.toggleButton performClick:nil]; reply(2, nil, @"Failed");
@@ -44,9 +44,17 @@ int main() {
     BOOL recovered = view.actionButton.hidden && [view.statusLabel.stringValue containsString:@"Ready"];
     [view setSearchMode:@"checking"];
     BOOL lockedNotActive = [view.statusLabel.stringValue containsString:@"opens"] || [view.statusLabel.stringValue containsString:@"open your vault"];
+    [view.toggleButton performClick:nil]; reply(5, catalog(NO), nil);
+    BOOL pendingWithoutSession = [view.statusLabel.stringValue containsString:@"Open Notes to apply"];
+    AfternoteSemanticSettings *reopened = [[AfternoteSemanticSettings alloc] initWithRunner:
+        ^(NSArray *args, AfternoteSemanticCompletion completion) { completion(catalog(NO), nil); }];
+    [reopened refresh]; [reopened refresh];
+    BOOL reopenedPending = [reopened.statusLabel.stringValue containsString:@"Open Notes to apply"];
+    [reopened activationCompleted:@"exact" modelId:@""];
+    reopenedPending = reopenedPending && [reopened.statusLabel.stringValue containsString:@"Off."];
     BOOL noDownloads = YES;
     for (NSDictionary *request in requests) if ([request[@"args"] containsObject:@"install"]) noDownloads = NO;
-    NSDictionary *checks = @{@"checkOnly":@(checkOnly), @"defaultOn":@(defaultOn), @"preparing":@(preparing),
+    NSDictionary *checks = @{@"reopenedPending":@(reopenedPending), @"pendingWithoutSession":@(pendingWithoutSession), @"checkOnly":@(checkOnly), @"defaultOn":@(defaultOn), @"preparing":@(preparing),
       @"indexing":@(indexing), @"active":@(active), @"duplicateBlocked":@(duplicateBlocked), @"staleIgnored":@(staleIgnored),
       @"disableApplied":@(disableApplied), @"exact":@(exact), @"failure":@(failure), @"malformedRejected":@(malformedRejected),
       @"retryActivation":@(retryActivation), @"recovered":@(recovered), @"lockedNotActive":@(lockedNotActive), @"noDownloads":@(noDownloads)};

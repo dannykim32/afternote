@@ -1532,7 +1532,10 @@ describe("SqliteMemory hybrid retrieval", () => {
       const running = new Promise<void>(resolve => {started = resolve;});
       model.embedQuery = async () => {started(); await blocked; return new Float32Array([1, 0]);};
       const pending = memory.recall(localVault, query, 5); await running;
+      const pendingUi = memory.searchNotes(localVault, {query, limit: 5});
+      await Bun.sleep(0);
       memory.disableSemanticSearch(localVault); release();
+      expect(await pendingUi).toMatchObject({results: [], nextCursor: null});
       expect(await pending).toEqual([]);
       expect(memory.derivedIndexStatus(localVault).state).toBe("disabled");
       expect(await memory.recall(localVault, query, 5)).toEqual([]);

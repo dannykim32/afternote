@@ -775,6 +775,7 @@ export class SqliteMemory implements Memory {
     semanticTimeoutMs: number,
   ): Promise<SearchNotesExecution> {
     if (this.#retrievalMode === "hybrid" && this.#embeddingModel) {
+      const model = this.#embeddingModel;
       this.#assertVault(vault);
       if (input.query.length > MAX_RECALL_QUERY_CHARACTERS) {
         throw new MemoryError(
@@ -805,7 +806,7 @@ export class SqliteMemory implements Memory {
           MINIMUM_EXPLORATORY_SEARCH_SIMILARITY,
         ),
       );
-      if (this.#closed) return { results: [], nextCursor: null, searchMode: "degraded" };
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], nextCursor: null, searchMode: this.#embeddingModel ? "indexing" : "exact" };
       const temporal = this.#queryTemporalAnnotations(input.query);
       const lexicalIds = temporal.length === 0 && !this.#embeddingModel.reranker
         ? new Set(this.#allLexicalResults(vault, input.query).map((result) => result.note.id))
