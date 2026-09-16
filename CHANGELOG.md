@@ -6,15 +6,33 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-alpha.26 - 2026-09-15
+
 ### Added
 
-- Install optional local semantic search from Settings with download/verification progress,
-  retry, and indexing status. Activates for Notes and connected tools without restarting
-  an authenticated vault or changing saved notes. Locked vaults retain normal authentication.
+- Enable local search by meaning from Settings with one explicit download, verification,
+  retry, and indexing status. The approximately 375 MB search bundle serves Notes and
+  connected AI tools; processing stays local after installation.
+- Combine semantic candidate retrieval with local relevance scoring so Notes and connected
+  tools can find saved notes without requiring the original wording.
 
 ### Fixed
 
+- Keep incidental keyword matches from hiding semantic results in Notes search.
+- Preserve strong semantic matches when relevance scoring favors repetitive distractors.
+- Reject stale search results after edits, deletion, vault closure, or model replacement,
+  including query-inference failure paths.
 - Keep semantic-install command output machine-readable for the native app.
+
+### Beta limitations
+
+- Search can miss a relevant note or return related context that does not answer the question.
+  Returned notes include their original citations; relevance scores are not answer guarantees.
+- Initial indexing and the first search after restart take longer than subsequent searches.
+  Exact search remains available when authorized during indexing or semantic-search failure.
+
+Semantic search remains opt-in. See [beta readiness](docs/BETA_READINESS.md) for the
+measured limitations and acceptance scope.
 
 ## 2.0.0-alpha.25 - 2026-09-15
 
