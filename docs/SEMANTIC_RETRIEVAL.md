@@ -1,5 +1,7 @@
 # Local semantic retrieval improvement
 
+Current [measurements and remaining publication gates](evals/2026-09-15-reranked-recall/README.md).
+
 ## Product requirements
 
 Semantic recall is a core Afternote capability: users should find explicitly saved notes by

@@ -8,6 +8,14 @@ import { SqliteMemory } from "../apps/local/src/sqlite-memory";
 import { validCitation } from "../apps/local/src/recall-eval";
 import type { TextEmbeddingModel } from "../apps/local/src/retrieval";
 
+export function verifySearchArtifacts(directory: string): void {
+  // The current allowlist covers both embedding and reranking artifacts.
+  for (const [name, expected] of Object.entries(SEMANTIC_MODELS.balanced.files)) {
+    const bytes = readFileSync(resolve(directory, name));
+    if (bytes.length !== expected.bytes || createHash("sha256").update(bytes).digest("hex") !== expected.sha256) throw new Error(`Model verification failed: ${name}`);
+  }
+}
+
 export async function evaluateSemanticRetrieval(directory: string, version: "v1" | "v2" | "v3", output: string, baseline = false) {
   const fixturePath = new URL(`./fixtures/semantic-recall-validation-${version}.json`, import.meta.url);
   const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as {
@@ -15,11 +23,7 @@ export async function evaluateSemanticRetrieval(directory: string, version: "v1"
     calibration?: Array<{query: string; expected: string | null; kind: string}>;
     evaluation: Array<{query: string; expected: string | null; kind: string}>;
   };
-  // The current allowlist covers both embedding and reranking artifacts.
-  for (const [name, expected] of Object.entries(SEMANTIC_MODELS.balanced.files)) {
-    const bytes = readFileSync(resolve(directory, name));
-    if (bytes.length !== expected.bytes || createHash("sha256").update(bytes).digest("hex") !== expected.sha256) throw new Error(`Model verification failed: ${name}`);
-  }
+  verifySearchArtifacts(directory);
   const raw = new TransformersTextEmbeddingModel({ profile: SEMANTIC_MODELS.balanced, localModelPath: directory, cacheDirectory: directory, allowRemoteModels: false });
   const model: TextEmbeddingModel = {
     descriptor: raw.descriptor, minimumSimilarity: raw.minimumSimilarity, uiMinimumSimilarity: raw.uiMinimumSimilarity,

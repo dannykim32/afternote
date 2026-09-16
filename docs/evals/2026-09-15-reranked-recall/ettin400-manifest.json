@@ -1,0 +1,50 @@
+{
+  "id": "cross-encoder/ettin-reranker-400m-v1",
+  "revision": "5dca36282a5d85f368d2544002513a29159b4c9e",
+  "files": {
+    "config.json": {
+      "bytes": 2165,
+      "sha256": "f4ef5a3ddcf2b856292caa74d655738001e1cf59c5abccde1cc20ef73ebe7042"
+    },
+    "tokenizer.json": {
+      "bytes": 3583327,
+      "sha256": "28c5e078e4c52aa37cf0e6de1a212878f3dbd58dd1c70466298efe0b6b86db35"
+    },
+    "tokenizer_config.json": {
+      "bytes": 488,
+      "sha256": "2b85302525d8c528a9e1fbaea2733472bd00d4755eae881441c8c52b90e2d600"
+    },
+    "onnx/model_qint8_arm64.onnx": {
+      "bytes": 397525673,
+      "sha256": "3bdb2a2e93334a52dab7de123649b4f369cd92d27af77ba1dd4b6a62a523f92a"
+    },
+    "1_Pooling/config.json": {
+      "bytes": 90,
+      "sha256": "3025df12a1b175b53c881060f91cf18728671aeea841112a12e020c7540307b9"
+    },
+    "2_Dense/config.json": {
+      "bytes": 230,
+      "sha256": "efed5589efa2d56acd228ed85f061faf0d1096aa5af4f7ea7c67b71c1c882f0f"
+    },
+    "2_Dense/model.safetensors": {
+      "bytes": 4194392,
+      "sha256": "c8f99555ed4aad347dca99afeb5609ba2f803c0b54592a9f3ef26ad60ac9d4c2"
+    },
+    "3_LayerNorm/config.json": {
+      "bytes": 25,
+      "sha256": "f257620e9b8fed6da184309b188662a7a153f36af03f31a93bffb93b61d899d6"
+    },
+    "3_LayerNorm/model.safetensors": {
+      "bytes": 8344,
+      "sha256": "c3bc9839299b6c8b7d473279ef9e1ec1a5d70d63581383b963e51df692676817"
+    },
+    "4_Dense/config.json": {
+      "bytes": 214,
+      "sha256": "eb4032084d47416651c36376da0c406c360abc6f8ed847be46b19f33be6f9187"
+    },
+    "4_Dense/model.safetensors": {
+      "bytes": 4252,
+      "sha256": "83ab91e7f5f697783a49c5864bd552844fa06b5dc6b80e795823c2a5e932b311"
+    }
+  }
+}

@@ -10,8 +10,10 @@ Model-choice/layout revision baseline: `31d83fd`.
   removed from the native UI. The current development bundle is EmbeddingGemma q4 plus a
   local Ettin reranker, about 375 MB total. Download size is not memory use or a quality guarantee.
 - Only the explicit enable action installs and selects the engine. Opening Settings never
-  downloads it. Existing installations remain active until the user requests the upgrade.
-  Installation and verification failures leave the previous selection intact.
+  downloads it. The published Alpha 25 Light installation remains active until the user requests the upgrade.
+  Installation and verification failures leave the previous selection intact. Earlier development
+  Balanced snapshots without the reranker need the explicit repair action before this candidate
+  considers them ready; exact search remains available. They were never published installations.
 - The shared local model serves both Notes search and connected-tool Recall. Agent-written
   search metadata is a separate feature and is not included here.
 - Show checking, downloading/verifying, installed, indexing, active, and retryable failure states.
