@@ -94,3 +94,18 @@ Do not restore a file whose provenance you do not trust.
 This is alpha software. It has automated security tests and internal adversarial review,
 but it is not represented as independently audited, appropriate for regulated data, or
 free of vulnerabilities. Use [SECURITY.md](../SECURITY.md) for private reporting.
+
+### Owner request replay protection
+
+The native owner client numbers requests monotonically on each XPC connection. The worker
+requires a positive safe integer and rejects a number at or below that connection's last
+accepted number before dispatch. One high-water mark is retained across vault lock/unlock
+until the trusted gateway reports disconnect. It has no time expiry or per-day request quota.
+The native serial send queue resets the counter only when replacing the XPC connection.
+Request UUIDs correlate replies; they do not authorize operations. A new connection has no
+inherited Library/inspection session or pending approval. All privileged actions retain their
+existing scope and fresh, exact-target, single-use owner-presence requirements.
+
+The worker bounds the number of tracked owner connections. Existing connections remain
+usable when that bound is reached; disconnect releases the corresponding entry. This avoids
+ordinary search progress checks consuming a global cache and blocking lock/unlock/revocation.

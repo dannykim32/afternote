@@ -6,6 +6,23 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.4 - 2026-09-16
+
+### Fixed
+
+- Keep Notes, unlock and revocation available after sustained search-status polling. Replace
+  the global 1,024-request owner replay cache with bounded per-connection sequence tracking.
+  Repeated and older requests remain rejected without a daily request limit.
+
+### Verification
+
+- Require native XPC integration in the release pipeline, including thousands of progress
+  checks followed by revocation, blocked connector access, lock/unlock and preserved notes.
+  The isolated test gateway simulates approval; physical owner-presence acceptance remains
+  a separate check on the installed candidate.
+
+The affected-Mac semantic recall misses remain under investigation.
+
 ## 2.0.0-beta.3 - 2026-09-16
 
 ### Fixed

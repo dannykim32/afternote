@@ -23,6 +23,7 @@ typedef BOOL (^AfternoteLifecycleTransitionValidator)(
   NSString *_service;
   dispatch_queue_t _connectionQueue;
   NSUInteger _connectionGeneration;
+  uint64_t _requestSequence;
   NSUInteger _disconnectGenerationReported;
   AfternoteBrokerResultValidator _resultValidator;
   AfternoteBrokerErrorValidator _errorValidator;

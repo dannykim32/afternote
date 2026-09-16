@@ -85,3 +85,18 @@ mechanism; acceptance on the Mac that reported the hour-long status remains nece
   the actual query arguments and signed connector requests. Do not claim that an empty
   search proves no note exists or that notes are private to the connector that saved them.
   Confirm the affected Mac's runtime version before treating local fixture success as a fix.
+
+## Beta 3 sustained-use failure (baseline `89b3c2f`)
+
+- Normal two-second search-status polling must remain available beyond 1,024 requests.
+  Owner replay defense must stay bounded without a global daily request quota or accepting
+  old/repeated requests after eviction, time expiry, or vault lock/unlock.
+- After sustained polling, Notes must still open and read saved notes. Direct connector
+  revocation must request fresh approval, reject subsequent actual connector reads/writes,
+  preserve access for unrelated connectors, and remain revoked after refresh.
+- Locked-state status checks must not prevent a subsequent approved unlock and Notes reopen.
+- Exercise the native owner client's actual XPC transport and encrypted broker in an isolated
+  fixture, as well as a deterministic clock-advanced worker regression. Simulated presence is
+  not evidence of physical Touch ID acceptance on the affected Mac.
+- Make the native gateway integration suite a required local release gate. Keep the prior
+  Beta 3 installer immutable. No announcement while affected-Mac acceptance remains open.

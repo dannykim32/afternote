@@ -24,7 +24,7 @@ describe("broker request policy", () => {
     for (const role of ["owner-control", "memory-client"] as const) {
       expect(brokerDispatchTarget("health", role)).toBe("health");
       expect(brokerRequestAdmission("health", role)).toEqual({
-        consumeOwnerRequestId: false, checkRecovery: false, requireUnlockedVault: false,
+        consumeOwnerSequence: false, checkRecovery: false, requireUnlockedVault: false,
       });
     }
   });
@@ -34,7 +34,7 @@ describe("broker request policy", () => {
     expectRoleDenied(method, "owner-control");
     for (const role of ["owner-control", "memory-client"] as const) {
       expect(brokerRequestAdmission(method, role)).toEqual({
-        consumeOwnerRequestId: false, checkRecovery: true, requireUnlockedVault: true,
+        consumeOwnerSequence: false, checkRecovery: true, requireUnlockedVault: true,
       });
     }
   });
@@ -47,7 +47,7 @@ describe("broker request policy", () => {
     expectRoleDenied(method, "memory-client");
     for (const role of ["owner-control", "memory-client"] as const) {
       expect(brokerRequestAdmission(method, role)).toEqual({
-        consumeOwnerRequestId: role === "owner-control",
+        consumeOwnerSequence: role === "owner-control",
         checkRecovery: !method.startsWith("recovery."),
         requireUnlockedVault: !method.startsWith("recovery.") && !method.startsWith("lifecycle."),
       });
@@ -68,13 +68,13 @@ describe("broker request policy", () => {
 
   it("retains namespace admission for unknown methods without admitting a route", () => {
     expect(brokerRequestAdmission("owner.unknown", "owner-control")).toEqual({
-      consumeOwnerRequestId: true, checkRecovery: true, requireUnlockedVault: true,
+      consumeOwnerSequence: true, checkRecovery: true, requireUnlockedVault: true,
     });
     expect(brokerRequestAdmission("lifecycle.unknown", "owner-control")).toEqual({
-      consumeOwnerRequestId: true, checkRecovery: true, requireUnlockedVault: false,
+      consumeOwnerSequence: true, checkRecovery: true, requireUnlockedVault: false,
     });
     expect(brokerRequestAdmission("recovery.unknown", "owner-control")).toEqual({
-      consumeOwnerRequestId: true, checkRecovery: false, requireUnlockedVault: false,
+      consumeOwnerSequence: true, checkRecovery: false, requireUnlockedVault: false,
     });
   });
 });

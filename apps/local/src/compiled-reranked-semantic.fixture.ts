@@ -1,3 +1,4 @@
+import { nextOwnerSequence } from "./owner-request-test-support";
 import {createHash, generateKeyPairSync, randomBytes, randomUUID, sign} from "node:crypto";
 import {canonicalBrokerTranscript} from "./vault-broker";
 import {readFileSync} from "node:fs";
@@ -19,7 +20,7 @@ const broker = new VaultBrokerWorker({ applicationVersion: "compiled-semantic-fi
 const connection = {connectionId: randomUUID(), peerPid: 51900};
 async function wire(peerRole: "owner-control" | "memory-client", peer: {connectionId: string; peerPid: number}, method: string, params: Record<string, unknown>) {
   let result = JSON.parse(await broker.handleSerialized(JSON.stringify({kind: "client", peerRole, ...peer,
-    payload: {protocolVersion: 1, requestId: randomUUID(), method, params}})));
+    payload: {protocolVersion: 1, ...(peerRole === "owner-control" ? { sequence: nextOwnerSequence(peer) } : {}), requestId: randomUUID(), method, params}})));
   if (result.ownerPresenceChallenge) result = JSON.parse(await broker.handleSerialized(JSON.stringify({kind: "owner-presence",
     peerRole, ...peer, payload: {challengeId: result.ownerPresenceChallenge.challengeId, approved: true, outcome: "approved"}})));
   if (!result.ok) throw new Error(JSON.stringify(result.error));

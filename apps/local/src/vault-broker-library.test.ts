@@ -1,3 +1,4 @@
+import { nextOwnerSequence } from "./owner-request-test-support";
 /* eslint-disable @typescript-eslint/no-explicit-any -- public protocol fixtures decode JSON */
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -1135,7 +1136,7 @@ async function beginRequest(
     kind: "client",
     peerRole,
     ...connection,
-    payload: { protocolVersion: 1, requestId: randomUUID(), method, params },
+    payload: { protocolVersion: 1, ...(peerRole === "owner-control" ? { sequence: nextOwnerSequence(connection) } : {}), requestId: randomUUID(), method, params },
   })));
 }
 

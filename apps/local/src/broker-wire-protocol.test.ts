@@ -78,3 +78,18 @@ describe("broker wire protocol", () => {
       .toBe("first second third");
   });
 });
+
+
+describe("owner-control sequence protocol", () => {
+  it("requires a positive exactly representable sequence only for owner requests", () => {
+    const request = { protocolVersion: 1, requestId: randomUUID(), method: "lifecycle.status", params: {} };
+    for (const sequence of [1, Number.MAX_SAFE_INTEGER]) {
+      expect(parseBrokerRequest({ ...request, sequence }, "owner-control").sequence).toBe(sequence);
+    }
+    for (const sequence of [undefined, null, 0, -1, 1.5, "1", Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseBrokerRequest({ ...request, sequence }, "owner-control")).toThrow(BrokerProtocolError);
+    }
+    expect(() => parseBrokerRequest(request, "owner-control")).toThrow(BrokerProtocolError);
+    expect(() => parseBrokerRequest({ ...request, sequence: 1 }, "memory-client")).toThrow(BrokerProtocolError);
+  });
+});

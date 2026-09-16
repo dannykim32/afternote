@@ -39,7 +39,7 @@ also have focused modules alongside these entry points.
 ## Invariants to preserve
 
 - Dispatch has two ordered phases. The worker first consumes protected Owner
-  request IDs, checks recovery, and checks vault-lock admission. Only then does it
+  request sequences, checks recovery, and checks vault-lock admission. Only then does it
   resolve an exact method and trusted-role route. Unknown methods retain their
   namespace admission requirements; a recovery/lifecycle exemption does not grant
   a callable route. Handlers retain all session, scope, and fresh-approval checks.

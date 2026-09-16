@@ -176,15 +176,15 @@ describeMacos("launchd-owned vault broker gateway", () => {
     });
     const searchStateSmoke = Bun.spawnSync([
       ownerControlPath,
-      "--search-state-smoke",
+      "--notes-retrieval-smoke",
     ], { stdout: "pipe", stderr: "pipe" });
     expect(
       searchStateSmoke.exitCode,
       searchStateSmoke.stderr.toString(),
     ).toBe(0);
     expect(JSON.parse(searchStateSmoke.stdout.toString())).toEqual({
-      newSearchReplacedResults: true,
-      pageAppendPreservedResults: true,
+      staleIgnored: true, currentApplied: true, draftsPreserved: true, onePageRequest: true,
+      lockCleared: true, staleErrorIgnored: true, freshSession: true,
     });
     const revisionNavigationSmoke = Bun.spawnSync([
       ownerControlPath,
@@ -827,6 +827,21 @@ describeMacos("launchd-owned vault broker gateway", () => {
       await stdioClient.close();
     }
 
+    const polling = Bun.spawnSync([ownerControlPath, "--owner-polling-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(polling.exitCode, polling.stderr.toString()).toBe(0);
+    expect(JSON.parse(polling.stdout.toString())).toMatchObject({ polls: 2048, revokedAfterPolling: true });
+    expect(polling.stdout.toString()).toContain("spruce-992");
+    expect(() => VaultBrokerMemoryClient.activate("codex", {
+      service, clientStatePath: join(directory, "codex-client.json"), signer, codeRequirement: gatewayCodeRequirement,
+    })).toThrow();
+    // Other connectors retain their authority until the subsequent global vault lock.
+    expect((await claudeMemory.recall(claudeMemory.vault, "cedar", 5)).length).toBeGreaterThan(0);
+    const lockedPolling = Bun.spawnSync([ownerControlPath, "--owner-locked-polling-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(lockedPolling.exitCode, lockedPolling.stderr.toString()).toBe(0);
+    expect(JSON.parse(lockedPolling.stdout.toString())).toMatchObject({ polls: 2048, unlockedAfterPolling: true });
+    expect(lockedPolling.stdout.toString()).toContain("spruce-992");
+    const beforeDuplicate = vaultBrokerHealth({ service, codeRequirement: gatewayCodeRequirement });
+
     const legacyLock = join(directory, "dev.afternote.vault-broker.lock");
     const legacySocket = join(directory, "broker.sock");
     writeFileSync(legacyLock, "replaceable\n");
@@ -862,9 +877,9 @@ describeMacos("launchd-owned vault broker gateway", () => {
       service,
       codeRequirement: gatewayCodeRequirement,
     })).toMatchObject({
-      bootId: recoveredUnlockedResult.epoch,
+      bootId: beforeDuplicate.bootId,
     });
-  }, 45_000);
+  }, 120_000);
 
   it("routes packaged afternote restore through its signed native owner-control XPC boundary", async () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-broker-restore-xpc-"));

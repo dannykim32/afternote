@@ -137,7 +137,7 @@ const OWNER_INSPECTION_SCOPES = [
   "owner.inspect_audit",
 ] as const;
 type OwnerInspectionScope = (typeof OWNER_INSPECTION_SCOPES)[number];
-const MAX_TRACKED_OWNER_REQUESTS = 1_024;
+const MAX_OWNER_CONNECTIONS = 1_024;
 const MAX_PENDING_OWNER_CHALLENGES = 32;
 const LIBRARY_DELETE_CHALLENGE_TTL_MS = 30_000;
 const MAX_LIBRARY_RESPONSE_BYTES = 768 * 1_024;
@@ -377,7 +377,7 @@ export class VaultBrokerWorker {
   readonly #pendingPresence = new OwnerPresenceCoordinator<PendingPresence>();
   readonly #ownerSessions = new Map<string, OwnerInspectionSession>();
   readonly #librarySessions = new Map<string, LibrarySession>();
-  readonly #ownerRequestIds = new Map<string, number>();
+  readonly #ownerSequences = new Map<string, number>();
   readonly #activationTtls = new Map<string, number>();
   readonly #tracedAuditEvents = new Set<string>();
   #authorization: VaultBrokerAuthorization | undefined;
@@ -474,6 +474,7 @@ export class VaultBrokerWorker {
       }
       if (gateway.kind === "connection-closed") {
         this.#authorization?.disconnectTransport(gateway.connectionId, gateway.peerPid);
+        this.#ownerSequences.delete(ownerSessionKey(binding(gateway)));
         this.#ownerSessions.delete(ownerSessionKey(binding(gateway)));
         this.#librarySessions.delete(ownerSessionKey(binding(gateway)));
         for (const [challengeId, pending] of this.#pendingPresence) {
@@ -495,7 +496,7 @@ export class VaultBrokerWorker {
         }
         return JSON.stringify({ ok: true });
       }
-      request = parseBrokerRequest(gateway.payload);
+      request = parseBrokerRequest(gateway.payload, gateway.peerRole);
       this.#prunePendingOwnerChallenges();
       const response = await this.#handleRequest(
         request,
@@ -579,7 +580,7 @@ export class VaultBrokerWorker {
       this.#pendingPresence.clear();
       this.#ownerSessions.clear();
       this.#librarySessions.clear();
-      this.#ownerRequestIds.clear();
+      this.#ownerSequences.clear();
       this.#activationTtls.clear();
       this.#vaultLifecycleLock.release();
     }
@@ -823,8 +824,8 @@ export class VaultBrokerWorker {
     peerRole: GatewayPeerRole,
   ): Promise<string> {
     const admission = brokerRequestAdmission(request.method, peerRole);
-    if (admission.consumeOwnerRequestId) {
-      this.#consumeOwnerRequestId(request.requestId);
+    if (admission.consumeOwnerSequence) {
+      this.#consumeOwnerSequence(request.sequence!, transportBinding);
     }
     if (admission.checkRecovery) {
       if (this.#pendingRecoveryChallengeId) {
@@ -2714,7 +2715,6 @@ export class VaultBrokerWorker {
         this.#ownerSessions.clear();
         this.#librarySessions.clear();
         this.#activationTtls.clear();
-        this.#ownerRequestIds.clear();
         this.#pendingPresence.clear();
         this.#lifecycleState = "locked";
         try {
@@ -3084,23 +3084,19 @@ export class VaultBrokerWorker {
     return this.#now?.() ?? Date.now();
   }
 
-  #consumeOwnerRequestId(requestId: string): void {
-    const now = this.#currentTime();
-    for (const [tracked, expiresAt] of this.#ownerRequestIds) {
-      if (expiresAt <= now) this.#ownerRequestIds.delete(tracked);
-    }
-    if (this.#ownerRequestIds.has(requestId)) {
+  #consumeOwnerSequence(sequence: number, transportBinding: BrokerTransportBinding): void {
+    const key = ownerSessionKey(transportBinding);
+    const previous = this.#ownerSequences.get(key);
+    if (previous !== undefined && sequence <= previous) {
       throw new BrokerProtocolError("replayed", "Owner-control request was replayed");
     }
-    if (this.#ownerRequestIds.size >= MAX_TRACKED_OWNER_REQUESTS) {
-      throw new BrokerProtocolError("rate_limited", "Owner-control replay window is full");
+    if (previous === undefined && this.#ownerSequences.size >= MAX_OWNER_CONNECTIONS) {
+      throw new BrokerProtocolError("rate_limited", "Too many owner-control connections");
     }
-    this.#ownerRequestIds.set(
-      requestId,
-      now + (this.#trustPath === "development-only"
-        ? DEVELOPMENT_OWNER_SESSION_MAX_TTL_MS
-        : OWNER_SESSION_MAX_TTL_MS),
-    );
+    // The gateway binds and orders requests on this live XPC connection. Retain one
+    // high-water mark until disconnect, including across vault lock/unlock. Never
+    // evict accepted requests by age or count and thereby make them replayable.
+    this.#ownerSequences.set(key, sequence);
   }
 
   async #completeOwnerPresence(gateway: GatewayEnvelope): Promise<string> {

@@ -5690,6 +5690,45 @@ int RunLibraryCleanupSmoke() {
       !serializedPlaintext ? 0 : 2;
 }
 
+// Real OwnerBrokerConnection -> XPC gateway -> encrypted worker. Available only
+// in the isolated test executable; owner approval is simulated by its test gateway.
+int RunOwnerControlPollingSmoke(BOOL locked) {
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+  auto request = ^NSDictionary *(NSString *method, NSDictionary *params) {
+    NSDictionary *result = nil;
+    NSDictionary *error = nil;
+    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error]) {
+      fprintf(stderr, "%s: %s\n", method.UTF8String, error.description.UTF8String);
+      return (NSDictionary *)nil;
+    }
+    return result;
+  };
+  NSDictionary *sessionParams = @{ @"requestedScopes" : @[ @"library.browse", @"library.search" ], @"ttlMs" : @900000 };
+  if (locked) {
+    if (request(@"lifecycle.lock", @{}) == nil) return 2;
+  } else if (request(@"library.session.begin", sessionParams) == nil) return 2;
+  for (NSUInteger poll = 0; poll < 2048; poll++) {
+    if (request(locked ? @"lifecycle.status" : @"library.refresh_search",
+                locked ? @{} : @{ @"reloadModel" : @NO }) == nil) return 2;
+  }
+  if (locked) {
+    if (request(@"lifecycle.unlock", @{}) == nil ||
+        request(@"library.session.begin", sessionParams) == nil) return 2;
+  }
+  NSDictionary *notes = request(@"library.browse", @{ @"view" : NSNull.null, @"limit" : @20, @"cursor" : NSNull.null });
+  if (notes == nil) return 2;
+  if (!locked) {
+    if (request(@"owner.connector_overview", @{}) == nil ||
+        request(@"owner.revoke_connector", @{ @"kind" : @"codex" }) == nil) return 2;
+  }
+  NSDictionary *output = @{ @"polls" : @2048, @"unlockedAfterPolling" : @(locked),
+                            @"revokedAfterPolling" : @(!locked), @"library" : notes };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
+  fwrite(data.bytes, 1, data.length, stdout);
+  fputc('\n', stdout);
+  return 0;
+}
+
 int RunProtocolSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 2;
@@ -5836,6 +5875,8 @@ int RunDiagnosticContractSmoke(const char *path) {
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--owner-polling-smoke") == 0) return RunOwnerControlPollingSmoke(NO);
+    if (argc == 2 && strcmp(argv[1], "--owner-locked-polling-smoke") == 0) return RunOwnerControlPollingSmoke(YES);
     if (argc == 2 && strcmp(argv[1], "--semantic-progress-smoke") == 0) {
       return RunSemanticProgressSmoke();
     }

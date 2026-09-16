@@ -16,6 +16,7 @@ export type GatewayEnvelope = {
 export type BrokerRequest = {
   protocolVersion: number;
   requestId: string;
+  sequence?: number;
   method: string;
   params: Record<string, unknown>;
 };
@@ -46,13 +47,18 @@ export function parseGatewayEnvelope(value: unknown): GatewayEnvelope {
   return envelope as GatewayEnvelope;
 }
 
-export function parseBrokerRequest(value: unknown): BrokerRequest {
-  assertExactObject(value, ["method", "params", "protocolVersion", "requestId"]);
+export function parseBrokerRequest(value: unknown, peerRole: GatewayPeerRole = "memory-client"): BrokerRequest {
+  assertExactObject(value, ["method", "params", "protocolVersion", "requestId",
+    ...(peerRole === "owner-control" ? ["sequence"] : [])]);
   const request = value as Record<string, unknown>;
   if (request.protocolVersion !== VAULT_BROKER_PROTOCOL_VERSION) {
     throw new BrokerProtocolError("unsupported_version", "Broker protocol version is invalid");
   }
   uuid(request.requestId, "request ID");
+  if (peerRole === "owner-control" &&
+    (!Number.isSafeInteger(request.sequence) || (request.sequence as number) <= 0)) {
+    throw new BrokerProtocolError("invalid_request", "Owner-control request sequence is invalid");
+  }
   if (typeof request.method !== "string" || !/^[a-z._]{1,64}$/.test(request.method)) {
     throw new BrokerProtocolError("invalid_request", "Broker method is invalid");
   }
