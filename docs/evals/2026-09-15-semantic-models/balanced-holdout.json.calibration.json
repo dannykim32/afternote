@@ -1,0 +1,527 @@
+{
+  "profile": "balanced",
+  "chosen": {
+    "threshold": 0.4,
+    "hitAt5": 0.9166666666666666,
+    "mrr": 0.9166666666666666,
+    "zeroResultRate": 1
+  },
+  "currentCalibration": {
+    "threshold": 0.3,
+    "supportedCases": 12,
+    "unsupportedCases": 8,
+    "hitAt5": 1,
+    "mrr": 1,
+    "zeroResultRate": 0.5,
+    "citationIntegrity": 1,
+    "p95Ms": 24.400290999999925,
+    "rows": [
+      {
+        "query": "Who can fix the slipping gears on my cycle?",
+        "expected": "cal-bike",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-bike",
+            "score": 1.0185350860238338
+          }
+        ],
+        "durationMs": 30.313791000000037
+      },
+      {
+        "query": "How can a visitor get online here?",
+        "expected": "cal-network",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-network",
+            "score": 1.0187101983818316
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.0174749046538634
+          },
+          {
+            "key": "cal-cabin",
+            "score": 1.0164879552019603
+          },
+          {
+            "key": "distractor-delivery",
+            "score": 1.0161748791426566
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0159106925216814
+          }
+        ],
+        "durationMs": 17.71875
+      },
+      {
+        "query": "Which ingredient swap makes the dessert safe for our guest?",
+        "expected": "cal-cake",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-cake",
+            "score": 1.0187853104568059
+          }
+        ],
+        "durationMs": 19.495666999999685
+      },
+      {
+        "query": "Why do we wait to send the next welcome message?",
+        "expected": "cal-events",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-events",
+            "score": 1.0179410312230128
+          }
+        ],
+        "durationMs": 20.544832999999926
+      },
+      {
+        "query": "Where is Pepper getting vaccinated?",
+        "expected": "cal-pet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-pet",
+            "score": 1.0206064402460249
+          }
+        ],
+        "durationMs": 17.008624999999938
+      },
+      {
+        "query": "How did we brighten the taste of the legume dish?",
+        "expected": "cal-soup",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-soup",
+            "score": 1.0190072830216246
+          },
+          {
+            "key": "cal-cake",
+            "score": 1.0161441089731218
+          }
+        ],
+        "durationMs": 21.70745799999986
+      },
+      {
+        "query": "Where is the little tool for tightening the photography bracket?",
+        "expected": "cal-tools",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-tools",
+            "score": 1.019573513754838
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.0168053870948155
+          },
+          {
+            "key": "eval-password",
+            "score": 1.0163147317069487
+          },
+          {
+            "key": "eval-long",
+            "score": 1.0158044080132087
+          },
+          {
+            "key": "eval-storage",
+            "score": 1.0149586585556507
+          }
+        ],
+        "durationMs": 20.49520799999982
+      },
+      {
+        "query": "What milestone makes a signup an activated account?",
+        "expected": "cal-metrics",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-metrics",
+            "score": 1.019410253575387
+          }
+        ],
+        "durationMs": 20.310083000000304
+      },
+      {
+        "query": "What proof do I need to get my travel costs paid back?",
+        "expected": "cal-receipts",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-receipts",
+            "score": 1.0197912347537497
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0164866282018188
+          }
+        ],
+        "durationMs": 24.400290999999925
+      },
+      {
+        "query": "Which detour gets us to the holiday house?",
+        "expected": "cal-cabin",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-cabin",
+            "score": 1.0171226790017407
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0165183086610114
+          }
+        ],
+        "durationMs": 20.36429199999975
+      },
+      {
+        "query": "Where can our group talk without disturbing readers?",
+        "expected": "cal-quiet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.0187131897608188
+          }
+        ],
+        "durationMs": 19.772042000000056
+      },
+      {
+        "query": "Why has my cooking herb turned yellow?",
+        "expected": "cal-garden",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-garden",
+            "score": 1.0178204093642422
+          }
+        ],
+        "durationMs": 17.834124999999858
+      },
+      {
+        "query": "What is the serial number of my telescope?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 19.936416999999892
+      },
+      {
+        "query": "Where did I store the scuba diving certificate?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-ticket",
+            "score": 1.0175136369161293
+          },
+          {
+            "key": "eval-password",
+            "score": 1.016341196199793
+          }
+        ],
+        "durationMs": 19.803750000000036
+      },
+      {
+        "query": "What are the instructions for changing the violin strings?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 21.147791999999754
+      },
+      {
+        "query": "Who is teaching our archery lesson?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 17.030083999999988
+      },
+      {
+        "query": "Which currency did we choose for the accounting ledger?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 21.105125000000044
+      },
+      {
+        "query": "How much is the swimming pool entry fee?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "distractor-membership",
+            "score": 1.0169222698289764
+          }
+        ],
+        "durationMs": 20.321957999999995
+      },
+      {
+        "query": "What is the order of planets in my astronomy worksheet?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "distractor-paper",
+            "score": 1.0164118107397861
+          }
+        ],
+        "durationMs": 19.5920000000001
+      },
+      {
+        "query": "Where does our choir rehearse?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.016831253424077
+          }
+        ],
+        "durationMs": 19.297958000000108
+      }
+    ]
+  },
+  "sweep": [
+    {
+      "threshold": 0.2,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.22,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.24,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.125
+    },
+    {
+      "threshold": 0.26,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.25
+    },
+    {
+      "threshold": 0.28,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.375
+    },
+    {
+      "threshold": 0.3,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.5
+    },
+    {
+      "threshold": 0.32,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.625
+    },
+    {
+      "threshold": 0.34,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.625
+    },
+    {
+      "threshold": 0.36,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.75
+    },
+    {
+      "threshold": 0.38,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "zeroResultRate": 0.875
+    },
+    {
+      "threshold": 0.4,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.42,
+      "hitAt5": 0.8333333333333334,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.44,
+      "hitAt5": 0.75,
+      "mrr": 0.75,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.46,
+      "hitAt5": 0.75,
+      "mrr": 0.75,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.48,
+      "hitAt5": 0.75,
+      "mrr": 0.75,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.5,
+      "hitAt5": 0.5833333333333334,
+      "mrr": 0.5833333333333334,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.52,
+      "hitAt5": 0.5,
+      "mrr": 0.5,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.54,
+      "hitAt5": 0.5,
+      "mrr": 0.5,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.56,
+      "hitAt5": 0.25,
+      "mrr": 0.25,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.58,
+      "hitAt5": 0.25,
+      "mrr": 0.25,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.6,
+      "hitAt5": 0.25,
+      "mrr": 0.25,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.62,
+      "hitAt5": 0.16666666666666666,
+      "mrr": 0.16666666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.64,
+      "hitAt5": 0.08333333333333333,
+      "mrr": 0.08333333333333333,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.66,
+      "hitAt5": 0.08333333333333333,
+      "mrr": 0.08333333333333333,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.68,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.7,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.72,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.74,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.76,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.78,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.8,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.82,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.84,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.86,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.88,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.9,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    }
+  ]
+}

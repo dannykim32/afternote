@@ -120,7 +120,7 @@ export async function validateSemanticModel(profileKey: string, modelDirectory: 
     }
     sample();
     const report = { profile: profile.key, descriptor: model.descriptor, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
-      measurements: { loadMs, indexingWallMs: firstQueryAt === undefined ? null : firstQueryAt - started - loadMs, indexInferenceMs, embeddedSlices: slices, sampledPeakRssMiB: peakRss / 1024 ** 2, elapsedSeconds: (performance.now() - started) / 1000 }, result };
+      measurements: { loadMs, setupAndIndexingWallMs: firstQueryAt === undefined ? null : firstQueryAt - started - loadMs, indexInferenceMs, embeddedSlices: slices, sampledPeakRssMiB: peakRss / 1024 ** 2, elapsedSeconds: (performance.now() - started) / 1000 }, result };
     await Bun.write(output, JSON.stringify(report, null, 2));
     console.log(JSON.stringify({ profile: profile.key, mode, output, measurements: report.measurements }));
     return report;

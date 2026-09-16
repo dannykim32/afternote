@@ -1,0 +1,1008 @@
+{
+  "profile": "balanced",
+  "descriptor": {
+    "id": "onnx-community/embeddinggemma-300m-ONNX:q4",
+    "revision": "5090578d9565bb06545b4552f76e6bc2c93e4a66:afternote-2",
+    "dimensions": 768
+  },
+  "runtime": {
+    "bun": "1.3.14",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "measurements": {
+    "loadMs": 632.2312499999999,
+    "setupAndIndexingWallMs": 1241.1190000000001,
+    "indexInferenceMs": 1213.2520860000006,
+    "embeddedSlices": 37,
+    "sampledPeakRssMiB": 626.421875,
+    "elapsedSeconds": 3.8052950410000004
+  },
+  "result": {
+    "corpusVersion": 1,
+    "corpusSha256": "45695ec1a15bbc80417bc69d373b1aaaa5d4b5c0a24458a1ebef1f15e7d70aad",
+    "gates": {
+      "supportedHitAt5": 1,
+      "supportedMrr": 0.9,
+      "unsupportedZeroResultRate": 1,
+      "citationIntegrity": 1
+    },
+    "chosenCalibration": {
+      "threshold": 0.4,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "zeroResultRate": 1
+    },
+    "currentCalibration": {
+      "threshold": 0.3,
+      "supportedCases": 12,
+      "unsupportedCases": 8,
+      "hitAt5": 1,
+      "mrr": 1,
+      "zeroResultRate": 0.5,
+      "citationIntegrity": 1,
+      "p95Ms": 24.400290999999925,
+      "rows": [
+        {
+          "query": "Who can fix the slipping gears on my cycle?",
+          "expected": "cal-bike",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-bike",
+              "score": 1.0185350860238338
+            }
+          ],
+          "durationMs": 30.313791000000037
+        },
+        {
+          "query": "How can a visitor get online here?",
+          "expected": "cal-network",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-network",
+              "score": 1.0187101983818316
+            },
+            {
+              "key": "distractor-membership",
+              "score": 1.0174749046538634
+            },
+            {
+              "key": "cal-cabin",
+              "score": 1.0164879552019603
+            },
+            {
+              "key": "distractor-delivery",
+              "score": 1.0161748791426566
+            },
+            {
+              "key": "eval-delivery",
+              "score": 1.0159106925216814
+            }
+          ],
+          "durationMs": 17.71875
+        },
+        {
+          "query": "Which ingredient swap makes the dessert safe for our guest?",
+          "expected": "cal-cake",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-cake",
+              "score": 1.0187853104568059
+            }
+          ],
+          "durationMs": 19.495666999999685
+        },
+        {
+          "query": "Why do we wait to send the next welcome message?",
+          "expected": "cal-events",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-events",
+              "score": 1.0179410312230128
+            }
+          ],
+          "durationMs": 20.544832999999926
+        },
+        {
+          "query": "Where is Pepper getting vaccinated?",
+          "expected": "cal-pet",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-pet",
+              "score": 1.0206064402460249
+            }
+          ],
+          "durationMs": 17.008624999999938
+        },
+        {
+          "query": "How did we brighten the taste of the legume dish?",
+          "expected": "cal-soup",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-soup",
+              "score": 1.0190072830216246
+            },
+            {
+              "key": "cal-cake",
+              "score": 1.0161441089731218
+            }
+          ],
+          "durationMs": 21.70745799999986
+        },
+        {
+          "query": "Where is the little tool for tightening the photography bracket?",
+          "expected": "cal-tools",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-tools",
+              "score": 1.019573513754838
+            },
+            {
+              "key": "distractor-bike",
+              "score": 1.0168053870948155
+            },
+            {
+              "key": "eval-password",
+              "score": 1.0163147317069487
+            },
+            {
+              "key": "eval-long",
+              "score": 1.0158044080132087
+            },
+            {
+              "key": "eval-storage",
+              "score": 1.0149586585556507
+            }
+          ],
+          "durationMs": 20.49520799999982
+        },
+        {
+          "query": "What milestone makes a signup an activated account?",
+          "expected": "cal-metrics",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-metrics",
+              "score": 1.019410253575387
+            }
+          ],
+          "durationMs": 20.310083000000304
+        },
+        {
+          "query": "What proof do I need to get my travel costs paid back?",
+          "expected": "cal-receipts",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-receipts",
+              "score": 1.0197912347537497
+            },
+            {
+              "key": "eval-ticket",
+              "score": 1.0164866282018188
+            }
+          ],
+          "durationMs": 24.400290999999925
+        },
+        {
+          "query": "Which detour gets us to the holiday house?",
+          "expected": "cal-cabin",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-cabin",
+              "score": 1.0171226790017407
+            },
+            {
+              "key": "eval-delivery",
+              "score": 1.0165183086610114
+            }
+          ],
+          "durationMs": 20.36429199999975
+        },
+        {
+          "query": "Where can our group talk without disturbing readers?",
+          "expected": "cal-quiet",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-quiet",
+              "score": 1.0187131897608188
+            }
+          ],
+          "durationMs": 19.772042000000056
+        },
+        {
+          "query": "Why has my cooking herb turned yellow?",
+          "expected": "cal-garden",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "cal-garden",
+              "score": 1.0178204093642422
+            }
+          ],
+          "durationMs": 17.834124999999858
+        },
+        {
+          "query": "What is the serial number of my telescope?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.936416999999892
+        },
+        {
+          "query": "Where did I store the scuba diving certificate?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "eval-ticket",
+              "score": 1.0175136369161293
+            },
+            {
+              "key": "eval-password",
+              "score": 1.016341196199793
+            }
+          ],
+          "durationMs": 19.803750000000036
+        },
+        {
+          "query": "What are the instructions for changing the violin strings?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 21.147791999999754
+        },
+        {
+          "query": "Who is teaching our archery lesson?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 17.030083999999988
+        },
+        {
+          "query": "Which currency did we choose for the accounting ledger?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 21.105125000000044
+        },
+        {
+          "query": "How much is the swimming pool entry fee?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "distractor-membership",
+              "score": 1.0169222698289764
+            }
+          ],
+          "durationMs": 20.321957999999995
+        },
+        {
+          "query": "What is the order of planets in my astronomy worksheet?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "distractor-paper",
+              "score": 1.0164118107397861
+            }
+          ],
+          "durationMs": 19.5920000000001
+        },
+        {
+          "query": "Where does our choir rehearse?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "cal-quiet",
+              "score": 1.016831253424077
+            }
+          ],
+          "durationMs": 19.297958000000108
+        }
+      ]
+    },
+    "currentEvaluation": {
+      "threshold": 0.3,
+      "supportedCases": 16,
+      "unsupportedCases": 8,
+      "hitAt5": 1,
+      "mrr": 0.9375,
+      "zeroResultRate": 0.75,
+      "citationIntegrity": 1,
+      "p95Ms": 26.46199999999999,
+      "rows": [
+        {
+          "query": "How should I protect the breakable dishes during relocation?",
+          "expected": "eval-moving",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-moving",
+              "score": 1.0194010290343227
+            },
+            {
+              "key": "distractor-network",
+              "score": 1.0166611052304717
+            },
+            {
+              "key": "eval-storage",
+              "score": 1.016098818872948
+            }
+          ],
+          "durationMs": 17.59137499999997
+        },
+        {
+          "query": "Where is my proof that I can enter the music show?",
+          "expected": "eval-ticket",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-ticket",
+              "score": 1.0184817754860922
+            },
+            {
+              "key": "eval-application",
+              "score": 1.0162018009192835
+            }
+          ],
+          "durationMs": 18.56354199999987
+        },
+        {
+          "query": "How do I stop paying for the shared workspace?",
+          "expected": "eval-cancel",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-cancel",
+              "score": 1.0199802330026015
+            },
+            {
+              "key": "eval-long",
+              "score": 1.0164939739653829
+            }
+          ],
+          "durationMs": 20.696917000000212
+        },
+        {
+          "query": "Which story should directors hear first in our slide deck?",
+          "expected": "eval-presentation",
+          "kind": "paraphrase",
+          "rank": 2,
+          "actual": [
+            {
+              "key": "distractor-presentation",
+              "score": 1.0170933175647854
+            },
+            {
+              "key": "eval-presentation",
+              "score": 1.0163842790827498
+            }
+          ],
+          "durationMs": 27.78774999999996
+        },
+        {
+          "query": "How do I stop my painting sheets from warping?",
+          "expected": "eval-storage",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-storage",
+              "score": 1.0185369545009981
+            },
+            {
+              "key": "eval-laundry",
+              "score": 1.0165523788297404
+            },
+            {
+              "key": "cal-garden",
+              "score": 1.0162573023173957
+            }
+          ],
+          "durationMs": 26.46199999999999
+        },
+        {
+          "query": "Who signs off on changing the dimensions of our shipping cartons?",
+          "expected": "eval-supplier",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-supplier",
+              "score": 1.0193635740563298
+            }
+          ],
+          "durationMs": 21.64079099999981
+        },
+        {
+          "query": "Which houseplant handles my being away without frequent watering?",
+          "expected": "eval-plant",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-plant",
+              "score": 1.0185134813838597
+            },
+            {
+              "key": "cal-garden",
+              "score": 1.0172370410188116
+            }
+          ],
+          "durationMs": 18.288833000000068
+        },
+        {
+          "query": "How do I clean the bed cover without making it smaller?",
+          "expected": "eval-laundry",
+          "kind": "paraphrase",
+          "rank": 2,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 2.0163934426229506
+            },
+            {
+              "key": "eval-laundry",
+              "score": 1.0184843245147943
+            }
+          ],
+          "durationMs": 19.112333000000035
+        },
+        {
+          "query": "Where is the emergency way back into my credential vault?",
+          "expected": "eval-password",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-password",
+              "score": 1.0174319244435057
+            },
+            {
+              "key": "eval-ticket",
+              "score": 1.0166014499627782
+            },
+            {
+              "key": "cal-network",
+              "score": 1.015818405315652
+            }
+          ],
+          "durationMs": 19.043749999999818
+        },
+        {
+          "query": "What must accompany the artist program submission?",
+          "expected": "eval-application",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-application",
+              "score": 1.0182429657097833
+            },
+            {
+              "key": "eval-contract",
+              "score": 1.0164855371370674
+            }
+          ],
+          "durationMs": 16.37262499999997
+        },
+        {
+          "query": "How should beginners learn to handle customers on the phone?",
+          "expected": "eval-training",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-training",
+              "score": 1.0180332460492103
+            },
+            {
+              "key": "distractor-presentation",
+              "score": 1.0162716950821824
+            }
+          ],
+          "durationMs": 19.773791000000074
+        },
+        {
+          "query": "Where should a parcel driver enter our maker space?",
+          "expected": "eval-delivery",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-delivery",
+              "score": 1.0186715209995973
+            },
+            {
+              "key": "distractor-delivery",
+              "score": 1.0169639990309385
+            },
+            {
+              "key": "eval-supplier",
+              "score": 1.0162683488199167
+            },
+            {
+              "key": "distractor-paper",
+              "score": 1.01584309682538
+            },
+            {
+              "key": "eval-moving",
+              "score": 1.015581434042761
+            }
+          ],
+          "durationMs": 18.116708000000017
+        },
+        {
+          "query": "Can we reuse the commissioned drawings beyond the leaflet?",
+          "expected": "eval-contract",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-contract",
+              "score": 1.018636931443429
+            },
+            {
+              "key": "distractor-paper",
+              "score": 1.0159104931459444
+            },
+            {
+              "key": "eval-storage",
+              "score": 1.0156324790732758
+            }
+          ],
+          "durationMs": 19.24883299999965
+        },
+        {
+          "query": "Where does the litter-picking team assemble?",
+          "expected": "eval-meeting",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-meeting",
+              "score": 1.0189314506363718
+            },
+            {
+              "key": "eval-delivery",
+              "score": 1.0161784274569101
+            }
+          ],
+          "durationMs": 17.50258299999996
+        },
+        {
+          "query": "What should I clean first when the espresso maker leaks?",
+          "expected": "eval-drip",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-drip",
+              "score": 1.019845707352156
+            }
+          ],
+          "durationMs": 18.918666999999914
+        },
+        {
+          "query": "Where is the backup electrical part for the pottery oven?",
+          "expected": "eval-long",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 1.0186102301225608
+            },
+            {
+              "key": "eval-moving",
+              "score": 1.0163609672356788
+            },
+            {
+              "key": "distractor-network",
+              "score": 1.0158924881439437
+            }
+          ],
+          "durationMs": 19.687582999999904
+        },
+        {
+          "query": "What is our boat's registered hull number?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.23554200000035
+        },
+        {
+          "query": "Where are the chess tournament score sheets?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 18.03991700000006
+        },
+        {
+          "query": "What altitude did we reach on the balloon flight?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 20.333916000000045
+        },
+        {
+          "query": "Who repaired the antique grandfather clock?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 17.184457999999722
+        },
+        {
+          "query": "Which station broadcasts the late-night jazz program?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.433542000000216
+        },
+        {
+          "query": "What is the combination to the rifle safe?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 1.016701735928166
+            }
+          ],
+          "durationMs": 19.22945800000025
+        },
+        {
+          "query": "How many medals did our fencing club win?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.73716599999989
+        },
+        {
+          "query": "Where are the instructions for tuning the harp?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 1.0166408268958453
+            },
+            {
+              "key": "eval-storage",
+              "score": 1.0157577767735164
+            }
+          ],
+          "durationMs": 18.040875000000142
+        }
+      ]
+    },
+    "calibratedEvaluation": {
+      "threshold": 0.4,
+      "supportedCases": 16,
+      "unsupportedCases": 8,
+      "hitAt5": 0.9375,
+      "mrr": 0.90625,
+      "zeroResultRate": 1,
+      "citationIntegrity": 1,
+      "p95Ms": 20.452749999999924,
+      "rows": [
+        {
+          "query": "How should I protect the breakable dishes during relocation?",
+          "expected": "eval-moving",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-moving",
+              "score": 1.0194010290343227
+            }
+          ],
+          "durationMs": 20.314374999999927
+        },
+        {
+          "query": "Where is my proof that I can enter the music show?",
+          "expected": "eval-ticket",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-ticket",
+              "score": 1.0184817754860922
+            }
+          ],
+          "durationMs": 20.452749999999924
+        },
+        {
+          "query": "How do I stop paying for the shared workspace?",
+          "expected": "eval-cancel",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-cancel",
+              "score": 1.0199802330026015
+            }
+          ],
+          "durationMs": 20.260999999999967
+        },
+        {
+          "query": "Which story should directors hear first in our slide deck?",
+          "expected": "eval-presentation",
+          "kind": "paraphrase",
+          "rank": 0,
+          "actual": [],
+          "durationMs": 19.617083000000093
+        },
+        {
+          "query": "How do I stop my painting sheets from warping?",
+          "expected": "eval-storage",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-storage",
+              "score": 1.0185369545009981
+            }
+          ],
+          "durationMs": 20.148249999999734
+        },
+        {
+          "query": "Who signs off on changing the dimensions of our shipping cartons?",
+          "expected": "eval-supplier",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-supplier",
+              "score": 1.0193635740563298
+            }
+          ],
+          "durationMs": 20.06612499999983
+        },
+        {
+          "query": "Which houseplant handles my being away without frequent watering?",
+          "expected": "eval-plant",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-plant",
+              "score": 1.0185134813838597
+            }
+          ],
+          "durationMs": 20.262708000000202
+        },
+        {
+          "query": "How do I clean the bed cover without making it smaller?",
+          "expected": "eval-laundry",
+          "kind": "paraphrase",
+          "rank": 2,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 2.0163934426229506
+            },
+            {
+              "key": "eval-laundry",
+              "score": 1.0184843245147943
+            }
+          ],
+          "durationMs": 19.830083000000286
+        },
+        {
+          "query": "Where is the emergency way back into my credential vault?",
+          "expected": "eval-password",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-password",
+              "score": 1.0174319244435057
+            }
+          ],
+          "durationMs": 20.248000000000047
+        },
+        {
+          "query": "What must accompany the artist program submission?",
+          "expected": "eval-application",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-application",
+              "score": 1.0182429657097833
+            }
+          ],
+          "durationMs": 16.78362500000003
+        },
+        {
+          "query": "How should beginners learn to handle customers on the phone?",
+          "expected": "eval-training",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-training",
+              "score": 1.0180332460492103
+            }
+          ],
+          "durationMs": 19.63679200000024
+        },
+        {
+          "query": "Where should a parcel driver enter our maker space?",
+          "expected": "eval-delivery",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-delivery",
+              "score": 1.0186715209995973
+            }
+          ],
+          "durationMs": 19.374709000000166
+        },
+        {
+          "query": "Can we reuse the commissioned drawings beyond the leaflet?",
+          "expected": "eval-contract",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-contract",
+              "score": 1.018636931443429
+            }
+          ],
+          "durationMs": 21.0747080000001
+        },
+        {
+          "query": "Where does the litter-picking team assemble?",
+          "expected": "eval-meeting",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-meeting",
+              "score": 1.0189314506363718
+            }
+          ],
+          "durationMs": 18.05899999999974
+        },
+        {
+          "query": "What should I clean first when the espresso maker leaks?",
+          "expected": "eval-drip",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-drip",
+              "score": 1.019845707352156
+            }
+          ],
+          "durationMs": 19.79929200000015
+        },
+        {
+          "query": "Where is the backup electrical part for the pottery oven?",
+          "expected": "eval-long",
+          "kind": "paraphrase",
+          "rank": 1,
+          "actual": [
+            {
+              "key": "eval-long",
+              "score": 1.0186102301225608
+            }
+          ],
+          "durationMs": 19.786792000000332
+        },
+        {
+          "query": "What is our boat's registered hull number?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.093832999999904
+        },
+        {
+          "query": "Where are the chess tournament score sheets?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 18.12774999999965
+        },
+        {
+          "query": "What altitude did we reach on the balloon flight?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.462542000000212
+        },
+        {
+          "query": "Who repaired the antique grandfather clock?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 16.84091699999999
+        },
+        {
+          "query": "Which station broadcasts the late-night jazz program?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.379707999999937
+        },
+        {
+          "query": "What is the combination to the rifle safe?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 19.2638750000001
+        },
+        {
+          "query": "How many medals did our fencing club win?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 18.990749999999935
+        },
+        {
+          "query": "Where are the instructions for tuning the harp?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "actual": [],
+          "durationMs": 17.911083000000417
+        }
+      ]
+    },
+    "currentPassed": false,
+    "calibratedPassed": false
+  }
+}

@@ -3,6 +3,20 @@
 This is development evidence, not approval to publish a new release. Exact search remains
 available without a download. Public Alpha 25 artifacts are unchanged.
 
+## Latest validation: publication blocked
+
+The [frozen holdout and isolated scale results](evals/2026-09-15-semantic-models/README.md)
+supersede the preliminary timings and outstanding measurement requirements below.
+Light passes the current v8 10,000-note suite, but fails the new holdout. Balanced has the
+best measured holdout tradeoff after calibration (15/16 supported targets, 8/8 unsupported
+questions rejected), but fails the strict recall gate and takes about 12.5 minutes to index
+10,000 synthetic notes. Large fails the holdout and shows substantial batch-dependent
+embedding variation; its 10,000-note run was skipped by a predeclared entry gate.
+
+All three fail at least one frozen holdout gate. No production cutoffs changed based on these
+results. Keep the model choices on the development branch pending retrieval improvements
+and fresh evaluation; the current evidence does not justify publishing them as ready.
+
 | Choice | Pinned model | Download | Vector dimensions | Runtime |
 | --- | --- | --- | --- | --- |
 | Light | GIST all-MiniLM-L6-v2 | 23,557,430 bytes | 384 | q8, mean pooling |
@@ -15,7 +29,7 @@ succeeded for Balanced and Large using local copies of the pinned public artifac
 probe verified that a launch-blocker paraphrase ranked the relevant note above an unrelated
 refrigerator note. This verifies packaging and basic behavior, not general retrieval quality.
 
-## Small-corpus diagnostic
+## Earlier small-corpus diagnostic (historical)
 
 The unchanged v8 corpus has 35 notes and 41 cases, including 14 semantic cases. Exploratory
 runs used a 0.30 agent cosine cutoff for both new models, after initial 0.55/0.65 cutoffs
@@ -39,7 +53,7 @@ about 65 ms; Large was about 300–400 ms. An isolated fair latency comparison i
 The resource recommendation uses installed physical RAM (Balanced at 8 GiB or more). It
 does not predict workload, memory pressure, battery impact, or retrieval accuracy.
 
-## Release requirements
+## Earlier release requirements (measurement status superseded above)
 
 - Complete real-model evaluation at library scale and on a separate paraphrase/unsupported
   query holdout before claiming either candidate improves recall.

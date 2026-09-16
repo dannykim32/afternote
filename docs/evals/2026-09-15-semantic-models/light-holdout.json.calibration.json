@@ -1,0 +1,607 @@
+{
+  "profile": "light",
+  "chosen": {
+    "threshold": 0.8,
+    "hitAt5": 0.6666666666666666,
+    "mrr": 0.6666666666666666,
+    "zeroResultRate": 1
+  },
+  "currentCalibration": {
+    "threshold": 0.75,
+    "supportedCases": 12,
+    "unsupportedCases": 8,
+    "hitAt5": 0.9166666666666666,
+    "mrr": 0.8333333333333334,
+    "zeroResultRate": 0.5,
+    "citationIntegrity": 1,
+    "p95Ms": 2.818040999999994,
+    "rows": [
+      {
+        "query": "Who can fix the slipping gears on my cycle?",
+        "expected": "cal-bike",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-bike",
+            "score": 1.0206301264386086
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.0192645273891991
+          },
+          {
+            "key": "eval-moving",
+            "score": 1.0189551256968028
+          }
+        ],
+        "durationMs": 8.124083999999982
+      },
+      {
+        "query": "How can a visitor get online here?",
+        "expected": "cal-network",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-network",
+            "score": 1.019444710533053
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.0191235800486096
+          },
+          {
+            "key": "distractor-delivery",
+            "score": 1.0188645932329488
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.018495172743357
+          }
+        ],
+        "durationMs": 2.818040999999994
+      },
+      {
+        "query": "Which ingredient swap makes the dessert safe for our guest?",
+        "expected": "cal-cake",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-cake",
+            "score": 1.0202940300754662
+          },
+          {
+            "key": "eval-moving",
+            "score": 1.0189800024274067
+          },
+          {
+            "key": "eval-supplier",
+            "score": 1.0186888191121837
+          }
+        ],
+        "durationMs": 1.804458000000011
+      },
+      {
+        "query": "Why do we wait to send the next welcome message?",
+        "expected": "cal-events",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-events",
+            "score": 1.0201952957541636
+          },
+          {
+            "key": "cal-metrics",
+            "score": 1.0190589635545282
+          },
+          {
+            "key": "eval-cancel",
+            "score": 1.018747516718891
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0184929860988106
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0181544532640778
+          }
+        ],
+        "durationMs": 1.5487919999999917
+      },
+      {
+        "query": "Where is Pepper getting vaccinated?",
+        "expected": "cal-pet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-pet",
+            "score": 1.0201609685404103
+          }
+        ],
+        "durationMs": 1.3597500000000196
+      },
+      {
+        "query": "How did we brighten the taste of the legume dish?",
+        "expected": "cal-soup",
+        "kind": "paraphrase",
+        "rank": 2,
+        "actual": [
+          {
+            "key": "cal-garden",
+            "score": 1.0197110633660942
+          },
+          {
+            "key": "cal-soup",
+            "score": 1.0193606727410058
+          },
+          {
+            "key": "cal-cake",
+            "score": 1.019073163748061
+          }
+        ],
+        "durationMs": 1.6778749999999718
+      },
+      {
+        "query": "Where is the little tool for tightening the photography bracket?",
+        "expected": "cal-tools",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-tools",
+            "score": 1.020433361031663
+          },
+          {
+            "key": "cal-bike",
+            "score": 1.0192954004835144
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.01900417858521
+          },
+          {
+            "key": "distractor-contract",
+            "score": 1.0185116551848805
+          },
+          {
+            "key": "eval-password",
+            "score": 1.0182265578944305
+          }
+        ],
+        "durationMs": 1.5070419999999558
+      },
+      {
+        "query": "What milestone makes a signup an activated account?",
+        "expected": "cal-metrics",
+        "kind": "paraphrase",
+        "rank": 2,
+        "actual": [
+          {
+            "key": "distractor-password",
+            "score": 1.019778982294606
+          },
+          {
+            "key": "cal-metrics",
+            "score": 1.0194219594071676
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.0189933326912082
+          }
+        ],
+        "durationMs": 1.4204169999999863
+      },
+      {
+        "query": "What proof do I need to get my travel costs paid back?",
+        "expected": "cal-receipts",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-receipts",
+            "score": 1.0200957297331554
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.019031396498999
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0187041461556752
+          },
+          {
+            "key": "cal-cabin",
+            "score": 1.018365922928557
+          }
+        ],
+        "durationMs": 2.63820800000002
+      },
+      {
+        "query": "Which detour gets us to the holiday house?",
+        "expected": "cal-cabin",
+        "kind": "paraphrase",
+        "rank": 0,
+        "actual": [
+          {
+            "key": "distractor-delivery",
+            "score": 1.0196580640741157
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0192333963968727
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0188050356039493
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.0185269582754972
+          },
+          {
+            "key": "distractor-network",
+            "score": 1.0182225271718697
+          }
+        ],
+        "durationMs": 1.4369580000000042
+      },
+      {
+        "query": "Where can our group talk without disturbing readers?",
+        "expected": "cal-quiet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.020363619675255
+          }
+        ],
+        "durationMs": 1.5998329999999896
+      },
+      {
+        "query": "Why has my cooking herb turned yellow?",
+        "expected": "cal-garden",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-garden",
+            "score": 1.0200769643898562
+          },
+          {
+            "key": "cal-soup",
+            "score": 1.0192473637967994
+          },
+          {
+            "key": "eval-long",
+            "score": 1.01877406722691
+          }
+        ],
+        "durationMs": 1.3442499999999882
+      },
+      {
+        "query": "What is the serial number of my telescope?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 2.7550840000000107
+      },
+      {
+        "query": "Where did I store the scuba diving certificate?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-ticket",
+            "score": 1.019530011361782
+          },
+          {
+            "key": "eval-password",
+            "score": 1.0192600688542683
+          },
+          {
+            "key": "eval-long",
+            "score": 1.018782533008307
+          },
+          {
+            "key": "distractor-network",
+            "score": 1.0184835247697799
+          }
+        ],
+        "durationMs": 1.4471660000000384
+      },
+      {
+        "query": "What are the instructions for changing the violin strings?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 1.2321249999999964
+      },
+      {
+        "query": "Who is teaching our archery lesson?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 1.1912079999999605
+      },
+      {
+        "query": "Which currency did we choose for the accounting ledger?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [],
+        "durationMs": 1.2596250000000282
+      },
+      {
+        "query": "How much is the swimming pool entry fee?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "distractor-membership",
+            "score": 1.0193594463443956
+          }
+        ],
+        "durationMs": 1.2696670000000267
+      },
+      {
+        "query": "What is the order of planets in my astronomy worksheet?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "distractor-paper",
+            "score": 1.019195672505388
+          }
+        ],
+        "durationMs": 2.107666999999992
+      },
+      {
+        "query": "Where does our choir rehearse?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.0196192350395938
+          },
+          {
+            "key": "cal-pet",
+            "score": 1.0190787076594245
+          }
+        ],
+        "durationMs": 1.4273330000000328
+      }
+    ]
+  },
+  "sweep": [
+    {
+      "threshold": 0.2,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.22,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.24,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.26,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.28,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.3,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.32,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.34,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.36,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.38,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.4,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.42,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.44,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.46,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.48,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.5,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.52,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.54,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.56,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.58,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.6,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.62,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.64,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.66,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.68,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.7,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.72,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0.125
+    },
+    {
+      "threshold": 0.74,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0.5
+    },
+    {
+      "threshold": 0.76,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.8333333333333334,
+      "zeroResultRate": 0.625
+    },
+    {
+      "threshold": 0.78,
+      "hitAt5": 0.8333333333333334,
+      "mrr": 0.7916666666666666,
+      "zeroResultRate": 0.875
+    },
+    {
+      "threshold": 0.8,
+      "hitAt5": 0.6666666666666666,
+      "mrr": 0.6666666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.82,
+      "hitAt5": 0.6666666666666666,
+      "mrr": 0.6666666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.84,
+      "hitAt5": 0.5,
+      "mrr": 0.5,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.86,
+      "hitAt5": 0.08333333333333333,
+      "mrr": 0.08333333333333333,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.88,
+      "hitAt5": 0.08333333333333333,
+      "mrr": 0.08333333333333333,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.9,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    }
+  ]
+}
