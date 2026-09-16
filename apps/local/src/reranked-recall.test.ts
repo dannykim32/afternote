@@ -82,4 +82,39 @@ describe("reranked local recall", () => {
       expect(await memory.recall(vault, "AZ-1842", 5)).toMatchObject([{ note: { id: note.id } }]);
     } finally { memory.close(); }
   });
+
+  it.each(["delete", "edit", "switch", "close"])("does not return captured lexical content after an embedding failure and %s", async (action) => {
+    let started!: () => void, reject!: (error: Error) => void;
+    const begun = new Promise<void>(resolve => { started = resolve; });
+    const blocked = new Promise<Float32Array>((_, fail) => { reject = fail; });
+    const embedding = model(async (_, p) => p.map(() => 8));
+    embedding.embedQuery = async () => { started(); return blocked; };
+    const memory = new SqliteMemory(":memory:", vault, {retrievalMode: "hybrid", embeddingModel: embedding});
+    try {
+      const note = await memory.remember(vault, {content: "The archive token is blue."});
+      await memory.waitForDerivedIndex();
+      const pending = memory.recall(vault, "archive token", 5);
+      await begun;
+      if (action === "delete") await memory.forget(vault, note.id);
+      if (action === "edit") await memory.updateNote(vault, note.id, {content: "The credential has been revoked.", expectedRevision: 1});
+      if (action === "switch") { const replacement = model(async (_, p) => p.map(() => 8)); replacement.descriptor.revision = "2"; memory.enableSemanticSearch(vault, replacement); }
+      if (action === "close") memory.close();
+      reject(new Error("query inference failed"));
+      expect(await pending).toEqual([]);
+    } finally { memory.close(); }
+  });
+
+
+  it("does not bypass relevance filtering with keyword fragments when query embedding fails", async () => {
+    const embedding = model(async (_, p) => p.map(() => 8));
+    embedding.embedQuery = async () => { throw new Error("unavailable"); };
+    const memory = new SqliteMemory(":memory:", vault, {retrievalMode: "hybrid", embeddingModel: embedding});
+    try {
+      await memory.remember(vault, {content: "Use safe colors for the slide deck and keep the title combination consistent."});
+      await memory.waitForDerivedIndex();
+      expect(await memory.recall(vault, "What combination opens the jewelry safe?", 5)).toEqual([]);
+      expect((await memory.recall(vault, "safe colors", 5)).length).toBe(1);
+    } finally { memory.close(); }
+  });
+
 });

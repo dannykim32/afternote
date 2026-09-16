@@ -1279,12 +1279,13 @@ export class SqliteMemory implements Memory {
     ) {
       return { results: [], searchMode: "hybrid" };
     }
+    const fallback = (searchMode: HybridRecallExecution["searchMode"]): HybridRecallExecution => {
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode };
+      return { results: this.#currentResults(this.#limitedTemporalResults(model.reranker ? literalRecallResults(query, rawLexical) : rawLexical, temporal, limit)), searchMode };
+    };
     const indexState = this.derivedIndexStatus(vault).state;
     if (indexState !== "ready") {
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: indexState === "indexing" ? "indexing" : "degraded",
-      };
+      return fallback(indexState === "indexing" ? "indexing" : "degraded");
     }
 
     let queryVector: Float32Array;
@@ -1296,22 +1297,14 @@ export class SqliteMemory implements Memory {
         semanticTimeoutMs,
       );
       if (!queryVector) {
-        return {
-          results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-          searchMode: "degraded",
-        };
+        return fallback("degraded");
       }
       validateEmbedding(queryVector, model.descriptor);
     } catch {
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: "degraded",
-      };
+      return fallback("degraded");
     }
 
-    if (this.#embeddingModel !== model) {
-      return { results: this.#limitedTemporalResults(rawLexical, temporal, limit), searchMode: "indexing" };
-    }
+    if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
     const descriptor = model.descriptor;
     const queryMagnitude = vectorMagnitude(queryVector);
     let semanticIndex: SemanticIndexCache;
@@ -1319,10 +1312,7 @@ export class SqliteMemory implements Memory {
       semanticIndex = this.#semanticIndex(descriptor);
     } catch (error) {
       if (!isInterrupted(error)) throw error;
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: "degraded",
-      };
+      return fallback("degraded");
     }
     // With a relevance model this is candidate generation, not the final
     // relevance decision. A strict embedding cutoff would discard paraphrases
@@ -1430,12 +1420,8 @@ export class SqliteMemory implements Memory {
     timeoutMs: number,
   ): Promise<HybridRecallExecution> {
     const reranker = model.reranker!;
-    const phrase = normalizedTextTokens(query).join(" ");
-    // Literal identifiers and phrases remain searchable, including beyond the
-    // bounded reranking window. Two incidental keyword hits are not a phrase.
-    const literal = lexical.filter(result => phrase.length > 0 &&
-      (` ${normalizedTextTokens(result.note.content + " " + (sourceSearchText(result.note.source) ?? "")).join(" ")} `)
-        .includes(` ${phrase} `));
+    // Literal identifiers remain searchable beyond the reranking shortlist.
+    const literal = literalRecallResults(query, lexical);
     const candidates = new Map<string, { result: RecallResult; passage: string }>();
     for (const candidate of semantic) {
       const result = semanticRowToResult(candidate.row, candidate.similarity);
@@ -1466,16 +1452,20 @@ export class SqliteMemory implements Memory {
     } catch { searchMode = "degraded"; }
     finally { stopped = true; }
     if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
-    // A note may have been edited or deleted while the model was running.
+    return {
+      results: this.#currentResults([...results.values()])
+        .sort((a, b) => b.score - a.score || b.note.createdAt.localeCompare(a.note.createdAt) || b.note.id.localeCompare(a.note.id)),
+      searchMode,
+    };
+  }
+
+  #currentResults(results: readonly RecallResult[]): RecallResult[] {
+    if (this.#closed) return [];
+    // Every asynchronous success/fallback path must reject edits and deletions
+    // that happened while inference was in progress.
     const revision = this.#database.query<{ current_revision: number }, [string]>("select current_revision from notes where id = ?");
-    try {
-      return {
-        results: [...results.values()]
-          .filter(result => revision.get(result.note.id)?.current_revision === result.note.revision)
-          .sort((a, b) => b.score - a.score || b.note.createdAt.localeCompare(a.note.createdAt) || b.note.id.localeCompare(a.note.id)),
-        searchMode,
-      };
-    } finally { closePreparedStatement(revision); }
+    try { return results.filter(result => revision.get(result.note.id)?.current_revision === result.note.revision); }
+    finally { closePreparedStatement(revision); }
   }
 
   #hydrateSemanticCandidates(
@@ -2853,6 +2843,14 @@ function normalizedTextTokens(value: string): string[] {
     .normalize("NFKC")
     .toLocaleLowerCase("en-US")
     .match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function literalRecallResults(query: string, results: readonly RecallResult[]): RecallResult[] {
+  const phrase = normalizedTextTokens(query).join(" ");
+  if (!phrase) return [];
+  return results.filter(result =>
+    (` ${normalizedTextTokens(result.note.content + " " + (sourceSearchText(result.note.source) ?? "")).join(" ")} `)
+      .includes(` ${phrase} `));
 }
 
 function strongRecallLexicalResults(
