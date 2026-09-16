@@ -8,12 +8,86 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   return label;
 }
 
+@implementation AfternoteSearchProgress
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (!self) return nil;
+  self.orientation = NSUserInterfaceLayoutOrientationVertical;
+  self.alignment = NSLayoutAttributeLeading;
+  self.spacing = 6;
+  _titleLabel = CopyLabel(@"Open your vault to check search", 12);
+  _titleLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+  _countLabel = CopyLabel(@"Private to this Mac", 11);
+  _detailLabel = CopyLabel(@"", 11);
+  _retryButton = [AfternoteButton buttonWithTitle:@"Check again" target:nil action:nil];
+  AfternoteStyleSecondaryButton(_retryButton);
+  NSStackView *heading = [NSStackView stackViewWithViews:@[_titleLabel, [NSView new], _countLabel, _retryButton]];
+  heading.spacing = 10;
+  heading.alignment = NSLayoutAttributeCenterY;
+  [_countLabel setContentCompressionResistancePriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
+  _progressBar = [NSProgressIndicator new];
+  _progressBar.style = NSProgressIndicatorStyleBar;
+  _progressBar.controlSize = NSControlSizeSmall;
+  _progressBar.minValue = 0;
+  _progressBar.maxValue = 1;
+  _progressBar.accessibilityLabel = @"Notes indexed for search by meaning";
+  for (NSView *view in @[heading, _progressBar, _detailLabel]) {
+    [self addArrangedSubview:view];
+    [view.widthAnchor constraintEqualToAnchor:self.widthAnchor].active = YES;
+  }
+  [self updateMode:@"checking" indexed:-1 total:-1 stalled:NO unavailable:NO];
+  return self;
+}
+- (void)updateMode:(NSString *)mode indexed:(NSInteger)indexed total:(NSInteger)total
+           stalled:(BOOL)stalled unavailable:(BOOL)unavailable {
+  BOOL indexing = [mode isEqual:@"indexing"];
+  BOOL known = indexed >= 0 && total > 0 && indexed <= total;
+  self.titleLabel.textColor = AfternoteMutedTextColor();
+  self.countLabel.stringValue = indexing && known
+      ? [NSString stringWithFormat:@"%ld of %ld notes", (long)indexed, (long)total] : @"Private to this Mac";
+  self.detailLabel.stringValue = @"";
+  self.retryButton.hidden = YES;
+  self.retryButton.title = @"Check again";
+  self.progressBar.hidden = !indexing || unavailable;
+  [self.progressBar stopAnimation:nil];
+  if (unavailable) {
+    self.titleLabel.stringValue = @"Search status unavailable";
+    self.detailLabel.stringValue = @"Could not check local search progress. Try again.";
+    self.retryButton.hidden = NO;
+  } else if (indexing) {
+    self.titleLabel.stringValue = stalled ? @"Indexing is taking longer than expected"
+        : known && indexed < total ? @"Indexing your notes" : @"Preparing search by meaning";
+    self.titleLabel.textColor = stalled ? StatusColor(@"warning") : AfternoteTextColor();
+    self.detailLabel.stringValue = stalled
+        ? @"No progress update for over a minute. Exact search remains available."
+        : @"Exact search works while this finishes. Everything stays on this Mac.";
+    self.retryButton.hidden = !stalled;
+    self.progressBar.indeterminate = !known || indexed == total;
+    self.progressBar.doubleValue = known ? (double)indexed / total : 0;
+    if (self.progressBar.indeterminate && !stalled) [self.progressBar startAnimation:nil];
+  } else if ([mode isEqual:@"hybrid"]) {
+    self.titleLabel.stringValue = @"Search by meaning ready";
+    self.titleLabel.textColor = AfternoteBrandCaptureColor();
+  } else if ([mode isEqual:@"degraded"]) {
+    self.titleLabel.stringValue = @"Search by meaning needs attention";
+    self.titleLabel.textColor = StatusColor(@"warning");
+    self.detailLabel.stringValue = @"Exact search is available. Open Settings to retry local search.";
+    self.retryButton.title = @"Settings";
+    self.retryButton.hidden = NO;
+  } else self.titleLabel.stringValue = [mode isEqual:@"exact"] ? @"Exact search" : @"Open your vault to check search";
+  self.detailLabel.hidden = self.detailLabel.stringValue.length == 0;
+}
+@end
+
 @interface AfternoteSemanticSettings ()
 @property(nonatomic, copy) AfternoteSemanticRunner runner;
 @property(nonatomic, strong) NSButton *actionButton;
 @property(nonatomic, strong) NSButton *toggleButton;
 @property(nonatomic, strong) NSTextField *statusLabel;
 @property(nonatomic, strong) NSProgressIndicator *spinner;
+@property(nonatomic, strong) NSProgressIndicator *indexProgress;
+@property(nonatomic) BOOL progressStalled;
+@property(nonatomic) BOOL progressUnavailable;
 @property(nonatomic, copy) NSString *modelState;
 @property(nonatomic, copy) NSString *modelId;
 @property(nonatomic, copy) NSString *activeModelId;
@@ -65,6 +139,15 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     [self addArrangedSubview:view];
     [view.widthAnchor constraintEqualToAnchor:self.widthAnchor].active = YES;
   }
+  _indexProgress = [NSProgressIndicator new];
+  _indexProgress.style = NSProgressIndicatorStyleBar;
+  _indexProgress.controlSize = NSControlSizeSmall;
+  _indexProgress.minValue = 0;
+  _indexProgress.maxValue = 1;
+  _indexProgress.hidden = YES;
+  _indexProgress.accessibilityLabel = @"Notes indexed for search by meaning";
+  [self addArrangedSubview:_indexProgress];
+  [_indexProgress.widthAnchor constraintEqualToAnchor:self.widthAnchor].active = YES;
   NSString *terms = [[NSBundle mainBundle].resourcePath stringByAppendingPathComponent:@"AfternoteRuntime/LICENSES/MODEL_TERMS.md"];
   if ([[NSFileManager defaultManager] fileExistsAtPath:terms]) {
     NSButton *termsButton = [NSButton buttonWithTitle:@"Model terms" target:self action:@selector(openModelTerms:)];
@@ -156,14 +239,31 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   self.toggleButton.enabled = !self.busy && self.modelState != nil;
   self.toggleButton.state = self.enabledPreference ? NSControlStateValueOn : NSControlStateValueOff;
   self.actionButton.enabled = !self.busy;
+  self.indexProgress.hidden = YES;
+  [self.indexProgress stopAnimation:nil];
   if (self.busy) return;
   [self.spinner stopAnimation:nil];
+  self.actionButton.title = @"Retry";
   self.actionButton.hidden = self.failure.length == 0;
   if (self.failure.length) {
     self.statusLabel.stringValue = self.failure;
     return;
   }
+  if (self.progressUnavailable || self.progressStalled) {
+    self.actionButton.title = @"Check again";
+    self.actionButton.hidden = NO;
+  }
+  if (self.progressUnavailable) {
+    self.statusLabel.stringValue = @"Search status unavailable. Could not check local search progress. Try again.";
+    return;
+  }
   BOOL active = self.activeModelId && [self.activeModelId isEqual:self.modelId];
+  if (active && self.enabledPreference && !self.applicationPending && [self.searchMode isEqual:@"indexing"]) {
+    self.indexProgress.hidden = NO;
+    self.indexProgress.indeterminate = self.totalNotes <= 0 || self.indexedNotes == self.totalNotes;
+    self.indexProgress.doubleValue = self.totalNotes > 0 ? (double)self.indexedNotes / self.totalNotes : 0;
+    if (self.indexProgress.indeterminate && !self.progressStalled) [self.indexProgress startAnimation:nil];
+  }
   if (self.applicationPending) self.statusLabel.stringValue = @"Setting saved. Open Notes to apply this change.";
   else if (!self.modelState) self.statusLabel.stringValue = @"Checking local search…";
   else if (!self.enabledPreference) self.statusLabel.stringValue = [self.searchMode isEqual:@"exact"]
@@ -171,10 +271,12 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
       : @"Setting saved. Open Notes to apply this change.";
   else if (![self.modelState isEqual:@"ready"]) self.statusLabel.stringValue = @"Search files are unavailable. Reinstall Afternote to restore them. Exact search remains available.";
   else if (active && [self.searchMode isEqual:@"hybrid"]) self.statusLabel.stringValue = @"Ready in Notes and connected tools.";
-  else if (active && [self.searchMode isEqual:@"indexing"]) self.statusLabel.stringValue = self.totalNotes == 0
+  else if (active && [self.searchMode isEqual:@"indexing"] && self.progressStalled) self.statusLabel.stringValue =
+      @"Indexing is taking longer than expected. No progress update for over a minute. Exact search remains available.";
+  else if (active && [self.searchMode isEqual:@"indexing"]) self.statusLabel.stringValue = self.totalNotes == 0 || self.indexedNotes == self.totalNotes
       ? @"Preparing local search. Exact search remains available."
-      : [NSString stringWithFormat:@"Preparing %ld of %ld notes. Exact search remains available.", (long)self.indexedNotes, (long)self.totalNotes];
-  else if ([self.searchMode isEqual:@"degraded"]) self.statusLabel.stringValue = @"Local search needs attention. Restart Afternote to retry. Exact search remains available.";
+      : [NSString stringWithFormat:@"Indexed %ld of %ld notes. Exact search remains available.", (long)self.indexedNotes, (long)self.totalNotes];
+  else if ([self.searchMode isEqual:@"degraded"]) self.statusLabel.stringValue = @"Local search needs attention. Turn search by meaning off and on to retry. Exact search remains available.";
   else self.statusLabel.stringValue = @"Enabled. Local search prepares when you open your vault.";
 }
 - (void)setSearchMode:(NSString *)mode {
@@ -185,6 +287,12 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 - (void)setIndexedNotes:(NSInteger)indexed total:(NSInteger)total {
   self.indexedNotes = indexed;
   self.totalNotes = total;
+  [self render];
+}
+- (void)setProgressStalled:(BOOL)stalled unavailable:(BOOL)unavailable {
+  _progressStalled = stalled;
+  _progressUnavailable = unavailable;
+  [self render];
 }
 - (void)activationCompleted:(NSString *)mode modelId:(NSString *)modelId {
   self.activeModelId = modelId;
@@ -206,6 +314,8 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   if (self.busy) return;
   if (self.activationFailure) {
     if (self.activate) self.activate(YES);
+  } else if (self.progressUnavailable || self.progressStalled) {
+    if (self.checkProgress) self.checkProgress();
   } else [self refresh];
 }
 - (void)toggleSearch:(id)sender {

@@ -64,7 +64,6 @@ describe("native Library production boundary", () => {
     expect(editorViewSource).toContain('action:@selector(toggleBulletList:)');
     expect(editorViewSource).toContain('action:@selector(toggleNumberedList:)');
     expect(editorViewSource).toContain('doCommandBySelector:(SEL)commandSelector');
-    expect(nativeAppSource).toContain('@"Search by meaning ready"');
     expect(nativeAppSource).toContain("libraryAuthenticateButton.hidden");
     // Refresh title, enabled state, and dispatch are covered by the standalone screen test.
     expect(nativeAppSource).not.toContain("VisibleNoteMetadata");

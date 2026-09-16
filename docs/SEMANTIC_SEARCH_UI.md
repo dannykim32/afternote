@@ -53,3 +53,23 @@ also expose model terms and signed update controls):
 ![Search by meaning enabled, with its control aligned to the right](images/afternote-beta-settings.png)
 
 ![Offline native viewer for the full included model terms](images/afternote-model-terms.png)
+
+## Beta 2 indexing feedback (baseline `10523e6`)
+
+- A search response reporting indexing must start authenticated progress polling even
+  after the initial activation has finished. Poll every two seconds, with one in-flight
+  request. Completion must update Notes and Settings without navigation or relaunch.
+- Show real indexed/total counts and a progress bar. Model warm-up has an indeterminate
+  state; ready collapses the bar and explanation to one quiet status row.
+- After a minute without changed progress, say that indexing is taking longer than
+  expected. A failed status check must be visibly distinct, offer Check again, and stop
+  automatic retries after three consecutive failures. Exact search remains available.
+- Lock/session invalidation clears counts and cancels queued polling; late replies cannot
+  restore protected state. Views only render; the owner coordinator owns broker requests.
+- Preserve the immutable Beta 1 package. Package these changes and the prior Settings
+  fixes as 2.0.0-beta.2, Apple build 28. Do not publish a release or announcement.
+
+The native regression reproduced the missing poll after a search returned indexing.
+The bundled-model integration test now starts cold and checks a 15-note index reaches
+ready using the same authenticated progress endpoint. This verifies the reproduced
+mechanism; acceptance on the Mac that reported the hour-long status remains necessary.

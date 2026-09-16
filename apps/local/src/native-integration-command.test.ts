@@ -61,6 +61,12 @@ describeMacos("native integration command runner", () => {
     expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(8).fill(true));
   });
 
+  it("tracks indexing reported by a search through completion without navigation", () => {
+    const smoke = Bun.spawnSync([runner, "--semantic-progress-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
+    expect(Object.values(JSON.parse(smoke.stdout.toString()))).toEqual(Array(10).fill(true));
+  }, 15_000);
+
   it("keeps late retrieval replies out of drafts and newly authenticated sessions", () => {
     const smoke = Bun.spawnSync([runner, "--notes-retrieval-smoke"], { stdout: "pipe", stderr: "pipe" });
     expect(smoke.exitCode, smoke.stdout.toString() + smoke.stderr.toString()).toBe(0);
