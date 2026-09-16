@@ -1,6 +1,6 @@
 # Local semantic retrieval improvement
 
-Current [measurements and remaining publication gates](evals/2026-09-15-reranked-recall/README.md).
+Current [beta release decision](BETA_READINESS.md) and [measurements](evals/2026-09-15-reranked-recall/README.md).
 
 ## Product requirements
 
@@ -8,8 +8,9 @@ Semantic recall is a core Afternote capability: users should find explicitly sav
 meaning in both Notes and authorized connected tools, without remembering the original words.
 Keep setup simple: one explicit local search download, with its action aligned to the right
 like other Settings controls. No Light/Balanced/Large selector in the product UI. Preserve
-existing vault, authentication, connector and citation boundaries. Do not publish on the basis
-of a small favorable example or silently loosen quality gates.
+existing vault, authentication, connector and citation boundaries. The beta accepts documented
+recall and latency limitations; the release decision is explicit in BETA_READINESS.md. Preserve
+the original benchmark results and all security/artifact verification requirements.
 
 ## Candidate implementation
 
@@ -49,9 +50,11 @@ V2 was committed at `bef4dbe` before retrieval changes. It has 24 supported and 
 queries, with semantically related distractors and keyword decoys. SHA-256:
 `97d136b2102ac5d6f7fe44e76268ef8c719f9d4a1ba5d5c7ce4373fd6856b206`.
 V2 has now been evaluated; its original reports must remain intact. It is no longer unseen data. Evaluate both UI and agent paths, preserve
-baseline and candidate reports, and report failures. Require 100% supported hit@5, MRR >= 0.90,
-100% unsupported rejection and valid citations. These small authored fixtures do not establish
-universal recall or answer correctness.
+baseline and candidate reports, and report failures. The original benchmark targets were
+100% supported hit@5, MRR >= 0.90, 100% unsupported rejection and valid citations. Their pass/fail
+results remain unchanged. Perfect learned-model recall is no longer a beta publication gate;
+citation integrity and access controls remain required. These small authored fixtures do not
+establish universal recall or answer correctness.
 
 Re-run the existing v8 scale quality tests. The historical 100 ms latency gate remains visible;
 a slower relevance stage must not be described as passing it. When replaying cached synthetic
@@ -81,6 +84,7 @@ not adopted.
 V3 was frozen at `2b1f09a` before rank fusion, with 20 synthetic notes, 16 supported queries
 and 8 unsupported questions. SHA-256:
 `625bf5b7e4168219ae023cbd5d6da93b1bdb150586cc01f2772c6599e86e49a9`.
-Keep its first evaluation separate from development and retain the same quality gates. The
-question of returning explicitly marked related context is a separate product policy; these
-experiments continue to use the conservative admission rule until that policy is decided.
+Keep its first evaluation separate from development and preserve its original quality targets.
+For the beta, keep the current admission rule and present retrieved notes with their original
+citations. A new possible-match label or perfect answerability classifier is not required
+before release. People and connected AI tools assess whether the returned note is useful.

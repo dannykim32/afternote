@@ -25,8 +25,9 @@ Model-choice/layout revision baseline: `31d83fd`.
   A locked vault or expired/missing Library session must not be bypassed. Offer normal Notes
   authentication when needed; that existing flow retains its draft/authorization rules.
 - Exact search remains usable while indexing and after failure. The release default stays exact.
-  No agent-generated note metadata or automatic download is in scope. Model quality at scale
-  and signed-build acceptance remain publication gates; the current candidate is not cleared for publication.
+  No agent-generated note metadata or automatic download is in scope. The measured semantic limitations are accepted for beta under
+  [BETA_READINESS.md](BETA_READINESS.md); signed-build acceptance and security requirements remain
+  publication gates. The current source candidate is not itself a cleared signed release.
 - Tests cover the existing storage/retrieval and owner-broker boundaries, native Settings action
   flow and stale replies, CLI JSON output, installation failures, and existing lifecycle behavior.
 

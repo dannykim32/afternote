@@ -62,6 +62,14 @@ automation, and do not treat a development package as a distributable artifact.
 The script deliberately stops after producing local release files. Publishing the GitHub
 Release and committing the generated appcast remain separate human actions.
 
+## Semantic-search beta acceptance
+
+The current learned-model candidate is accepted for beta subject to the bounded ordinary-use
+and security checks in [BETA_READINESS.md](BETA_READINESS.md). Its separate experimental recall
+and latency reports retain their original failures; they are not the deterministic fixture
+checks run by `test:quality`. This decision does not change or bypass any command in the guarded
+release pipeline above. Signed artifact and clean-user acceptance are still required.
+
 ## Signed-update bootstrap
 
 Alpha 11 and earlier do not contain the signed updater, so they cannot discover or install

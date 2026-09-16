@@ -1,9 +1,11 @@
 # Local semantic retrieval: candidate evidence
 
-**Publication remains blocked.** The fresh V3 set passes, but the 10,000-note v8 suite still
-misses two semantic targets and exceeds its existing 100 ms p95 latency gate. These authored
-synthetic fixtures are regression/generalization checks, not a claim of universal accuracy.
-No personal notes were used. Public Alpha 25 artifacts were not changed.
+**Current decision:** the learned-model recall and latency limitations are accepted for beta
+under [the revised release bar](../../BETA_READINESS.md). The fresh V3 set passes; the 10,000-note
+v8 suite still misses two semantic targets and exceeds its original 100 ms p95 target. Those
+recorded failures remain unchanged. Publication still requires the next signed artifact's normal
+security, installation and connector acceptance. These synthetic fixtures do not establish
+universal accuracy. No personal notes were used; public Alpha 25 artifacts were not changed.
 
 ## What changed
 
@@ -126,13 +128,18 @@ for signing/notarization or clean-user acceptance.
 
 ## Product policy and publication gates
 
-The pending product choice is whether to return explicitly marked related context when the
-requested detail is not actually saved. This evidence retains conservative admission and the
-original unsupported-zero-results gate. A different policy needs explicit UI/tool semantics and
-its own evaluation; it must not silently convert these failures to passes.
+The original decision blocked publication on the learned-model recall and latency failures
+above. On September 15 the maintainer explicitly chose a practical beta bar: useful search,
+clear limits, and sound security. [BETA_READINESS.md](../../BETA_READINESS.md) records that decision
+and the remaining bounded acceptance work. This is a change in release criteria, not a claim
+that the failed measurements passed.
 
-Before publication: resolve retrieval quality at scale, decide the relevance policy, establish
-acceptable end-to-end response times, and run a new signed build's clean-user/connector checks.
+Keep the current admission rule. Returned notes are evidence for people and agents to assess;
+a new possible-match labeling feature is not on the beta critical path. The original
+unsupported-zero-results benchmark remains visible as a measurement.
+
+Before publication, complete the existing automated release pipeline and the next signed
+build's clean-user/connector checks, including ordinary semantic use and failure recovery.
 Published Alpha 25 Light installations retain their existing behavior until explicit upgrade.
 Earlier unpublished development Balanced snapshots lack the new bundle files and require the
 explicit repair action; exact search remains available.
