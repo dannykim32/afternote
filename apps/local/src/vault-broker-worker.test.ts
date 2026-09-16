@@ -29,6 +29,38 @@ afterEach(() => {
 });
 
 describe("vault broker worker protocol", () => {
+  it.each(["development-only", "production-signed"] as const)("revokes from the passive Connections overview on %s with fresh approval and no inspection session", async (trustPath) => {
+    const fixture = workerFixture({ trustPath });
+    const connection = { connectionId: randomUUID(), peerPid: 40191 };
+    const owner = { connectionId: randomUUID(), peerPid: 40192 };
+    const durable = p256(), session = p256();
+    const active = await pairAndActivate(fixture, connection, durable, session,
+      ["memory.remember", "memory.recall", "memory.get_note"], 900000,
+      trustPath === "production-signed" ? "secure-enclave" : "development-exact-build");
+    await ownerRequest(fixture.worker, owner, "owner.connector_overview", {});
+    const denied = await rawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" }, false);
+    expect(denied).toMatchObject({ ok: false, error: { code: "owner_denied" } });
+    const saved = await memoryRequest(fixture, connection, active, "memory.remember",
+      { content: "Keep access until fresh revocation is approved" }, session.privateKey);
+    expect(saved.note.id).toBeString();
+    const forged = await rawRequest(fixture.worker, connection, "owner.revoke_connector", { kind: "codex" }, true);
+    expect(forged).toMatchObject({ ok: false, error: { code: "identity_mismatch" } });
+    const challenge = await beginRawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" });
+    expect(challenge.ownerPresenceChallenge.challengeId).toBeString();
+    const wrongPeer = await completeOwnerPresence(fixture.worker,
+      { connectionId: randomUUID(), peerPid: 40193 }, challenge.ownerPresenceChallenge.challengeId);
+    expect(wrongPeer).toMatchObject({ ok: false, error: { code: "identity_mismatch" } });
+    const revoked = await rawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" }, true);
+    expect(revoked).toMatchObject({ ok: true, result: { revoked: true, kind: "codex" } });
+    for (const [operation, body] of [
+      ["memory.remember", { content: "Revoked connector must not write" }],
+      ["memory.recall", { query: "access", limit: 5 }],
+      ["memory.get_note", { id: saved.note.id }],
+    ] as const) await expect(memoryRequest(fixture, connection, active, operation, body, session.privateKey)).rejects.toThrow();
+    const overview = await ownerRequest(fixture.worker, owner, "owner.connector_overview", {});
+    expect(overview.connectors.find((c: { kind: string }) => c.kind === "codex").status).toBe("revoked");
+  });
+
   it("preserves lock and replay precedence before method/role dispatch", async () => {
     const { worker } = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 39001 };
@@ -2475,13 +2507,14 @@ async function pairAndActivate(
   session: ReturnType<typeof p256>,
   requestedCapabilities: MemoryCapability[],
   ttlMs = 15 * 60 * 1_000,
+  signingMode = "development-exact-build",
 ) {
   const begun = await request(fixture.worker, connection, "client.begin", {
     kind: "codex",
     displayName: "Codex",
     installIdentity: randomUUID(),
     publicKey: durable.publicKey,
-    signingMode: "development-exact-build",
+    signingMode,
     requestedCapabilities,
     forgetPolicy: "never",
   });

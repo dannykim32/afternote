@@ -6,6 +6,24 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.3 - 2026-09-16
+
+### Fixed
+
+- Request fresh owner approval when revoking directly from Connections, without requiring
+  a prior authenticated history inspection. Approved revocation stops reads and writes;
+  canceled approval leaves access unchanged.
+
+### Changed
+
+- Clarify connector recall instructions: search across approved connectors in the same vault,
+  start with the user's question, and try a focused rephrasing before reporting no match.
+  An empty result alone does not establish that no relevant note exists.
+
+The reported cross-connector recall misses remain under investigation. The supplied canary
+queries pass against the bundled models in signed connector tests; this is not yet a verified
+fix for the affected Mac.
+
 ## 2.0.0-beta.2 - 2026-09-16
 
 ### Fixed

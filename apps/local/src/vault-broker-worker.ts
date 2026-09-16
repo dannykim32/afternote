@@ -1873,11 +1873,8 @@ export class VaultBrokerWorker {
     request: BrokerRequest,
     transportBinding: BrokerTransportBinding,
   ): string {
-    this.#ownerSession(transportBinding, [
-      "owner.inspect_clients",
-      "owner.inspect_grants",
-      "owner.inspect_sessions",
-    ]);
+    // Passive Connections does not mint inspection authority. Revocation instead
+    // requires the fresh, connection-bound approval over the exact target below.
     assertExactObject(request.params, ["kind"]);
     const target = this.#authority().connectorRevocationTarget(
       ownerClientKind(request.params.kind),

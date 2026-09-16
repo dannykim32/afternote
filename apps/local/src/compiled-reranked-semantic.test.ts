@@ -29,7 +29,7 @@ it.skipIf(!process.env.AFTERNOTE_TEST_MODEL_DIRECTORY)("uses included offline mo
     const [exit, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
     expect(exit, stderr).toBe(0);
     const result = JSON.parse(stdout);
-    expect(result).toMatchObject({ state: "ready", dimensions: 768, brokerRecall: true, indexingCompleted: true });
+    expect(result).toMatchObject({ state: "ready", dimensions: 768, brokerRecall: true, canaryRecall: true, indexingCompleted: true });
     expect(result.scores[0]).toBeGreaterThan(result.minimumScore);
     expect(result.scores[1]).toBeLessThan(result.minimumScore);
   } finally { rmSync(directory, { recursive: true, force: true }); }

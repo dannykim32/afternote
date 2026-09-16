@@ -36,6 +36,11 @@ Connector authorization has idle and absolute deadlines. Manual lock, screen loc
 sleep, user-session resignation, broker restart, identity rotation, and revocation end live
 authority. Durable pairing never substitutes for a current session.
 
+Connector revocation from the passive Connections overview requires a fresh, single-use
+owner approval bound to the requesting native connection and the exact connector target.
+It does not require an inspection session first; that read session cannot substitute for
+revocation approval. Authenticated inspection remains required for detailed authority and audit data.
+
 ## Retrieval and untrusted content
 
 FTS5, temporal parsing, embeddings, and ranking operate locally. Recall has bounded query,

@@ -1,11 +1,11 @@
 {
   "name": "afternote",
-  "version": "2.0.0-beta.2",
+  "version": "2.0.0-beta.3",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "bun@1.3.14",
   "afternote": {
-    "bundleVersion": "28"
+    "bundleVersion": "29"
   },
   "workspaces": [
     "apps/*",

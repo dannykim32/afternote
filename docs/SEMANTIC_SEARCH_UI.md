@@ -73,3 +73,15 @@ The native regression reproduced the missing poll after a search returned indexi
 The bundled-model integration test now starts cold and checks a 15-note index reaches
 ready using the same authenticated progress endpoint. This verifies the reproduced
 mechanism; acceptance on the Mac that reported the hour-long status remains necessary.
+
+## Beta 2 acceptance regressions (baseline `85f0a74`)
+
+- Revoking a connector directly from the passive Connections overview must request fresh
+  native owner approval. It must not depend on first opening an authenticated inspection
+  session. Denial leaves access unchanged; approval stops Remember, Recall and Get on all
+  targeted identities. Trusted caller roles, connection-bound single-use approval, exact
+  target revision checks, and explicit reconnect requirements remain enforced.
+- Reproduce the reported cross-connector canary recall misses using the shipped models,
+  the actual query arguments and signed connector requests. Do not claim that an empty
+  search proves no note exists or that notes are private to the connector that saved them.
+  Confirm the affected Mac's runtime version before treating local fixture success as a fix.
