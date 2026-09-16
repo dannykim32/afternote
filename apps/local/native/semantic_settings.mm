@@ -88,10 +88,15 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
     self.termsWindow = [[NSWindowController alloc] initWithWindow:window];
     self.termsDocuments = [NSStackView new];
     self.termsDocuments.spacing = 8;
-    NSArray *titles = @[@"Gemma terms", @"Use policy", @"Gemma notice", @"Ettin license"];
-    for (NSUInteger i = 0; i < titles.count; i++) {
-      NSButton *button = [AfternoteButton buttonWithTitle:titles[i] target:self action:@selector(selectModelTerms:)];
-      button.tag = i;
+    NSArray *documents = @[
+      @[@"Gemma terms", @"GEMMA_TERMS.txt"],
+      @[@"Use policy", @"GEMMA_PROHIBITED_USE_POLICY.txt"],
+      @[@"Gemma notice", @"GEMMA_NOTICE.txt"],
+      @[@"Ettin license", @"ETTIN_LICENSE.txt"],
+    ];
+    for (NSArray<NSString *> *document in documents) {
+      NSButton *button = [AfternoteButton buttonWithTitle:document[0] target:self action:@selector(selectModelTerms:)];
+      button.identifier = document[1];
       [self.termsDocuments addArrangedSubview:button];
     }
     NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 680, 430)];
@@ -134,9 +139,8 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   [self.termsWindow.window makeKeyAndOrderFront:nil];
 }
 - (void)selectModelTerms:(NSButton *)sender {
-  NSArray *files = @[@"GEMMA_TERMS.txt", @"GEMMA_PROHIBITED_USE_POLICY.txt", @"GEMMA_NOTICE.txt", @"ETTIN_LICENSE.txt"];
-  if (sender.tag < 0 || sender.tag >= (NSInteger)files.count) return;
-  NSString *file = files[sender.tag];
+  if (![self.termsDocuments.arrangedSubviews containsObject:sender]) return;
+  NSString *file = sender.identifier;
   for (NSButton *button in self.termsDocuments.arrangedSubviews) {
     button.state = button == sender ? NSControlStateValueOn : NSControlStateValueOff;
     if (button == sender) AfternoteStylePrimaryButton(button);
