@@ -12,7 +12,7 @@
     },
     "apps/local": {
       "name": "@afternote/local",
-      "version": "2.0.0-alpha.26",
+      "version": "2.0.0-beta.1",
       "dependencies": {
         "@afternote/mcp": "workspace:*",
         "@afternote/memory": "workspace:*",
@@ -22,7 +22,7 @@
     },
     "packages/mcp": {
       "name": "@afternote/mcp",
-      "version": "2.0.0-alpha.26",
+      "version": "2.0.0-beta.1",
       "dependencies": {
         "@afternote/memory": "workspace:*",
         "@modelcontextprotocol/server": "2.0.0",
@@ -31,7 +31,7 @@
     },
     "packages/memory": {
       "name": "@afternote/memory",
-      "version": "2.0.0-alpha.26",
+      "version": "2.0.0-beta.1",
     },
   },
   "overrides": {

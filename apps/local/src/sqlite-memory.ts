@@ -327,6 +327,7 @@ export class SqliteMemory implements Memory {
     this.#database = options.database
       ? options.database as unknown as Database
       : openNoteDatabase(databasePath, this.#encryptionKey, { create: true });
+    const memory = this;
     this.#derivedIndexes = new DerivedIndexCoordinator<Note>({
       model: this.#embeddingModel?.descriptor ?? null,
       rebuildSynchronous: () => {
@@ -338,6 +339,10 @@ export class SqliteMemory implements Memory {
         this.#replaceSmartViewAssignments(note);
         this.#replaceOrganizationAssignments(note);
         this.#replaceTemporalIndex(note);
+      },
+      get prepareSemanticModel() {
+        const model = memory.#embeddingModel;
+        return model?.prepare ? () => model.prepare!() : undefined;
       },
       missingSemanticNotes: () => this.#missingEmbeddingNotes(),
       indexSemanticNotes: (notes, reportError) =>
@@ -1173,6 +1178,14 @@ export class SqliteMemory implements Memory {
     this.#derivedIndexes.enableSemanticModel(model.descriptor);
   }
 
+  disableSemanticSearch(vault: VaultContext): void {
+    this.#assertVault(vault);
+    if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
+    this.#embeddingModel = null;
+    this.#retrievalMode = "lexical";
+    this.#derivedIndexes.disableSemanticModel();
+  }
+
   async waitForDerivedIndex(): Promise<void> {
     await this.#derivedIndexes.wait();
   }
@@ -1283,6 +1296,15 @@ export class SqliteMemory implements Memory {
       if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode };
       return { results: this.#currentResults(this.#limitedTemporalResults(model.reranker ? literalRecallResults(query, rawLexical) : rawLexical, temporal, limit)), searchMode };
     };
+    // A save queues local indexing. Give that work a bounded chance to finish so
+    // immediate recall can find the note; large imports still fall back promptly.
+    if (this.derivedIndexStatus(vault).state === "indexing") {
+      const exact = fallback("indexing");
+      if (exact.results.length > 0) return exact;
+      try { await withTimeout(this.#derivedIndexes.wait(), Math.max(1, deadline - performance.now())); }
+      catch { return fallback("indexing"); }
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+    }
     const indexState = this.derivedIndexStatus(vault).state;
     if (indexState !== "ready") {
       return fallback(indexState === "indexing" ? "indexing" : "degraded");
@@ -1294,7 +1316,7 @@ export class SqliteMemory implements Memory {
         model.embedQuery
           ? model.embedQuery(query + temporalEmbeddingContext(temporal)).then((vector) => [vector])
           : model.embed([query + temporalEmbeddingContext(temporal)]),
-        semanticTimeoutMs,
+        Math.max(1, deadline - performance.now()),
       );
       if (!queryVector) {
         return fallback("degraded");

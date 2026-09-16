@@ -165,3 +165,33 @@ it("pins bundled relevance downloads and commits selection only after the releva
     expect(urls).toHaveLength(1);
   } finally { profile.files = originalFiles; embed.mockRestore(); score.mockRestore(); }
 });
+
+it("uses the verified bundled model by default without creating a cache, preserves off, and rejects invalid preferences", async () => {
+  const { discoverLocalEmbeddingModel, semanticSearchEnabled, setSemanticSearchEnabled } = await import("./local-embedding");
+  const directory = mkdtempSync(join(tmpdir(), "afternote-bundled-model-")); directories.push(directory);
+  const vaultPath = join(directory, "state/vault.db"), bundledModelPath = join(directory, "app/semantic-model");
+  const profile = SEMANTIC_MODELS.balanced, original = profile.files;
+  const content = "verified bundle fixture";
+  profile.files = {"config.json": {bytes: content.length, sha256: createHash("sha256").update(content).digest("hex")}};
+  try {
+    mkdirSync(bundledModelPath, {recursive: true}); writeFileSync(join(bundledModelPath, "config.json"), content);
+    expect(semanticSearchEnabled(vaultPath)).toBe(true);
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model?.descriptor.dimensions).toBe(768);
+    expect(existsSync(join(directory, "state"))).toBe(false);
+    setSemanticSearchEnabled(vaultPath, false);
+    expect(semanticModelCatalog(vaultPath, {bundledModelPath})).toMatchObject({enabled: false, bundled: true});
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model).toBeNull();
+    setSemanticSearchEnabled(vaultPath, true);
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model).not.toBeNull();
+    writeFileSync(join(bundledModelPath, "config.json"), "tampered");
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath})).toMatchObject({model: null, status: {state: "invalid"}});
+    const preference = join(directory, "state/models/search.json");
+    for (const invalid of ['null', '{"version":1,"enabled":"yes"}', ' '.repeat(129)]) {
+      writeFileSync(preference, invalid);
+      expect(() => discoverLocalEmbeddingModel(vaultPath, {bundledModelPath})).toThrow();
+    }
+    rmSync(preference); symlinkSync(join(bundledModelPath, "config.json"), preference);
+    expect(() => semanticSearchEnabled(vaultPath)).toThrow("could not be read");
+    expect(existsSync(vaultPath)).toBe(false);
+  } finally { profile.files = original; }
+});

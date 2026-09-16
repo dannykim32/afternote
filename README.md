@@ -13,7 +13,7 @@ hosted service, customer data, deployment configuration, or release credentials.
 
 ## Try it
 
-Afternote is an early alpha for Apple Silicon Macs running macOS 13.3 or newer.
+Afternote is a beta for Apple Silicon Macs running macOS 13.3 or newer.
 
 Download the signed and notarized DMG and its `SHA256SUMS` from
 [GitHub Releases](https://github.com/dannykim32/afternote/releases), then follow
@@ -181,7 +181,7 @@ connection to its process. The private worker owns the vault key, authorization 
 audit trail, and note mutations.
 
 Canonical notes and revisions share a transaction with their exact, temporal, and
-organizational projections. The optional semantic index is derived locally and can be
+organizational projections. The semantic index is derived locally and can be
 rebuilt without changing canonical notes. Connector lifecycle, owner-presence claims,
 release policy, XPC transport, and product-surface routing each have explicit module seams
 and focused tests.
@@ -201,7 +201,7 @@ and tests. The project's domain language is documented in [CONTEXT.md](CONTEXT.m
   manual vault lock, expiry, and policy changes require fresh approval.
 - Screen lock, sleep, logout, manual vault lock, and broker restart clear live authority.
   Export, deletion, recovery, lock, and unlock always require fresh owner approval.
-- Exact search, date-aware retrieval, and optional semantic inference run locally. The
+- Exact search, date-aware retrieval, and semantic inference run locally. The
   installed product has no Afternote account, sync endpoint, analytics transport, or
   telemetry transport.
 - Public artifacts are Developer ID signed, notarized, stapled, checksummed, and bound to a
@@ -225,26 +225,24 @@ current limits.
 
 ## Retrieval and verification
 
-Afternote starts with exact-text and date-aware search. This applies both to Notes in
-Afternote and to Recall calls from Codex, Claude Code, and Claude Desktop.
+Search by meaning is on by default in the beta, in both Notes and Recall calls from
+approved connected tools. The app includes one local search engine: EmbeddingGemma for
+finding candidates and Ettin for checking their relevance. There is no first-run model
+download. Indexing and search happen on your Mac, without uploading notes to a model service.
+The included model files occupy about 375 MB; runtime memory use is higher.
 
-To enable search by meaning, open **Settings → Search by meaning**. Choose Light
-(23.6 MB), Balanced (218.7 MB), or Large (625.0 MB), then click **Download model**.
-Balanced is recommended for Macs with at least 8 GB of memory; an existing Light installation
-is preserved. The recommendation does not download anything. Download size is not RAM use.
-Models are pinned and verified before selection. Downloads contact Hugging Face; inference and
-indexing run locally without uploading notes. Switching models rebuilds the derived index,
-leaves note revisions intact, and keeps exact search available while indexing.
-If Notes is locked or its session has ended, open it with your usual authentication to
-activate the model. A current Notes session activates it without reopening the vault.
-CLI equivalents: `afternote semantic catalog`, `afternote semantic status`, and
-`afternote semantic install light|balanced|large`. Omitting the profile reuses the selection.
-See [model comparison and release limits](docs/SEMANTIC_MODEL_COMPARISON.md); these choices
-are development candidates pending real-model scale validation and signed-build acceptance.
+**Settings → Search by meaning** turns it on or off. Exact-text and date-aware search remain
+available while local search prepares and when it is off. Existing notes index while the
+vault is unlocked, and saved or edited notes update the same local index automatically.
+Turning search off leaves saved notes and their revisions intact. CLI status is available
+through `afternote semantic catalog` and `afternote semantic status`.
 
-Semantic search improves both Notes and connected tools. Agent Recall uses a stricter
-similarity threshold than the Notes search UI to reduce weak matches. The connected model
-can reformulate queries, but it cannot reason about a note Afternote has not returned.
+Notes and connected tools use the same semantic relevance and ranking rules. A connected
+model can reformulate a query, but it cannot reason about a note Afternote has not returned.
+Search still has misses and can return related notes that do not answer a question; always
+inspect the original citation. See [beta evidence and limits](docs/BETA_READINESS.md) and
+[model licenses and use restrictions](apps/local/packaging/MODEL_TERMS.md).
+
 Results remain subject to that connector's approved access. What a connected AI host sends
 to its provider is governed by the host's own behavior.
 

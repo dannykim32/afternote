@@ -58,6 +58,11 @@ export class TransformersTextEmbeddingModel implements TextEmbeddingModel {
     }
   }
 
+  async prepare(): Promise<void> {
+    await this.embedQuery("Find a saved note.");
+    if (this.reranker) await this.reranker.score("saved note", ["A saved note for local search."]);
+  }
+
   async embedQuery(text: string): Promise<Float32Array> {
     return (await this.#embed([text], true))[0]!;
   }

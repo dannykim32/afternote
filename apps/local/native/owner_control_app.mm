@@ -974,6 +974,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self updateSetupBannerVisibility];
     [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-settings"]) {
+    [self.semanticSettings refresh];
     [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-new-note"]) {
     [self beginNewNote:nil];
@@ -1306,10 +1307,18 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   __weak OwnerControlDelegate *weakSelf = self;
   self.semanticSettings = [[AfternoteSemanticSettings alloc] initWithRunner:
       ^(NSArray<NSString *> *arguments, AfternoteSemanticCompletion completion) {
+#if defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
+    completion(@{ @"enabled":@YES, @"models":@[@{@"key":@"balanced", @"modelId":@"preview:q4", @"state":@"ready"}] }, nil);
+#else
     [weakSelf runPackagedCommand:arguments completion:completion];
+#endif
   }];
   self.semanticSettings.activate = ^(BOOL userInitiated) {
+#if defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
+    [weakSelf.semanticSettings activationCompleted:@"hybrid" modelId:@"preview:q4"];
+#else
     [weakSelf activateSemanticSearch:userInitiated];
+#endif
   };
   NSTextField *vaultLocationState = [self label:@"Afternote-managed" size:12 weight:NSFontWeightMedium];
   vaultLocationState.textColor = AfternoteMutedTextColor();

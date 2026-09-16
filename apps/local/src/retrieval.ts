@@ -15,6 +15,7 @@ export interface TextReranker {
 }
 
 export interface TextEmbeddingModel {
+  prepare?(): Promise<void>;
   readonly reranker?: TextReranker;
   readonly descriptor: EmbeddingModelDescriptor;
   readonly minimumSimilarity: number;

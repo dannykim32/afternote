@@ -105,7 +105,7 @@ export function desktopRuntimeEntries(includeSemanticRuntime: boolean): string[]
     "libsqlcipher.3.dylib",
     "libcrypto.4.dylib",
     ...(includeSemanticRuntime ? ["libonnxruntime.1.21.0.dylib"] : []),
-    ...(includeSemanticRuntime ? ["onnxruntime_binding.node"] : []),
+    ...(includeSemanticRuntime ? ["onnxruntime_binding.node", "semantic-model"] : []),
     "install.sh",
     "rollback.sh",
     "uninstall.sh",
@@ -124,7 +124,7 @@ export function renderPackagingText(
 ): string {
   let rendered = contents.replaceAll(
     "__AFTERNOTE_RELEASE_CHANNEL__",
-    options.release ? "public-alpha" : "development-alpha",
+    options.release ? "public-beta" : "development",
   );
   if (!options.includeSemanticRuntime) {
     rendered = rendered.replace(

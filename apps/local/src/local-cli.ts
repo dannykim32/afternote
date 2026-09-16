@@ -50,6 +50,7 @@ export type LocalSemanticRuntime = {
   open(vaultPath: string): TextEmbeddingModel | null;
   status(vaultPath: string): unknown;
   catalog?(vaultPath: string): unknown;
+  setEnabled?(vaultPath: string, enabled: boolean): unknown;
   acquire(vaultPath: string, options?: { profile?: SemanticProfileId }): Promise<unknown>;
   help: string;
 };
@@ -347,7 +348,7 @@ async function relaunchWithBundledLibraries(
 
 function commandNeedsEmbeddingLibrary(args: string[]): boolean {
   const command = args[0] ?? "mcp";
-  if (command === "semantic") return args[1] === "install";
+  if (command === "semantic") return args[1] === "install" || args[1] === "check";
   if (command === "eval-recall") return args.includes("--semantic");
   return false;
 }
@@ -640,8 +641,20 @@ async function manageSemanticSearch(
   if (args.length > (action === "install" ? 2 : 1)) throw new Error("Unexpected semantic arguments");
   const profile = selection === undefined ? undefined : semanticProfile(selection).key;
   const path = vaultPath();
+  if ((action === "enable" || action === "disable") && semanticRuntime.setEnabled) {
+    console.log(JSON.stringify(semanticRuntime.setEnabled(path, action === "enable"), null, 2));
+    return;
+  }
   if (action === "catalog" && semanticRuntime.catalog) {
     console.log(JSON.stringify(semanticRuntime.catalog(path), null, 2));
+    return;
+  }
+  if (action === "check") {
+    const model = semanticRuntime.open(path);
+    if (!model) throw new Error("Search by meaning is disabled or its model files are unavailable");
+    if (model.prepare) await model.prepare();
+    else await model.embed(["Local search runtime check."]);
+    console.log(JSON.stringify({ ...model.descriptor, ready: true, local: true }, null, 2));
     return;
   }
   if (action === "status") {
@@ -655,7 +668,7 @@ async function manageSemanticSearch(
     console.log(JSON.stringify(await semanticRuntime.acquire(path, { profile }), null, 2));
     return;
   }
-  throw new Error("Semantic action must be status, catalog, or install");
+  throw new Error("Semantic action must be status, catalog, check, enable, disable, or install");
 }
 
 function recallEvaluationScale(args: string[]): {

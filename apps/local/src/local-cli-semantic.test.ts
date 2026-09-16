@@ -37,3 +37,20 @@ it("validates model choices before download and exposes the read-only catalog", 
     expect(selected).toEqual(["large"]);
   } finally { stdout.mockRestore(); stderr.mockRestore(); }
 });
+
+
+it("changes the preference without downloading and probes the local runtime without opening a vault", async () => {
+  const changes: boolean[] = []; let probes = 0;
+  const runtime = {open: () => ({descriptor: {id: "fixture", revision: "1", dimensions: 2}, minimumSimilarity: 0.5,
+    prepare: async () => {probes++;}, embed: async () => []}), status: () => ({}),
+    setEnabled: (_path: string, enabled: boolean) => {changes.push(enabled); return {enabled};},
+    acquire: async () => {throw new Error("must not download");}, help: "fixture"};
+  const stdout = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await runLocalCli(["semantic", "disable"], runtime);
+    await runLocalCli(["semantic", "enable"], runtime);
+    await runLocalCli(["semantic", "check"], runtime);
+    expect(changes).toEqual([false, true]); expect(probes).toBe(1);
+    expect(JSON.parse(stdout.mock.calls[2]![0])).toMatchObject({ready: true, local: true});
+  } finally {stdout.mockRestore();}
+});

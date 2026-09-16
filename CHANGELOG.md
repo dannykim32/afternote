@@ -6,6 +6,25 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.1 - 2026-09-16
+
+### Changed
+
+- Search by meaning is on by default in Notes and approved connected tools. The app includes
+  the verified EmbeddingGemma and Ettin models; no first-run download or model choice is needed.
+- Settings has one right-aligned Enabled control, with local preparation and failure status.
+  Turning it off keeps notes intact and switches both surfaces to exact search.
+- The local engine prepares when the vault opens. Newly saved notes index automatically;
+  immediate recall can wait within its existing deadline, while exact matches remain fast.
+- Included model files, licenses and use restrictions are part of the signed release payload.
+
+### Fixed
+
+- Retire queued indexing and suppress late semantic results when search is disabled.
+- Stop using an active model if refreshed model verification fails.
+
+The accepted beta search limitations remain documented in [beta readiness](docs/BETA_READINESS.md).
+
 ## 2.0.0-alpha.26 - 2026-09-15
 
 ### Added

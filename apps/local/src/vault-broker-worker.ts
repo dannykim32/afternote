@@ -1383,7 +1383,9 @@ export class VaultBrokerWorker {
                 const discovery = this.#embeddingModelProvider(this.#vaultConfiguration().vaultPath);
                 this.#semanticDiscoveryFailed = discovery.invalid;
                 if (discovery.model) memory.enableSemanticSearch(vault, discovery.model);
+                else memory.disableSemanticSearch(vault);
               } catch {
+                memory.disableSemanticSearch(vault);
                 this.#semanticDiscoveryFailed = true;
               }
             }

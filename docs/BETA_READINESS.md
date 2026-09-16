@@ -20,7 +20,7 @@ and takes roughly 0.6–0.7 seconds at p95. First search in the process-restart 
 - Note access still requires the correct live authority. Lock, expiry and revocation must
   stop access; delayed searches must not expose stale note revisions or restore access.
 - Saving, editing, upgrading and recovery must preserve note data and revision integrity.
-- Model installation is explicit, pinned, verified and local after download. Failure is
+- The beta includes pinned, verified models and enables local search by default. Failure is
   visible and does not bypass authentication or corrupt the vault.
 - Exact search and original note citations remain usable. Semantic results are retrieved
   notes to assess, not verified answers or confidence probabilities. Occasional misses and
@@ -38,8 +38,8 @@ or agent-generated metadata are prerequisites for this beta.
 
 Use synthetic notes and the normal authenticated app and connector flows:
 
-1. Enable search by meaning from Settings. Confirm the stated download, indexing state and
-   completion are understandable. Installation must not change existing note contents.
+1. Launch without a model cache or network. Confirm search by meaning is enabled and its
+   preparation state is understandable. Toggle off/on. Note contents must stay unchanged.
 2. Recall a few ordinary notes using different words in Notes and in an approved AI tool;
    inspect the original text/citation. Also find an exact identifier. The aim is useful
    everyday retrieval, not 100% success on every wording.
@@ -49,7 +49,7 @@ Use synthetic notes and the normal authenticated app and connector flows:
 4. Lock and revoke while exercising search. Verify the next tool request cannot retrieve
    notes, the UI clears protected content, and late results cannot bring it back. Then
    recover through the supported approval/reconnection flow.
-5. Interrupt installation or indexing and retry/relaunch. Confirm exact search remains
+5. Interrupt indexing and retry/relaunch. Confirm exact search remains
    available when authorized and the semantic setup can recover without resetting the vault.
 
 Run these alongside the existing clean-user and connector acceptance, using the exact new

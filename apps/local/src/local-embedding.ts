@@ -40,13 +40,14 @@ export type LocalEmbeddingStatus = {
 
 export type LocalEmbeddingDiscovery = {
   status: LocalEmbeddingStatus;
+  enabled: boolean;
   model: TransformersTextEmbeddingModel | null;
 };
 
 export function selectedSemanticProfile(vaultPath: string): SemanticProfileId {
   const path = join(modelCacheDirectory(vaultPath), "selection.json");
   let fd: number;
-  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW); }
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("Semantic model selection could not be read");
     // Respect previous explicit Light installation; otherwise recommend Balanced.
@@ -73,21 +74,62 @@ function selectModel(vaultPath: string, profile: SemanticProfileId): void {
   } finally { rmSync(staging, { force: true }); }
 }
 
-export function semanticModelCatalog(vaultPath: string) {
+// The signed app supplies this path from its own executable layout. There is no
+// environment-variable or user-supplied model path in a release worker.
+export type LocalEmbeddingOptions = { bundledModelPath?: string };
+
+export function semanticSearchEnabled(vaultPath: string): boolean {
+  const path = join(modelCacheDirectory(vaultPath), "search.json");
+  let fd: number;
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw new Error("Search preference could not be read");
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.size > 128) throw new Error("Search preference is invalid");
+    const bytes = readFileSync(fd);
+    if (bytes.length > 128) throw new Error("Search preference is invalid");
+    const data = JSON.parse(bytes.toString("utf8"));
+    if (!data || Object.keys(data).length !== 2 || data.version !== 1 || typeof data.enabled !== "boolean")
+      throw new Error("Search preference is invalid");
+    return data.enabled;
+  } finally { closeSync(fd); }
+}
+
+export function setSemanticSearchEnabled(vaultPath: string, enabled: boolean): void {
+  if (typeof enabled !== "boolean") throw new Error("Search preference is invalid");
+  const directory = modelCacheDirectory(vaultPath);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const staging = join(directory, `.search-${randomUUID()}`);
+  try {
+    writeFileSync(staging, JSON.stringify({ version: 1, enabled }), { flag: "wx", mode: 0o600 });
+    renameSync(staging, join(directory, "search.json"));
+  } finally { rmSync(staging, { force: true }); }
+}
+
+export function semanticModelCatalog(vaultPath: string, options?: LocalEmbeddingOptions) {
   return {
-    selected: selectedSemanticProfile(vaultPath),
+    selected: options?.bundledModelPath ? "balanced" : selectedSemanticProfile(vaultPath),
+    enabled: semanticSearchEnabled(vaultPath),
+    bundled: Boolean(options?.bundledModelPath),
     recommended: totalmem() >= 8 * 1024 ** 3 ? "balanced" : "light",
     memoryGiB: Math.round(totalmem() / 1024 ** 3),
     models: Object.values(SEMANTIC_MODELS).map((profile) => ({
       key: profile.key, name: profile.name, modelId: `${profile.id}:${profile.dtype}`, downloadBytes: modelDownloadBytes(profile),
-      state: localEmbeddingStatus(vaultPath, profile.key).state,
+      state: localEmbeddingStatus(vaultPath, profile.key, options).state,
     })),
   };
 }
 
-export function localEmbeddingStatus(vaultPath: string, selected?: SemanticProfileId): LocalEmbeddingStatus {
-  const profile = semanticProfile(selected ?? selectedSemanticProfile(vaultPath));
-  const snapshot = modelSnapshotPath(vaultPath, profile);
+export function localEmbeddingStatus(vaultPath: string, selected?: SemanticProfileId, options?: LocalEmbeddingOptions): LocalEmbeddingStatus {
+  const profile = semanticProfile(selected ?? (options?.bundledModelPath ? "balanced" : selectedSemanticProfile(vaultPath)));
+  const snapshot = options?.bundledModelPath && profile.key === "balanced" ? options.bundledModelPath : modelSnapshotPath(vaultPath, profile);
+  return verifyModelSnapshot(snapshot, profile);
+}
+
+export function verifyModelSnapshot(snapshot: string, profile: SemanticModelProfile): LocalEmbeddingStatus {
   let bytes = 0;
   let found = 0;
   for (const [relativePath, expected] of Object.entries(profile.files)) {
@@ -116,21 +158,23 @@ export function localEmbeddingStatus(vaultPath: string, selected?: SemanticProfi
 }
 
 export function openLocalEmbeddingModel(
-  vaultPath: string,
+  vaultPath: string, options?: LocalEmbeddingOptions,
 ): TransformersTextEmbeddingModel | null {
-  return discoverLocalEmbeddingModel(vaultPath).model;
+  return discoverLocalEmbeddingModel(vaultPath, options).model;
 }
 
 export function discoverLocalEmbeddingModel(
-  vaultPath: string,
+  vaultPath: string, options?: LocalEmbeddingOptions,
 ): LocalEmbeddingDiscovery {
-  const status = localEmbeddingStatus(vaultPath);
+  const enabled = semanticSearchEnabled(vaultPath);
+  const status = localEmbeddingStatus(vaultPath, undefined, options);
   return {
     status,
-    model: status.state === "ready"
+    enabled,
+    model: enabled && status.state === "ready"
       ? new TransformersTextEmbeddingModel({
           cacheDirectory: modelCacheDirectory(vaultPath),
-          localModelPath: modelSnapshotPath(vaultPath, semanticProfile(status.profile)),
+          localModelPath: options?.bundledModelPath ?? modelSnapshotPath(vaultPath, semanticProfile(status.profile)),
           profile: semanticProfile(status.profile),
           allowRemoteModels: false,
         })
@@ -193,7 +237,7 @@ export async function acquireLocalEmbeddingModel(
   return status;
 }
 
-async function downloadVerifiedModelFile(
+export async function downloadVerifiedModelFile(
   stagingDirectory: string,
   relativePath: string,
   profile: SemanticModelProfile,

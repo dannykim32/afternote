@@ -1,6 +1,7 @@
 import { runLocalCli } from "./local-cli";
 import {
   acquireLocalEmbeddingModel,
+  setSemanticSearchEnabled,
   localEmbeddingStatus,
   semanticModelCatalog,
   openLocalEmbeddingModel,
@@ -10,6 +11,7 @@ try {
     open: openLocalEmbeddingModel,
     status: localEmbeddingStatus,
     catalog: semanticModelCatalog,
+    setEnabled: (path, enabled) => { setSemanticSearchEnabled(path, enabled); return semanticModelCatalog(path); },
     acquire: acquireLocalEmbeddingModel,
     help: `
   eval-recall [--semantic] [--noise 10|100] [--notes 10000]

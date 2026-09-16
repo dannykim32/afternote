@@ -297,6 +297,17 @@ if [ -e "$script_dir/libonnxruntime.1.21.0.dylib" ]; then
   fi
   install -m 755 "$script_dir/onnxruntime_binding.node" "$version_stage/onnxruntime_binding.node"
 fi
+if [ -e "$script_dir/semantic-model" ]; then
+  if [ -L "$script_dir/semantic-model" ] || [ ! -d "$script_dir/semantic-model" ] ||
+    find "$script_dir/semantic-model" -type l -print -quit | grep -q .; then
+    printf 'Refusing invalid or symlinked search model files.\n' >&2
+    exit 1
+  fi
+  cp -R "$script_dir/semantic-model" "$version_stage/semantic-model"
+elif [ "__AFTERNOTE_RELEASE_ARTIFACT__" = "1" ]; then
+  printf 'Refusing a release without its included search model.\n' >&2
+  exit 1
+fi
 verify_release_version "$version_stage" "$installed_application_path"
 
 broker_path_xml=$(xml_escape "$install_root/current/afternote-vault-broker" | sed_replacement)

@@ -54,6 +54,13 @@ describe("native Library broker protocol", () => {
     expect(searched.results).toMatchObject([{ citation: { noteId: saved.id, revision: 1 } }]);
     expect((await ownerRequest(fixture.worker, connection, "library.get_note", { id: saved.id, revision: null })).note).toMatchObject({ content: note, revision: 1 });
     expect((await ownerRequest(fixture.worker, connection, "library.refresh_search", {})).searchMode).toBe("hybrid");
+    installed = false;
+    expect((await ownerRequest(fixture.worker, connection, "library.refresh_search", {})).searchMode).toBe("exact");
+    expect((await ownerRequest(fixture.worker, connection, "library.search", {cursor: null, limit: 10, query})).results).toEqual([]);
+    expect((await ownerRequest(fixture.worker, connection, "library.get_note", {id: saved.id, revision: null})).note).toMatchObject({content: note, revision: 1});
+    installed = true;
+    await ownerRequest(fixture.worker, connection, "library.refresh_search", {});
+    expect((await ownerRequest(fixture.worker, connection, "library.search", {cursor: null, limit: 10, query})).results).toMatchObject([{citation: {noteId: saved.id}}]);
   });
 
   it("requires a current search scope and rejects activation parameters", async () => {

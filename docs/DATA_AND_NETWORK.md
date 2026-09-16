@@ -9,10 +9,10 @@ vault, and Codex, Claude Code, and Claude Desktop connectors only.
 | --- | --- | --- |
 | `~/.afternote/vault.db` | SQLCipher-encrypted notes, revisions, metadata, embeddings, grants, and audit records | Preserved so reinstall does not destroy notes |
 | `~/.afternote/clients/` | Connector installation identifiers; no note text or private signing-key bytes | Preserved for reconnect after reinstall |
-| `~/.afternote/models/` | Pinned local embedding model files downloaded only after explicit semantic installation | Preserved; may be deleted and downloaded again |
+| `~/.afternote/models/` | Search preference (`search.json`); developer builds may also cache explicitly installed models | Preserved |
 | `~/.afternote/.vault.db.afternote.lock` | Transient lifecycle lock containing process coordination state, not note text | Removed when the broker exits normally; stale locks are recovered safely |
 | `~/.afternote/vault.db.*migration*` and `vault.db.*restore*` | Owner-only transactional markers, encrypted candidates, rollback vaults, and integrity seals used only while migration or restore is incomplete | Cleaned after successful completion; retained after interruption so recovery can resume without guessing |
-| `~/Library/Application Support/Afternote/` | Versioned runtime, native helpers, license inventory, and active-version link | Removed |
+| `~/Library/Application Support/Afternote/` | Versioned runtime, included search models, native helpers, license inventory, and active-version link | Removed |
 | `~/Library/LaunchAgents/dev.afternote.vault-broker.plist` | User-level broker launch configuration | Removed |
 | `~/.local/bin/afternote` | Link to the active command | Removed when Afternote owns it |
 | `~/.codex/config.toml` | One `mcp_servers.afternote` entry | Only the Afternote entry is removed |
@@ -68,11 +68,11 @@ DMG from `github.com/dannykim32/afternote/releases`. The feed and DMG carry EdDS
 the app also requires Apple code signing. Development builds contain no update feed or updater
 framework and make no update request.
 
-Apart from approved app updates, an explicit **Settings → Search by meaning → Download model** action
-(or `afternote semantic install light|balanced|large`)
-fetches a fixed file set from `https://huggingface.co` at the pinned model revision. Every
-file has a byte limit and SHA-256 digest and is verified before publication. The model and
-inference remain local after installation.
+Search by meaning uses model files included in the signed app. It is enabled by default,
+works offline, and does not contact Hugging Face or Google at runtime. The release build
+fetches pinned model files from Hugging Face and verifies every size and SHA-256 digest.
+The developer-only `semantic install` command can still download pinned experimental
+profiles when explicitly invoked; the app UI never invokes that command.
 
 Codex, Claude Code, and Claude Desktop are separate products with their own network and retention behavior.
 When one of those connectors calls Recall, Afternote returns the requested excerpts to that

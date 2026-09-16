@@ -1,72 +1,55 @@
 #import "semantic_settings.h"
-
 int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
     NSMutableArray *requests = [NSMutableArray array];
     AfternoteSemanticSettings *view = [[AfternoteSemanticSettings alloc] initWithRunner:
         ^(NSArray *args, AfternoteSemanticCompletion completion) {
-      [requests addObject:@{ @"args": args, @"reply": [completion copy] }];
+      [requests addObject:@{@"args":args, @"reply":[completion copy]}];
     }];
-    __block NSUInteger automaticActivations = 0, explicitActivations = 0;
-    view.activate = ^(BOOL userInitiated) { if (userInitiated) explicitActivations++; else automaticActivations++; };
-    NSDictionary *(^catalog)(void) = ^NSDictionary * {
-      NSMutableArray *models = [NSMutableArray array];
-      for (NSString *key in @[@"light", @"balanced", @"large"])
-        [models addObject:@{ @"key":key, @"name":key, @"modelId":[key stringByAppendingString:@":q8"],
-          @"downloadBytes":@23000000, @"state":@"not-installed" }];
-      return @{ @"selected":@"balanced", @"recommended":@"balanced", @"memoryGiB":@16, @"models":models };
-    };
-    NSDictionary *(^status)(NSString *) = ^NSDictionary *(NSString *key) {
-      return @{ @"state":@"ready", @"profile":key, @"modelId":key, @"revision":@"pinned",
-        @"dtype":@"q8", @"dimensions":@384, @"bytes":@23000000, @"reason":NSNull.null };
+    __block NSUInteger automatic = 0, explicitActivations = 0;
+    view.activate = ^(BOOL user) { if (user) explicitActivations++; else automatic++; };
+    NSDictionary *(^catalog)(BOOL) = ^NSDictionary *(BOOL enabled) {
+      return @{@"enabled":@(enabled), @"models":@[@{@"key":@"balanced", @"modelId":@"fixture:q4", @"state":@"ready"}]};
     };
     void (^reply)(NSUInteger, NSDictionary *, NSString *) = ^(NSUInteger i, NSDictionary *result, NSString *error) {
       AfternoteSemanticCompletion completion = requests[i][@"reply"]; completion(result, error);
     };
     [view refresh]; [view refresh];
-    BOOL checkOnly = requests.count == 1 && [requests[0][@"args"] isEqual:@[@"semantic", @"catalog"]];
-    reply(0, catalog(), nil);
-    BOOL explicitInstall = automaticActivations == 0 && [view.actionButton.title isEqual:@"Enable search by meaning"];
-    [view.actionButton performClick:nil]; [view.actionButton performClick:nil]; [view refresh];
-    BOOL duplicateBlocked = requests.count == 2 && !view.actionButton.enabled &&
-        [requests[1][@"args"] isEqual:@[@"semantic", @"install", @"balanced"]];
-    reply(0, catalog(), nil);
-    BOOL staleIgnored = !view.actionButton.enabled && automaticActivations == 0;
-    reply(1, nil, @"Network failed");
-    BOOL retryOffered = view.actionButton.enabled && [view.actionButton.title isEqual:@"Retry"];
-    [view setSearchMode:@"hybrid"];
-    BOOL failureSurvivesSearch = [view.actionButton.title isEqual:@"Retry"];
-    [view refresh]; reply(2, catalog(), nil);
-    BOOL failureSurvivesNavigation = [view.actionButton.title isEqual:@"Retry"] &&
-        [view.statusLabel.stringValue containsString:@"Installation failed"];
-    [view.actionButton performClick:nil]; reply(3, @{ @"state":@"ready" }, nil);
-    BOOL malformedRejected = automaticActivations == 0 && [view.actionButton.title isEqual:@"Retry"];
-    [view.actionButton performClick:nil]; reply(4, status(@"balanced"), nil);
-    BOOL installed = automaticActivations == 1 && [view.actionButton.title isEqual:@"Activate search"];
-    [view.actionButton performClick:nil];
-    BOOL explicitActivation = explicitActivations == 1;
-    [view setIndexedNotes:32 total:100];
-    [view activationCompleted:@"indexing" modelId:@"balanced:q8"];
-    BOOL indexing = [view.statusLabel.stringValue containsString:@"Indexing 32 of 100"];
-    [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
-    BOOL active = [view.statusLabel.stringValue containsString:@"Active in Notes and connected tools"];
-    BOOL oneSearchEngine = ![view respondsToSelector:NSSelectorFromString(@"modelMenu")];
-    [view activationFailed];
-    [view.actionButton performClick:nil];
-    BOOL activationRetryDoesNotDownload = requests.count == 5 && explicitActivations == 2;
-    [view activationCompleted:@"hybrid" modelId:@"large:q8"];
-    BOOL oldModelNotActive = [view.actionButton.title isEqual:@"Activate search"];
-    [view activationCompleted:@"hybrid" modelId:@"balanced:q8"];
+    BOOL checkOnly = requests.count == 1 && !view.toggleButton.enabled && [requests[0][@"args"] isEqual:@[@"semantic", @"catalog"]];
+    reply(0, catalog(YES), nil);
+    BOOL defaultOn = automatic == 1 && view.toggleButton.state == NSControlStateValueOn && view.toggleButton.enabled;
+    [view activationCompleted:@"indexing" modelId:@"fixture:q4"];
+    BOOL preparing = [view.statusLabel.stringValue containsString:@"Preparing local search"];
+    [view setIndexedNotes:2 total:3]; [view activationCompleted:@"indexing" modelId:@"fixture:q4"];
+    BOOL indexing = [view.statusLabel.stringValue containsString:@"2 of 3"];
+    [view activationCompleted:@"hybrid" modelId:@"fixture:q4"];
+    BOOL active = [view.statusLabel.stringValue containsString:@"Ready in Notes"];
+    [view.toggleButton performClick:nil]; [view.toggleButton performClick:nil]; [view refresh];
+    BOOL duplicateBlocked = requests.count == 2 && !view.toggleButton.enabled && [requests[1][@"args"] isEqual:@[@"semantic", @"disable"]];
+    reply(0, catalog(YES), nil);
+    BOOL staleIgnored = !view.toggleButton.enabled;
+    reply(1, catalog(NO), nil);
+    BOOL disableApplied = explicitActivations == 1 && view.toggleButton.state == NSControlStateValueOff && [view.statusLabel.stringValue containsString:@"Turning off"];
+    [view activationCompleted:@"exact" modelId:@""];
+    BOOL exact = [view.statusLabel.stringValue containsString:@"Off."];
+    [view.toggleButton performClick:nil]; reply(2, nil, @"Failed");
+    BOOL failure = !view.actionButton.hidden && view.toggleButton.state == NSControlStateValueOff;
+    [view.actionButton performClick:nil]; reply(3, @{}, nil);
+    BOOL malformedRejected = !view.actionButton.hidden && explicitActivations == 1;
+    [view.actionButton performClick:nil]; reply(4, catalog(YES), nil);
+    [view activationFailed]; [view.actionButton performClick:nil];
+    BOOL retryActivation = requests.count == 5 && explicitActivations == 2 && [view.statusLabel.stringValue containsString:@"Could not activate"];
+    [view activationCompleted:@"hybrid" modelId:@"fixture:q4"];
+    BOOL recovered = view.actionButton.hidden && [view.statusLabel.stringValue containsString:@"Ready"];
     [view setSearchMode:@"checking"];
-    BOOL lockedNotActive = [view.actionButton.title isEqual:@"Activate search"];
-    NSDictionary *checks = @{ @"checkOnly":@(checkOnly), @"explicitInstall":@(explicitInstall),
-      @"duplicateBlocked":@(duplicateBlocked), @"staleIgnored":@(staleIgnored),
-      @"failureSurvivesSearch":@(failureSurvivesSearch), @"failureSurvivesNavigation":@(failureSurvivesNavigation),
-      @"retryOffered":@(retryOffered), @"malformedRejected":@(malformedRejected),
-      @"installed":@(installed), @"explicitActivation":@(explicitActivation),
-      @"indexing":@(indexing), @"active":@(active), @"lockedNotActive":@(lockedNotActive),
-      @"activationRetryDoesNotDownload":@(activationRetryDoesNotDownload), @"oneSearchEngine":@(oneSearchEngine), @"oldModelNotActive":@(oldModelNotActive) };
+    BOOL lockedNotActive = [view.statusLabel.stringValue containsString:@"opens"] || [view.statusLabel.stringValue containsString:@"open your vault"];
+    BOOL noDownloads = YES;
+    for (NSDictionary *request in requests) if ([request[@"args"] containsObject:@"install"]) noDownloads = NO;
+    NSDictionary *checks = @{@"checkOnly":@(checkOnly), @"defaultOn":@(defaultOn), @"preparing":@(preparing),
+      @"indexing":@(indexing), @"active":@(active), @"duplicateBlocked":@(duplicateBlocked), @"staleIgnored":@(staleIgnored),
+      @"disableApplied":@(disableApplied), @"exact":@(exact), @"failure":@(failure), @"malformedRejected":@(malformedRejected),
+      @"retryActivation":@(retryActivation), @"recovered":@(recovered), @"lockedNotActive":@(lockedNotActive), @"noDownloads":@(noDownloads)};
     NSData *data = [NSJSONSerialization dataWithJSONObject:checks options:0 error:nil];
     fwrite(data.bytes, 1, data.length, stdout);
     for (NSNumber *passed in checks.allValues) if (!passed.boolValue) return 2;

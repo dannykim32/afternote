@@ -1520,6 +1520,29 @@ describe("SqliteMemory temporal recall", () => {
 });
 
 describe("SqliteMemory hybrid retrieval", () => {
+  it("recalls a fresh note without an explicit index wait, and disables in-flight inference", async () => {
+    const content = "The brass token opens the archive room.", query = "records storage access credential";
+    const model: TextEmbeddingModel = new FixtureEmbeddingModel(new Map([[content, [1, 0]], [query, [1, 0]]]));
+    const memory = new SqliteMemory(":memory:", localVault, {embeddingModel: model, retrievalMode: "hybrid"});
+    try {
+      const note = await memory.remember(localVault, {content});
+      expect(await memory.recall(localVault, query, 5)).toMatchObject([{note: {id: note.id}}]);
+      let release!: () => void, started!: () => void;
+      const blocked = new Promise<void>(resolve => {release = resolve;});
+      const running = new Promise<void>(resolve => {started = resolve;});
+      model.embedQuery = async () => {started(); await blocked; return new Float32Array([1, 0]);};
+      const pending = memory.recall(localVault, query, 5); await running;
+      memory.disableSemanticSearch(localVault); release();
+      expect(await pending).toEqual([]);
+      expect(memory.derivedIndexStatus(localVault).state).toBe("disabled");
+      expect(await memory.recall(localVault, query, 5)).toEqual([]);
+      expect(await memory.recall(localVault, "brass token", 5)).toMatchObject([{note: {id: note.id, revision: 1}}]);
+      delete model.embedQuery;
+      memory.enableSemanticSearch(localVault, model); await memory.waitForDerivedIndex();
+      expect(await memory.recall(localVault, query, 5)).toMatchObject([{note: {id: note.id, revision: 1}}]);
+    } finally { memory.close(); }
+  });
+
   it("switches models during indexing and query inference without mixing vectors or editing notes", async () => {
     const content = "The brass token opens the archive room.";
     const query = "records storage access credential";

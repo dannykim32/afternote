@@ -6,8 +6,8 @@ Current [beta release decision](BETA_READINESS.md) and [measurements](evals/2026
 
 Semantic recall is a core Afternote capability: users should find explicitly saved notes by
 meaning in both Notes and authorized connected tools, without remembering the original words.
-Keep setup simple: one explicit local search download, with its action aligned to the right
-like other Settings controls. No Light/Balanced/Large selector in the product UI. Preserve
+Keep setup simple: one included local search engine, enabled by default, with its on/off
+control aligned to the right like other Settings controls. No Light/Balanced/Large selector in the product UI. Preserve
 existing vault, authentication, connector and citation boundaries. The beta accepts documented
 recall and latency limitations; the release decision is explicit in BETA_READINESS.md. Preserve
 the original benchmark results and all security/artifact verification requirements.
@@ -27,11 +27,11 @@ matches retain priority. Scores are ranking values, not confidence probabilities
 
 The official ONNX reranker graph contains its encoder. Afternote applies the separately
 published CLS/dense-GELU/LayerNorm/dense head locally. All graph, tokenizer, config and head
-files have pinned revisions, sizes and hashes. The installer verifies and runtime-probes both
-components before committing selection; the combined download is about 375 MB. No model code
-is downloaded or evaluated. Processing is offline after installation. Internal legacy profile
-support remains for previous explicit installations and comparison tooling, but the native UI
-only offers the improved search bundle.
+files have pinned revisions, sizes and hashes. The release builder verifies and includes
+both components (about 375 MB) in the signed app; runtime discovery verifies them again.
+Opening an unlocked vault prepares both models. Missing or invalid files never trigger a
+download. Processing is offline. Internal profile support remains for development tooling;
+the native app exposes only the included engine and an on/off control.
 
 The reranker sees the matching passage with surrounding text and verified source context.
 Work is bounded, checked for cancellation between batches, and shares the existing query time
