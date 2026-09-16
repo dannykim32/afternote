@@ -16,7 +16,11 @@ reranker evaluates a bounded shortlist of up to 20 semantic and 20 lexical candi
 embedding candidate cutoff is 0.20; the reranker's relevance cutoff is 3. These are different
 scores, not probabilities. Full literal phrases and identifiers stay searchable and pageable
 beyond the reranking shortlist. Incidental keyword overlap cannot outrank or hide semantic
-results. UI and agent retrieval share the same relevance rule.
+results. UI and agent retrieval share the same relevance rule. After admission, equal-weight reciprocal
+rank fusion combines the semantic order and relevance order, using `1 / (2 + zeroBasedRank)`
+for each list. This intentionally gives the top results from either signal a strong vote, so
+the cross-encoder cannot bury a leading semantic match under repetitive distractors. Literal
+matches retain priority. Scores are ranking values, not confidence probabilities.
 
 The official ONNX reranker graph contains its encoder. Afternote applies the separately
 published CLS/dense-GELU/LayerNorm/dense head locally. All graph, tokenizer, config and head
@@ -42,7 +46,7 @@ calibration paraphrase still missed in the integrated path. Keep that failure vi
 V2 was committed at `bef4dbe` before retrieval changes. It has 24 supported and 12 unsupported
 queries, with semantically related distractors and keyword decoys. SHA-256:
 `97d136b2102ac5d6f7fe44e76268ef8c719f9d4a1ba5d5c7ce4373fd6856b206`.
-No threshold or model selection may use V2 outcomes. Evaluate both UI and agent paths, preserve
+V2 has now been evaluated; its original reports must remain intact. It is no longer unseen data. Evaluate both UI and agent paths, preserve
 baseline and candidate reports, and report failures. Require 100% supported hit@5, MRR >= 0.90,
 100% unsupported rejection and valid citations. These small authored fixtures do not establish
 universal recall or answer correctness.
@@ -63,3 +67,18 @@ Signed packaging, clean-user acceptance and connector checks remain separate pub
 
 EmbeddingGemma retains its upstream Gemma terms; Ettin is Apache-2.0. Weights are downloaded
 only on explicit request and are not bundled into the application.
+
+## Further experiments and next holdout
+
+Ettin 400M was also probed against known V1 and v8 cases. It separated the V1 candidates well
+but still rejected valid v8 paraphrases and ranked the deployment blocker behind shipping-label
+printer distractors. It is not selected for the product. More parameters alone do not fix the
+relevance decision. Removing source metadata from passages also had mixed effects and was
+not adopted.
+
+V3 was frozen at `2b1f09a` before rank fusion, with 20 synthetic notes, 16 supported queries
+and 8 unsupported questions. SHA-256:
+`625bf5b7e4168219ae023cbd5d6da93b1bdb150586cc01f2772c6599e86e49a9`.
+Keep its first evaluation separate from development and retain the same quality gates. The
+question of returning explicitly marked related context is a separate product policy; these
+experiments continue to use the conservative admission rule until that policy is decided.

@@ -5,17 +5,13 @@ Model-choice/layout revision baseline: `31d83fd`.
 
 ## Scope
 
-- Settings uses a full-width, left-aligned **Search by meaning** section. It offers a native
-  Light / Balanced / Large selector, model identity and download size, resource guidance,
-  a recommendation, and aligned action/status rows. The selector and action button share
-  the right edge used by other Settings controls; explanatory text stays on the left. Text wraps at the 900-point minimum window.
-- Choices are GIST MiniLM q8 (23.6 MB), EmbeddingGemma q4 (218.7 MB), and Qwen3 Embedding
-  0.6B q8 (625.0 MB). Balanced is the new-install selection and resource recommendation on
-  Macs with at least 8 GB of RAM; Light is recommended below that. Preserve earlier explicit
-  Light installations. Download size is never presented as memory use or a quality guarantee.
-- Only **Download model** / **Use model** commits a selection. Selecting a popup item or opening
-  Settings never downloads a model. Switching rebuilds only the derived index, with exact
-  search available. Installation/verification failure leaves the previous selection intact.
+- Settings uses a full-width, left-aligned **Search by meaning** section with one right-aligned
+  **Enable search by meaning** action. Model tiers and hardware recommendations have been
+  removed from the native UI. The current development bundle is EmbeddingGemma q4 plus a
+  local Ettin reranker, about 375 MB total. Download size is not memory use or a quality guarantee.
+- Only the explicit enable action installs and selects the engine. Opening Settings never
+  downloads it. Existing installations remain active until the user requests the upgrade.
+  Installation and verification failures leave the previous selection intact.
 - The shared local model serves both Notes search and connected-tool Recall. Agent-written
   search metadata is a separate feature and is not included here.
 - Show checking, downloading/verifying, installed, indexing, active, and retryable failure states.
@@ -28,14 +24,14 @@ Model-choice/layout revision baseline: `31d83fd`.
   authentication when needed; that existing flow retains its draft/authorization rules.
 - Exact search remains usable while indexing and after failure. The release default stays exact.
   No agent-generated note metadata or automatic download is in scope. Model quality at scale
-  and signed-build acceptance remain publication gates; a resource recommendation is not a quality claim.
+  and signed-build acceptance remain publication gates; the current candidate is not cleared for publication.
 - Tests cover the existing storage/retrieval and owner-broker boundaries, native Settings action
   flow and stale replies, CLI JSON output, installation failures, and existing lifecycle behavior.
 
 ## Retrieval boundary
 
-UI search and MCP Recall share the local index. Their ranking thresholds differ: UI search is
-more exploratory; agent Recall is stricter. Host models may reformulate queries, but do not see
+UI search and MCP Recall share the local index and, with the new engine, the same
+semantic relevance and ranking rules. Legacy embedding-only profiles retain their historical cutoffs. Host models may reformulate queries, but do not see
 notes that retrieval did not return. The current agent Remember input contains note text; verified
 connector attribution is attached by Afternote. Search-hint metadata requires a separate design.
 
@@ -48,17 +44,17 @@ release gates and signed-build acceptance. No release credentials or policies ch
 
 Use a new release version. Keep the accepted Alpha 25 artifacts intact.
 
-1. On a Mac without a model, open Settings. Verify the recommendation, all three choices,
-   model/download details, and wrapping at normal and minimum window widths. Verify no download until clicked. Confirm the notice covers Notes and connected tools.
+1. On a Mac without a model, open Settings. Verify the single enable action,
+   download details, and wrapping at normal and minimum window widths. Verify no download until clicked. Confirm the notice covers Notes and connected tools.
 2. Interrupt a download, then retry. Navigate to Notes and back; an installation failure
    must remain visible. Verify the downloaded files and runtime load before accepting readiness.
-3. With an authenticated Notes session and an unsaved editor draft, install each model and switch
+3. With an authenticated Notes session and an unsaved editor draft, install the engine and upgrade a legacy installation
    while indexing and while polling status. An old model reply must not mark a new model active.
    Verify indexing completes, the draft remains intact, and existing notes keep their revisions.
 4. With the vault locked or Notes expired, verify installation cannot read/index notes until
    normal Notes authentication. Lock during indexing; late status replies must not restore access.
 5. Save a synthetic note and try a paraphrase in Notes and through each approved connector.
-   Inspect the returned original citation. Ranking differs between Notes and agent Recall;
+   Inspect the returned original citation. Verify both surfaces find the same note;
    a particular paraphrase is not guaranteed to match. Verify exact search continues to work.
 6. Relaunch and confirm the model is reused without downloading again. Recheck signed helper
    execution, doctor, release provenance, update behavior, and the existing connector smoke gates.

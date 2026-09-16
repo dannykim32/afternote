@@ -117,4 +117,23 @@ describe("reranked local recall", () => {
     } finally { memory.close(); }
   });
 
+  it("keeps a strong semantic match visible among repetitive high-scoring distractors", async () => {
+    const embedding = model(async (_, passages) => passages.map(p => p.includes("deployment") ? 3.5 : 7));
+    embedding.embed = async texts => texts.map(text => {
+      const cosine = text.includes("deployment") ? 0.6 : 0.25;
+      return new Float32Array([cosine, Math.sqrt(1 - cosine ** 2)]);
+    });
+    const memory = new SqliteMemory(":memory:", vault, {retrievalMode: "hybrid", embeddingModel: embedding});
+    try {
+      const target = await memory.remember(vault, {content: "The deployment is waiting on a review."});
+      for (let i = 0; i < 25; i++) await memory.remember(vault, {content: `A mailing label printer was discussed, record ${i}.`});
+      await memory.waitForDerivedIndex();
+      const query = "What is preventing us from shipping?";
+      const agent = await memory.recall(vault, query, 5);
+      const ui = await memory.searchNotes(vault, {query, limit: 5});
+      expect(agent.some(hit => hit.note.id === target.id)).toBe(true);
+      expect(ui.results.map(hit => hit.note.id)).toEqual(agent.map(hit => hit.note.id));
+    } finally { memory.close(); }
+  });
+
 });

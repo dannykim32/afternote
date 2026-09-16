@@ -8,7 +8,7 @@ import { SqliteMemory } from "../apps/local/src/sqlite-memory";
 import { validCitation } from "../apps/local/src/recall-eval";
 import type { TextEmbeddingModel } from "../apps/local/src/retrieval";
 
-export async function evaluateSemanticRetrieval(directory: string, version: "v1" | "v2", output: string, baseline = false) {
+export async function evaluateSemanticRetrieval(directory: string, version: "v1" | "v2" | "v3", output: string, baseline = false) {
   const fixturePath = new URL(`./fixtures/semantic-recall-validation-${version}.json`, import.meta.url);
   const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as {
     notes: Array<{key: string; content: string}>;
@@ -62,6 +62,7 @@ export async function evaluateSemanticRetrieval(directory: string, version: "v1"
         p95Ms: times[Math.ceil(times.length * .95) - 1], qualityPassed: hitAt5 === 1 && mrr >= .9 && zeroResultRate === 1 && citationIntegrity, rows});
     }
     const report = {version, baseline, fixtureSha256: createHash("sha256").update(readFileSync(fixturePath)).digest("hex"), embedding: model.descriptor,
+      reranker: model.reranker ? { id: model.reranker.id, minimumScore: model.reranker.minimumScore } : null,
       runtime: {bun: Bun.version, platform: process.platform, arch: process.arch}, loadMs, indexMs, sampledPeakRssMiB: peak / 1024 ** 2, results};
     await Bun.write(output, JSON.stringify(report, null, 2));
     console.log(JSON.stringify({...report, results: results.map(({rows, ...summary}) => summary)}));
@@ -71,6 +72,6 @@ export async function evaluateSemanticRetrieval(directory: string, version: "v1"
 
 if (import.meta.main) {
   const [directory, version, output, baseline] = process.argv.slice(2);
-  if (!directory || !output || (version !== "v1" && version !== "v2") || (baseline !== undefined && baseline !== "baseline")) throw new Error("Usage: bun scripts/evaluate-semantic-retrieval.ts MODEL_DIRECTORY v1|v2 REPORT_PATH [baseline]");
+  if (!directory || !output || (version !== "v1" && version !== "v2" && version !== "v3") || (baseline !== undefined && baseline !== "baseline")) throw new Error("Usage: bun scripts/evaluate-semantic-retrieval.ts MODEL_DIRECTORY v1|v2|v3 REPORT_PATH [baseline]");
   await evaluateSemanticRetrieval(resolve(directory), version, output, baseline === "baseline");
 }

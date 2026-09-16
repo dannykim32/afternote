@@ -38,3 +38,18 @@ it("freezes the fresh retrieval holdout before tuning and keeps it separate from
     if (item.expected !== null) expect(keys.has(item.expected)).toBe(true);
   }
 });
+
+
+it("freezes v3 before revising the candidate after the v2 and scale failures", () => {
+  const bytes = readFileSync(new URL("./fixtures/semantic-recall-validation-v3.json", import.meta.url));
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe("625bf5b7e4168219ae023cbd5d6da93b1bdb150586cc01f2772c6599e86e49a9");
+  const fixture = JSON.parse(bytes.toString());
+  const v2 = JSON.parse(readFileSync(new URL("./fixtures/semantic-recall-validation-v2.json", import.meta.url), "utf8"));
+  const previous = new Set([...corpus.calibration, ...corpus.evaluation, ...v2.evaluation].map(item => item.query));
+  const keys = new Set(fixture.notes.map((note: {key: string}) => note.key));
+  expect(keys.size).toBe(fixture.notes.length);
+  for (const item of fixture.evaluation) {
+    expect(previous.has(item.query)).toBe(false);
+    if (item.expected !== null) expect(keys.has(item.expected)).toBe(true);
+  }
+});

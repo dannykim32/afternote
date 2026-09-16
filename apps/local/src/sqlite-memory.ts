@@ -1436,6 +1436,7 @@ export class SqliteMemory implements Memory {
       }
     }
     const selected = [...candidates.values()];
+    const semanticRanks = new Map(semantic.map((candidate, index) => [candidate.row.id, index]));
     let stopped = false;
     let searchMode: HybridRecallExecution["searchMode"] = "hybrid";
     const results = new Map(literal.map(result => [result.note.id, { ...result, score: 100 }]));
@@ -1443,11 +1444,16 @@ export class SqliteMemory implements Memory {
       const scores = await withTimeout(reranker.score(query, selected.map(candidate => candidate.passage),
         () => stopped || this.#closed || this.#embeddingModel !== model), timeoutMs);
       if (scores.length !== selected.length || scores.some(score => !Number.isFinite(score))) throw new Error("Invalid relevance scores");
-      selected.forEach((candidate, index) => {
-        const score = scores[index]!;
-        if (score >= reranker.minimumScore && !results.has(candidate.result.note.id)) {
-          results.set(candidate.result.note.id, { ...candidate.result, score });
-        }
+      // Fuse ranks rather than incomparable cosine/logit magnitudes. A shallow
+      // reciprocal-rank curve preserves a strong first-stage result even when
+      // many repetitive passages receive similar cross-encoder scores.
+      const relevanceOrder = selected.map((candidate, index) => ({ candidate, relevance: scores[index]! }))
+        .sort((a, b) => b.relevance - a.relevance || a.candidate.result.note.id.localeCompare(b.candidate.result.note.id));
+      relevanceOrder.forEach(({ candidate, relevance }, index) => {
+        if (relevance < reranker.minimumScore || results.has(candidate.result.note.id)) return;
+        const semanticRank = semanticRanks.get(candidate.result.note.id);
+        const score = 1 / (2 + index) + (semanticRank === undefined ? 0 : 1 / (2 + semanticRank));
+        results.set(candidate.result.note.id, { ...candidate.result, score });
       });
     } catch { searchMode = "degraded"; }
     finally { stopped = true; }

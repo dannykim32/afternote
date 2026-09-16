@@ -12,7 +12,7 @@ const BATCH_SIZE = 4;
 type ScoreBatch = (query: string, passages: string[]) => Promise<number[]>;
 
 export class TransformersTextReranker implements TextReranker {
-  readonly id = `${LOCAL_RERANKER.id}:${LOCAL_RERANKER.revision}:afternote-1`;
+  readonly id = `${LOCAL_RERANKER.id}:${LOCAL_RERANKER.revision}:afternote-2`;
   readonly minimumScore = 3;
   readonly #directory: string;
   #runtime: Promise<ScoreBatch> | null = null;

@@ -3,7 +3,13 @@
 This is development evidence, not approval to publish a new release. Exact search remains
 available without a download. Public Alpha 25 artifacts are unchanged.
 
-## Latest validation: publication blocked
+## Current implementation
+
+The native UI now offers one explicit search-engine download. The three-model comparison
+below is historical. See [the current retrieval design](SEMANTIC_RETRIEVAL.md) for the
+EmbeddingGemma plus Ettin candidate and its remaining publication gates.
+
+## Earlier embedding-only validation: publication blocked
 
 The [frozen holdout and isolated scale results](evals/2026-09-15-semantic-models/README.md)
 supersede the preliminary timings and outstanding measurement requirements below.
@@ -14,7 +20,7 @@ questions rejected), but fails the strict recall gate and takes about 12.5 minut
 embedding variation; its 10,000-note run was skipped by a predeclared entry gate.
 
 All three fail at least one frozen holdout gate. No production cutoffs changed based on these
-results. Keep the model choices on the development branch pending retrieval improvements
+results. Keep this work on the development branch pending retrieval improvements
 and fresh evaluation; the current evidence does not justify publishing them as ready.
 
 | Choice | Pinned model | Download | Vector dimensions | Runtime |
