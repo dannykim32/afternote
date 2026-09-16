@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -18,7 +18,9 @@ it("packages only verified model inputs, model identities and required notices",
     writeFileSync(join(root, "build/semantic-model/unexpected"), "never ship arbitrary cache files");
     mkdirSync(join(root, "apps/local/packaging"), {recursive: true});
     for (const file of ["MODEL_TERMS.md", "GEMMA_NOTICE.txt"]) writeFileSync(join(root, "apps/local/packaging", file), file);
+    chmodSync(join(root, "build/semantic-model/onnx/test.onnx"), 0o600);
     bundleSemanticModels(root, output);
+    expect(statSync(join(output, "semantic-model/onnx/test.onnx")).mode & 0o777).toBe(0o644);
     expect(readFileSync(join(output, "semantic-model/onnx/test.onnx"), "utf8")).toBe(content);
     expect(JSON.parse(readFileSync(join(output, "semantic-model/manifest.json"), "utf8"))).toMatchObject({embedding: {id: BUNDLED_SEMANTIC_PROFILE.id}, files: BUNDLED_SEMANTIC_PROFILE.files});
     expect(() => readFileSync(join(output, "semantic-model/unexpected"))).toThrow();

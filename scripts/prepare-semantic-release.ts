@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { downloadVerifiedModelFile, verifyModelSnapshot } from "../apps/local/src/local-embedding";
 import { SEMANTIC_MODELS, LOCAL_RERANKER } from "../apps/local/src/semantic-model-catalog";
@@ -31,6 +31,8 @@ export function bundleSemanticModels(repositoryRoot: string, portableDirectory: 
   for (const path of Object.keys(BUNDLED_SEMANTIC_PROFILE.files)) {
     mkdirSync(dirname(join(destination, path)), { recursive: true });
     cpSync(join(source, path), join(destination, path), { dereference: false });
+    // Download staging is private; the distributed app must work for every Mac user.
+    chmodSync(join(destination, path), 0o644);
   }
   if (verifyModelSnapshot(destination, BUNDLED_SEMANTIC_PROFILE).state !== "ready")
     throw new Error("Packaged search models failed verification");
