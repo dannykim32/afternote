@@ -35,7 +35,21 @@ agent-generated metadata, or perfect synthetic benchmark target is required.
 
 ## Native layout
 
+### Beta 1 acceptance feedback (baseline `88d1ab6`)
+
+- Explain that model files are included; preparing search means local warm-up/indexing,
+  not a download. Label the ready and preparing states consistently with Search by meaning.
+- Read the complete included model terms inside an offline, selectable native window,
+  without relying on a Markdown file association. Include the Gemma policy and notice.
+- Remove static Connector identities and production Build policy rows from Settings.
+  Preserve the conspicuous owner-presence-bypass warning in development builds.
+- Provide one self-contained founder acceptance checklist with actions, expected results,
+  exact synthetic notes, and room to record failures. Do not imply the installed Beta 1
+  artifact contains later source changes or claim unperformed hands-on acceptance.
+
 Synthetic-data preview of the Beta 1 settings layout (development preview; release builds
 also expose model terms and signed update controls):
 
 ![Search by meaning enabled, with its control aligned to the right](images/afternote-beta-settings.png)
+
+![Offline native viewer for the full included model terms](images/afternote-model-terms.png)

@@ -26,6 +26,9 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 @property(nonatomic) NSInteger indexedNotes;
 @property(nonatomic) NSInteger totalNotes;
 @property(nonatomic) NSUInteger generation;
+@property(nonatomic, strong) NSWindowController *termsWindow;
+@property(nonatomic, strong) NSTextView *termsText;
+@property(nonatomic, strong) NSStackView *termsDocuments;
 @end
 
 @implementation AfternoteSemanticSettings
@@ -46,7 +49,7 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
   [_toggleButton setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
   NSStackView *header = [NSStackView stackViewWithViews:@[heading, [NSView new], _toggleButton]];
   header.alignment = NSLayoutAttributeCenterY;
-  NSTextField *explanation = CopyLabel(@"Find notes by meaning in Afternote and connected tools. Included with the app and processed entirely on this Mac.", 12);
+  NSTextField *explanation = CopyLabel(@"Find notes by meaning in Afternote and connected tools. Models are included with the app—no separate download. Search runs entirely on this Mac.", 12);
   _statusLabel = CopyLabel(@"Checking local search…", 12);
   _actionButton = [AfternoteButton buttonWithTitle:@"Retry" target:self action:@selector(performAction:)];
   AfternoteStyleSecondaryButton(_actionButton);
@@ -73,8 +76,77 @@ static NSTextField *CopyLabel(NSString *text, CGFloat size) {
 }
 - (void)openModelTerms:(id)sender {
   (void)sender;
-  NSURL *url = [[NSBundle mainBundle].resourceURL URLByAppendingPathComponent:@"AfternoteRuntime/LICENSES/MODEL_TERMS.md"];
-  [[NSWorkspace sharedWorkspace] openURL:url];
+  if (!self.termsWindow) {
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 720, 540)
+        styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+        backing:NSBackingStoreBuffered defer:NO];
+    window.title = @"Local search model terms";
+    window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    window.backgroundColor = AfternoteCanvasColor();
+    window.minSize = NSMakeSize(560, 360);
+    window.releasedWhenClosed = NO;
+    self.termsWindow = [[NSWindowController alloc] initWithWindow:window];
+    self.termsDocuments = [NSStackView new];
+    self.termsDocuments.spacing = 8;
+    NSArray *titles = @[@"Gemma terms", @"Use policy", @"Gemma notice", @"Ettin license"];
+    for (NSUInteger i = 0; i < titles.count; i++) {
+      NSButton *button = [AfternoteButton buttonWithTitle:titles[i] target:self action:@selector(selectModelTerms:)];
+      button.tag = i;
+      [self.termsDocuments addArrangedSubview:button];
+    }
+    NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 680, 430)];
+    scroll.hasVerticalScroller = YES;
+    scroll.borderType = NSBezelBorder;
+    self.termsText = [[NSTextView alloc] initWithFrame:scroll.contentView.bounds];
+    self.termsText.editable = NO;
+    self.termsText.selectable = YES;
+    self.termsText.richText = NO;
+    self.termsText.font = [NSFont systemFontOfSize:13];
+    self.termsText.textColor = AfternoteTextColor();
+    self.termsText.backgroundColor = AfternoteSurfaceColor();
+    self.termsText.textContainerInset = NSMakeSize(16, 16);
+    self.termsText.verticallyResizable = YES;
+    self.termsText.horizontallyResizable = NO;
+    self.termsText.autoresizingMask = NSViewWidthSizable;
+    self.termsText.textContainer.widthTracksTextView = YES;
+    self.termsText.textContainer.containerSize = NSMakeSize(scroll.contentSize.width, CGFLOAT_MAX);
+    self.termsText.accessibilityLabel = @"Model license text";
+    scroll.documentView = self.termsText;
+    NSTextField *explanation = CopyLabel(@"Afternote's code is Apache-2.0. The included models have their own terms, reproduced below. These copies are available offline.", 12);
+    NSStackView *column = [NSStackView stackViewWithViews:@[explanation, self.termsDocuments, scroll]];
+    column.orientation = NSUserInterfaceLayoutOrientationVertical;
+    column.alignment = NSLayoutAttributeLeading;
+    column.spacing = 12;
+    column.translatesAutoresizingMaskIntoConstraints = NO;
+    [window.contentView addSubview:column];
+    [NSLayoutConstraint activateConstraints:@[
+      [column.leadingAnchor constraintEqualToAnchor:window.contentView.leadingAnchor constant:20],
+      [column.trailingAnchor constraintEqualToAnchor:window.contentView.trailingAnchor constant:-20],
+      [column.topAnchor constraintEqualToAnchor:window.contentView.topAnchor constant:20],
+      [column.bottomAnchor constraintEqualToAnchor:window.contentView.bottomAnchor constant:-20],
+      [explanation.widthAnchor constraintEqualToAnchor:column.widthAnchor],
+      [scroll.widthAnchor constraintEqualToAnchor:column.widthAnchor],
+    ]];
+    [self selectModelTerms:(NSButton *)self.termsDocuments.arrangedSubviews.firstObject];
+    [window center];
+  }
+  [self.termsWindow showWindow:nil];
+  [self.termsWindow.window makeKeyAndOrderFront:nil];
+}
+- (void)selectModelTerms:(NSButton *)sender {
+  NSArray *files = @[@"GEMMA_TERMS.txt", @"GEMMA_PROHIBITED_USE_POLICY.txt", @"GEMMA_NOTICE.txt", @"ETTIN_LICENSE.txt"];
+  if (sender.tag < 0 || sender.tag >= (NSInteger)files.count) return;
+  NSString *file = files[sender.tag];
+  for (NSButton *button in self.termsDocuments.arrangedSubviews) {
+    button.state = button == sender ? NSControlStateValueOn : NSControlStateValueOff;
+    if (button == sender) AfternoteStylePrimaryButton(button);
+    else AfternoteStyleSecondaryButton(button);
+  }
+  NSURL *directory = [[NSBundle mainBundle].resourceURL URLByAppendingPathComponent:@"AfternoteRuntime/LICENSES" isDirectory:YES];
+  NSString *contents = [NSString stringWithContentsOfURL:[directory URLByAppendingPathComponent:file]
+                                               encoding:NSUTF8StringEncoding error:nil];
+  self.termsText.string = contents ?: @"This included document is unavailable. Reinstall Afternote to restore its model terms.";
+  [self.termsText scrollRangeToVisible:NSMakeRange(0, 0)];
 }
 - (void)render {
   self.toggleButton.enabled = !self.busy && self.modelState != nil;

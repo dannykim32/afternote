@@ -1186,11 +1186,13 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 
 - (void)applySearchMode:(NSString *)mode {
   self.currentSearchMode = mode.length > 0 ? mode : @"checking";
+  self.searchModeLabel.toolTip = nil;
   if ([mode isEqualToString:@"hybrid"]) {
-    self.searchModeLabel.stringValue = @"Semantic recall";
+    self.searchModeLabel.stringValue = @"Search by meaning ready";
     self.searchModeLabel.textColor = AfternoteBrandCaptureColor();
   } else if ([mode isEqualToString:@"indexing"]) {
-    self.searchModeLabel.stringValue = @"Exact search ready · improving recall";
+    self.searchModeLabel.stringValue = @"Preparing search by meaning…";
+    self.searchModeLabel.toolTip = @"The included models are warming up or indexing your notes on this Mac. Exact search is available while this finishes. No download is needed.";
     self.searchModeLabel.textColor = StatusColor(@"warning");
   } else if ([mode isEqualToString:@"degraded"]) {
     self.searchModeLabel.stringValue = @"Exact search only";
@@ -1365,9 +1367,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       break;
     }
   }
-  NSTextField *identityState = [self label:@"One identity per tool" size:12 weight:NSFontWeightMedium];
-  identityState.textColor = AfternoteMutedTextColor();
-
   NSTextField *productHeading = [self label:@"Product" size:18 weight:NSFontWeightSemibold];
   NSString *packageVersion = [NSBundle.mainBundle
       objectForInfoDictionaryKey:@"AfternotePackageVersion"];
@@ -1416,10 +1415,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSTextField *developmentState = [self label:@"Owner presence bypass active"
                                            size:12 weight:NSFontWeightSemibold];
   developmentState.textColor = StatusColor(@"warning");
-#else
-  NSTextField *developmentState = [self label:@"Production authentication policy"
-                                           size:12 weight:NSFontWeightMedium];
-  developmentState.textColor = AfternoteMutedTextColor();
 #endif
 
   NSStackView *column = [NSStackView stackViewWithViews:@[
@@ -1432,8 +1427,9 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     securityHeading,
     [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
     [self settingsRowWithTitle:@"Routine authentication" detail:@"Used for Notes and for Codex, Claude Code, and Claude Desktop connections. Changing this setting applies to every connector. Export, deletion, recovery, lock, and unlock still require fresh approval." control:self.routineAuthenticationMenu],
-    [self settingsRowWithTitle:@"Connector identities" detail:@"Rotation and exact revocation remain scoped to one local connector." control:identityState],
+#if defined(AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS)
     [self settingsRowWithTitle:@"Build policy" detail:@"Development convenience is isolated from release builds." control:developmentState],
+#endif
     productHeading,
     [self settingsRowWithTitle:@"Version" detail:@"Afternote V2 local memory." control:version],
     [self settingsRowWithTitle:@"Updates" detail:self.softwareUpdateController.available
