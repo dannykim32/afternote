@@ -55,10 +55,31 @@ Use synthetic notes and the normal authenticated app and connector flows:
 Run these alongside the existing clean-user and connector acceptance, using the exact new
 signed artifact. Do not repeat model experiments unless a real acceptance failure warrants it.
 
-## Current checkpoint
+## Beta 5 checkpoint — September 17, 2026
 
-Source: semantic implementation `206faf7`; preserved evaluation checkpoint `78685ca`.
-The full suite passed 631 tests with 10 explicit skips; type checking and the separate
-compiled local-model installation/query check passed. These are development checks, not a
-new independent security audit or signed-release acceptance. The next work is release
-preparation and the bounded checks above. Existing Alpha 25 artifacts remain unchanged.
+Accepted artifact: `2.0.0-beta.5`, Apple build `31`, source
+`706421b2ab4e01c4b77f9e668d658ee2246da6c0`. DMG SHA256:
+`ea96f357a6b0ff73ce9737f979bc29efff1fb1cbd7ea11987c9662f4fb32d364`.
+
+The clean release pipeline passed type checking, 644 default-suite tests (10 explicit
+skips), native gateway integration, actual bundled-model AppKit readiness, 10,000-note
+performance, dependency audit, package lifecycle and compiled offline recall gates. The
+signed, notarized final DMG separately passed integrity, Gatekeeper, model hashes and
+network-denied model startup with fresh temporary configuration.
+
+The native readiness regression reproduced a synchronous worker wait starving model
+preparation even with a complete index. Beta 5 fixes that wait without changing the model
+or embedding format. Founder acceptance on the affected second Mac confirmed readiness,
+Codex retrieval of a note saved via Claude Desktop, and working revocation.
+
+Coverage limits remain explicit: native fixtures simulate owner approval, package lifecycle
+checks use isolated test installations, and the final read-only verification does not install
+the app as a new macOS user. The targeted founder report does not independently establish
+all three hosts and every approval/update/recovery path on this exact build. Carry these
+coverage gaps into the non-founder beta trial; do not represent them as completed checks.
+
+Known limitation: MCP recall does not yet return search-mode information. While local
+semantic search is preparing or unavailable, an AI host can receive exact-search results
+without knowing that fallback occurred. Check Notes for readiness; an empty result alone
+is not evidence that the vault contains no relevant note. This is an engineering follow-up,
+not a change to the accepted retrieval benchmark tradeoffs above.

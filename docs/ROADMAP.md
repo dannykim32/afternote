@@ -1,6 +1,6 @@
-# Local alpha status and roadmap
+# Local beta status and roadmap
 
-Updated 2026-09-15 for [Alpha 25](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-alpha.25).
+Updated 2026-09-17 for [Beta 5](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-beta.5).
 This repository is the complete Local Mac product. The earlier hosted application
 and experimental browser/Slack adapters are outside this release.
 
@@ -8,7 +8,7 @@ and experimental browser/Slack adapters are outside this release.
 
 - Signed and notarized app for Apple Silicon Macs running macOS 13.3 or newer.
 - Encrypted local notes, immutable revisions, exact and date-aware retrieval,
-  optional local semantic retrieval, JSON export/restore, and Markdown export.
+  included local semantic retrieval enabled by default, JSON export/restore, and Markdown export.
 - Codex, Claude Code, and Claude Desktop Remember/Recall connectors with separate
   identities, attribution, activity counts, revocation, and owner-approved reconnect
   preparation that persists until the replacement pairs.
@@ -17,12 +17,14 @@ and experimental browser/Slack adapters are outside this release.
 - Apache-2.0 source, release verification instructions, contribution guidance,
   and a private vulnerability-reporting route.
 
-Alpha 25 passed its release-host test suite (596 passed, 9 explicit skips), package
-and performance gates, dependency audit, notarization, and founder reconnect
-acceptance on a second Mac. Public source CI passed, and the anonymously downloaded
-DMG matched the accepted checksum. Founder acceptance
-does not replace testing by new users; see [RELEASING.md](RELEASING.md) for the
-release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limits.
+Beta 5 passed its clean release suite (644 passed, 10 explicit default-suite skips),
+separate native gateway and actual-model UI readiness checks, package and performance gates,
+dependency audit, signing and notarization. Independent read-only DMG verification also
+confirmed the bundled model loads with network access denied. Founder acceptance on a second
+Mac confirmed search readiness, Codex recall of a Claude Desktop note, and revocation.
+These checks are scoped evidence, not a claim that every real-host or approval path has been
+independently tested. See [beta readiness](BETA_READINESS.md) and
+[the security model](SECURITY_MODEL.md) for limitations.
 
 ## Next validation
 
@@ -33,6 +35,11 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
   that trial before expanding the connector list.
 
 ## Engineering backlog
+
+- Include search-mode/readiness information in MCP recall results. In this beta the tool
+  returns matches but omits that status, so an AI host may not recognize exact-search fallback
+  while semantic search is preparing or unavailable. An empty result is not proof that no
+  relevant note exists. Check Notes for the ready status and retry once it is ready.
 
 - Continue splitting large native UI, broker dispatch, authorization, and storage
   modules along their responsibilities. The architecture has explicit interfaces,
@@ -63,15 +70,15 @@ release checklist and [SECURITY_MODEL.md](SECURITY_MODEL.md) for assurance limit
 - Design a supported destructive erase workflow and evaluate vault rollback-freshness
   controls. Ordinary uninstall currently preserves notes and Keychain identities.
 
-These are open work items, not claims that the current alpha provides those controls.
+These are open work items, not claims that the current beta provides those controls.
 The [enterprise review](ENTERPRISE_SECURITY.md) describes their implications.
 
 ## Deferred scope
 
 Slack, browser capture, ChatGPT consumer connectors, cloud sync, Windows/Linux,
 Intel Mac distribution, fleet management, and a stable 2.0 release require separate
-design and acceptance work. They are not included in this Mac alpha. Optional
-semantic retrieval remains opt-in; exact retrieval remains the default.
+design and acceptance work. They are not included in this Mac beta. Search by meaning runs locally and is enabled by default; turning it
+off in Settings keeps notes intact and uses exact search in Notes and connected tools.
 
 ## Feedback
 

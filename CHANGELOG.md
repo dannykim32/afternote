@@ -6,7 +6,7 @@ during release review.
 
 ## Unreleased
 
-## 2.0.0-beta.5 - 2026-09-16
+## 2.0.0-beta.5 - 2026-09-17
 
 ### Fixed
 
@@ -20,7 +20,8 @@ during release review.
 - Reproduced the stalled complete index through the native gateway before the fix.
 - Require real AppKit Notes readiness through the native gateway and encrypted worker after
   lock/unlock, both with asynchronous fixture preparation and with pinned bundled models.
-  Test services simulate owner approval; affected-Mac installed acceptance remains separate.
+  Test services simulate owner approval. Founder acceptance on the affected second Mac
+  confirmed ready status, cross-host recall from Codex, and revocation.
 
 ## 2.0.0-beta.4 - 2026-09-16
 
@@ -37,7 +38,8 @@ during release review.
   The isolated test gateway simulates approval; physical owner-presence acceptance remains
   a separate check on the installed candidate.
 
-The affected-Mac semantic recall misses remain under investigation.
+At this checkpoint the affected-Mac semantic recall misses remained under investigation;
+Beta 5 records the subsequent fix and acceptance.
 
 ## 2.0.0-beta.3 - 2026-09-16
 
@@ -53,7 +55,7 @@ The affected-Mac semantic recall misses remain under investigation.
   start with the user's question, and try a focused rephrasing before reporting no match.
   An empty result alone does not establish that no relevant note exists.
 
-The reported cross-connector recall misses remain under investigation. The supplied canary
+At this checkpoint the reported cross-connector recall misses remained under investigation. The supplied canary
 queries pass against the bundled models in signed connector tests; this is not yet a verified
 fix for the affected Mac.
 

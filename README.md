@@ -88,7 +88,7 @@ opening that host's MCP setup. Claude Desktop uses a small local MCPB package an
 own install confirmation. At runtime Afternote verifies Anthropic's launcher and its signed
 Claude Desktop parent as one process chain; it never writes Claude's private extension configuration.
 npm-installed scripts, wrapper launchers, and repackaged binaries are not supported in this
-alpha because they cannot satisfy the native runtime identity check.
+beta because they cannot satisfy the native runtime identity check.
 
 ### Connect Codex or Claude Code
 
