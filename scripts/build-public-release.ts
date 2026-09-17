@@ -20,11 +20,15 @@ const BUN_VERSION = "1.3.14";
 
 export const PUBLIC_RELEASE_COMMANDS = [
   { args: ["run", "prepare:native-release"], phase: "release-preparation" },
+  { args: ["run", "prepare:semantic-release"], phase: "release-preparation" },
   { args: ["run", "typecheck"], phase: "quality" },
   { args: ["run", "test"], phase: "quality" },
+  { args: ["run", "test:desktop"], phase: "quality" },
+  { args: ["run", "test:desktop:semantic"], phase: "quality" },
   { args: ["run", "test:quality"], phase: "quality" },
   { args: ["run", "audit"], phase: "quality" },
   { args: ["run", "test:package"], phase: "quality" },
+  { args: ["run", "test:semantic-release"], phase: "quality" },
 ] as const;
 
 if (import.meta.main) buildPublicRelease();

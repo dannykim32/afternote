@@ -80,7 +80,7 @@ builds fetch a signed update feed from GitHub once per day by default; the user 
 The request does not include Sparkle's optional system profile. Downloads occur only after user
 approval and must pass EdDSA archive and feed verification plus Apple code-signing validation.
 
-The optional `afternote semantic install` action downloads a fixed, size-limited, SHA-256-pinned
+The optional Settings semantic-search install (also `afternote semantic install`) downloads a fixed, size-limited, SHA-256-pinned
 model file set from `https://huggingface.co`. After installation, inference is local.
 
 Recall returns selected note excerpts to the local Codex, Claude Code, or Claude Desktop process. That host may

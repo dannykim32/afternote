@@ -16,6 +16,7 @@ const publicReport = {
   platform: "darwin-arm64",
   releaseFlavor: "public",
   semanticRuntimeIncluded: true,
+  semanticModelsIncluded: true,
   signing: "Developer ID hardened-runtime signature; notarization remains a separate release gate",
   portableDirectory: paths.portableDirectory,
   binaryPath: `${paths.portableDirectory}/afternote`,

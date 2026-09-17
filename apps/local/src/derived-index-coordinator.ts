@@ -6,6 +6,7 @@ import type {
 export type DerivedIndexAdapter<Note> = {
   model: EmbeddingModelDescriptor | null;
   rebuildSynchronous(): void;
+  prepareSemanticModel?(): Promise<void>;
   replaceSynchronous(note: Note): void;
   missingSemanticNotes(): readonly Note[];
   indexSemanticNotes(
@@ -26,8 +27,11 @@ export class DerivedIndexCoordinator<Note> {
   readonly #adapter: DerivedIndexAdapter<Note>;
   #queue: Promise<void> = Promise.resolve();
   #indexing = 0;
+  #preparing = false;
+  #preparationError: string | null = null;
   #lastError: string | null = null;
   #closed = false;
+  #generation = 0;
 
   constructor(adapter: DerivedIndexAdapter<Note>) {
     this.#adapter = adapter;
@@ -35,6 +39,19 @@ export class DerivedIndexCoordinator<Note> {
 
   initialize(): void {
     this.#adapter.rebuildSynchronous();
+    this.#prepare();
+    this.#schedule(this.#adapter.missingSemanticNotes());
+  }
+
+  enableSemanticModel(model: EmbeddingModelDescriptor): void {
+    if (this.#closed) return;
+    this.#generation += 1;
+    this.#indexing = 0;
+    this.#lastError = null;
+    this.#preparationError = null;
+    this.#adapter.model = model;
+    this.#adapter.invalidateSemanticCache?.();
+    this.#prepare();
     this.#schedule(this.#adapter.missingSemanticNotes());
   }
 
@@ -44,6 +61,16 @@ export class DerivedIndexCoordinator<Note> {
   }
 
   remove(): void {
+    this.#adapter.invalidateSemanticCache?.();
+  }
+
+  disableSemanticModel(): void {
+    this.#generation += 1;
+    this.#indexing = 0;
+    this.#lastError = null;
+    this.#preparationError = null;
+    this.#adapter.model = null;
+    this.#preparing = false;
     this.#adapter.invalidateSemanticCache?.();
   }
 
@@ -66,16 +93,16 @@ export class DerivedIndexCoordinator<Note> {
     }
     const indexedNotes = this.#adapter.indexedNotes();
     return {
-      state: this.#lastError
+      state: this.#lastError || this.#preparationError
         ? "degraded"
-        : this.#indexing > 0 || indexedNotes < totalNotes
+        : this.#preparing || this.#indexing > 0 || indexedNotes < totalNotes
           ? "indexing"
           : "ready",
       model: { ...model },
       totalNotes,
       indexedNotes,
       staleNotes: Math.max(0, totalNotes - indexedNotes),
-      lastError: this.#lastError,
+      lastError: this.#preparationError ?? this.#lastError,
     };
   }
 
@@ -83,25 +110,46 @@ export class DerivedIndexCoordinator<Note> {
     this.#closed = true;
   }
 
+  #prepare(): void {
+    if (!this.#adapter.model || !this.#adapter.prepareSemanticModel || this.#closed) return;
+    const generation = this.#generation;
+    this.#preparing = true;
+    this.#queue = this.#queue.then(async () => {
+      if (this.#closed || generation !== this.#generation) return;
+      await this.#adapter.prepareSemanticModel!();
+    }).catch((error) => {
+      if (generation === this.#generation) this.#preparationError = errorMessage(error);
+    }).finally(() => {
+      if (generation === this.#generation) this.#preparing = false;
+    });
+  }
+
   #schedule(notes: readonly Note[]): void {
     if (!this.#adapter.model || this.#closed || notes.length === 0) return;
     this.#adapter.invalidateSemanticCache?.();
+    const generation = this.#generation;
     this.#indexing += notes.length;
     this.#queue = this.#queue
       .then(async () => {
-        if (this.#closed) return;
-        await this.#adapter.indexSemanticNotes(notes, (error) => {
-          this.#lastError = errorMessage(error);
-        });
-        if (this.#adapter.indexedNotes() === this.#adapter.totalNotes()) {
+        if (this.#closed || generation !== this.#generation) return;
+        // Commit progress in bounded units so locking/restarting during a large
+        // model rebuild does not discard an entire library's completed inference.
+        const batchSize = 32;
+        for (let offset = 0; offset < notes.length; offset += batchSize) {
+          if (this.#closed || generation !== this.#generation) return;
+          await this.#adapter.indexSemanticNotes(notes.slice(offset, offset + batchSize), (error) => {
+            if (generation === this.#generation) this.#lastError = errorMessage(error);
+          });
+        }
+        if (generation === this.#generation && this.#adapter.indexedNotes() === this.#adapter.totalNotes()) {
           this.#lastError = null;
         }
       })
       .catch((error) => {
-        this.#lastError = errorMessage(error);
+        if (generation === this.#generation) this.#lastError = errorMessage(error);
       })
       .finally(() => {
-        this.#indexing = Math.max(0, this.#indexing - notes.length);
+        if (generation === this.#generation) this.#indexing = Math.max(0, this.#indexing - notes.length);
       });
   }
 }

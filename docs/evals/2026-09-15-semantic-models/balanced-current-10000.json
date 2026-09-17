@@ -1,0 +1,923 @@
+{
+  "format": "afternote-recall-eval",
+  "schemaVersion": 1,
+  "corpus": {
+    "id": "local-delayed-recall",
+    "version": 8,
+    "sha256": "c4ebe8ecdacaa7563514f54a452d3239efee1a4c32719d2934fe61223eec68c0",
+    "baseNoteCount": 31,
+    "semanticNoteCount": 4,
+    "noiseMultiplier": 0,
+    "noiseNoteCount": 9965,
+    "targetNoteCount": 10000,
+    "noteCount": 10000,
+    "caseCount": 41,
+    "unsupportedCaseCount": 4
+  },
+  "engine": "hybrid:onnx-community/embeddinggemma-300m-ONNX:q4",
+  "derivedIndex": {
+    "state": "ready",
+    "model": {
+      "id": "onnx-community/embeddinggemma-300m-ONNX:q4",
+      "revision": "5090578d9565bb06545b4552f76e6bc2c93e4a66:afternote-2",
+      "dimensions": 768
+    },
+    "totalNotes": 10000,
+    "indexedNotes": 10000,
+    "staleNotes": 0,
+    "lastError": null
+  },
+  "quality": {
+    "hitRateAt5": 0.972222,
+    "meanReciprocalRank": 0.925926,
+    "unsupportedZeroResultRate": 1,
+    "citationIntegrityRate": 1
+  },
+  "semanticQuality": {
+    "caseCount": 14,
+    "hitRateAt5": 0.928571,
+    "meanReciprocalRank": 0.880952
+  },
+  "thresholds": {
+    "hitRateAt5": 1,
+    "meanReciprocalRank": 0.9,
+    "semanticHitRateAt5": 1,
+    "semanticMeanReciprocalRank": 0.9,
+    "unsupportedZeroResultRate": 1,
+    "citationIntegrityRate": 1
+  },
+  "latency": {
+    "p95Ms": 107.842,
+    "limitMs": 100,
+    "passed": false
+  },
+  "cases": [
+    {
+      "id": "commitment-proposal",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000013",
+        "00000000-0000-4000-8000-000000000017"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.036412,
+        1.0168,
+        1.016507
+      ],
+      "passed": true
+    },
+    {
+      "id": "decision-pricing",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000002"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-9000-000000100092",
+        "00000000-0000-4000-9000-000000100078",
+        "00000000-0000-4000-9000-000000104684",
+        "00000000-0000-4000-9000-000000105832"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.037611,
+        1.015948,
+        1.01551,
+        1.015213,
+        1.014897
+      ],
+      "passed": true
+    },
+    {
+      "id": "date-dentist",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000031",
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.036716,
+        1.016876,
+        1.016229
+      ],
+      "passed": true
+    },
+    {
+      "id": "name-plumber",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000004"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000004"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.036524
+      ],
+      "passed": true
+    },
+    {
+      "id": "source-author",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000005"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000033",
+        "00000000-0000-4000-8000-000000000005"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        2
+      ],
+      "actualScores": [
+        2.034649,
+        2.033232
+      ],
+      "passed": true
+    },
+    {
+      "id": "source-label",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000006"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000006",
+        "00000000-0000-4000-9000-000000108421",
+        "00000000-0000-4000-9000-000000107311",
+        "00000000-0000-4000-9000-000000109261",
+        "00000000-0000-4000-9000-000000105541"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.034065,
+        1.016153,
+        1.015788,
+        1.015534,
+        1.015277
+      ],
+      "passed": true
+    },
+    {
+      "id": "garage-code",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000007"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-8000-000000000032",
+        "00000000-0000-4000-8000-000000000025"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.037201,
+        1.017411,
+        1.016706
+      ],
+      "passed": true
+    },
+    {
+      "id": "travel-gate",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.037732
+      ],
+      "passed": true
+    },
+    {
+      "id": "prescription-time",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.035901
+      ],
+      "passed": true
+    },
+    {
+      "id": "tax-location",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000010"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000010"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.037577
+      ],
+      "passed": true
+    },
+    {
+      "id": "book-person",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000011",
+        "00000000-0000-4000-9000-000000106322"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.038324,
+        1.01529
+      ],
+      "passed": true
+    },
+    {
+      "id": "retrieval-decision",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000012"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000012",
+        "00000000-0000-4000-9000-000000109473",
+        "00000000-0000-4000-9000-000000106017",
+        "00000000-0000-4000-9000-000000107175",
+        "00000000-0000-4000-9000-000000107007"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.036159,
+        1.01596,
+        1.015699,
+        1.01545,
+        1.015191
+      ],
+      "passed": true
+    },
+    {
+      "id": "temporal-last-friday",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000021"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000021",
+        "00000000-0000-4000-8000-000000000033"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        15.020361,
+        6
+      ],
+      "passed": true
+    },
+    {
+      "id": "temporal-last-month-year-boundary",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000022"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000034",
+        "00000000-0000-4000-8000-000000000022"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        2
+      ],
+      "actualScores": [
+        16.010147,
+        15.020384
+      ],
+      "passed": true
+    },
+    {
+      "id": "temporal-next-weekday",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000015"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000015"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        15.02038
+      ],
+      "passed": true
+    },
+    {
+      "id": "temporal-ambiguous-weekday-lexical",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000021",
+        "00000000-0000-4000-8000-000000000009",
+        "00000000-0000-4000-8000-000000000017",
+        "00000000-0000-4000-8000-000000000031"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.035983,
+        1.017168,
+        1.016561,
+        1.016289,
+        1.016017
+      ],
+      "passed": true
+    },
+    {
+      "id": "source-time-last-friday",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000033"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000033",
+        "00000000-0000-4000-8000-000000000021"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        16.010194,
+        15.020343
+      ],
+      "passed": true
+    },
+    {
+      "id": "source-time-last-month",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000034"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000034",
+        "00000000-0000-4000-8000-000000000022"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        16.010182,
+        15.020359
+      ],
+      "passed": true
+    },
+    {
+      "id": "source-time-next-weekend",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000035"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000035"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        16.020342
+      ],
+      "passed": true
+    },
+    {
+      "id": "revision-current-location",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000025"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000025",
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-8000-000000000032",
+        "00000000-0000-4000-8000-000000000018",
+        "00000000-0000-4000-8000-000000000028"
+      ],
+      "citationFragmentMatched": true,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.03589,
+        1.017829,
+        1.017491,
+        1.016319,
+        1.015963
+      ],
+      "passed": true
+    },
+    {
+      "id": "revision-stale-location",
+      "expectedNoteIds": [],
+      "excludedNoteIds": [
+        "00000000-0000-4000-8000-000000000025"
+      ],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [],
+      "actualScores": [],
+      "passed": true
+    },
+    {
+      "id": "duplicate-identical-notes",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000026",
+        "00000000-0000-4000-8000-000000000027"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000027",
+        "00000000-0000-4000-8000-000000000026",
+        "00000000-0000-4000-8000-000000000018",
+        "00000000-0000-4000-9000-000000106108",
+        "00000000-0000-4000-9000-000000106111"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        2,
+        1
+      ],
+      "actualScores": [
+        2.037737,
+        2.037737,
+        1.017333,
+        1.016814,
+        1.016545
+      ],
+      "passed": true
+    },
+    {
+      "id": "long-note-tail-citation",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000028"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000028",
+        "00000000-0000-4000-8000-000000000018",
+        "00000000-0000-4000-8000-000000000026",
+        "00000000-0000-4000-8000-000000000027",
+        "00000000-0000-4000-9000-000000101318"
+      ],
+      "citationFragmentMatched": true,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        2.035264,
+        1.01698,
+        1.016584,
+        1.016336,
+        1.014585
+      ],
+      "passed": true
+    },
+    {
+      "id": "unsupported-weather",
+      "expectedNoteIds": [],
+      "excludedNoteIds": [],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [],
+      "actualScores": [],
+      "passed": true
+    },
+    {
+      "id": "unsupported-inbox",
+      "expectedNoteIds": [],
+      "excludedNoteIds": [],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [],
+      "actualScores": [],
+      "passed": true
+    },
+    {
+      "id": "unsupported-source-field",
+      "expectedNoteIds": [],
+      "excludedNoteIds": [],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [],
+      "actualScores": [],
+      "passed": true
+    },
+    {
+      "id": "unsupported-empty",
+      "expectedNoteIds": [],
+      "excludedNoteIds": [],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [],
+      "actualScores": [],
+      "passed": true
+    },
+    {
+      "id": "semantic-launch-blocker",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000029"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000029",
+        "00000000-0000-4000-9000-000000108482",
+        "00000000-0000-4000-9000-000000108480",
+        "00000000-0000-4000-9000-000000108495",
+        "00000000-0000-4000-9000-000000108475"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.017181,
+        1.016483,
+        1.016138,
+        1.015873,
+        1.015632
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-renewal-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000030"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000030",
+        "00000000-0000-4000-9000-000000101460",
+        "00000000-0000-4000-9000-000000101712",
+        "00000000-0000-4000-9000-000000101448",
+        "00000000-0000-4000-9000-000000101640"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018482,
+        1.016225,
+        1.015881,
+        1.015601,
+        1.015324
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-event-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000031"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        null
+      ],
+      "actualScores": [],
+      "passed": false
+    },
+    {
+      "id": "semantic-access-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000032"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000032",
+        "00000000-0000-4000-8000-000000000026",
+        "00000000-0000-4000-8000-000000000027",
+        "00000000-0000-4000-8000-000000000025",
+        "00000000-0000-4000-8000-000000000018"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018098,
+        1.017331,
+        1.017075,
+        1.016589,
+        1.016051
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-pricing-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000002"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-9000-000000109311",
+        "00000000-0000-4000-9000-000000102381",
+        "00000000-0000-4000-9000-000000102759"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.017931,
+        1.01593,
+        1.015312,
+        1.014872
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-medicine-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000009",
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018416,
+        1.016691
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-tax-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000010"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000010",
+        "00000000-0000-4000-9000-000000102284",
+        "00000000-0000-4000-9000-000000101745",
+        "00000000-0000-4000-9000-000000101841",
+        "00000000-0000-4000-9000-000000102177"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018525,
+        1.015227,
+        1.014913,
+        1.014567,
+        1.014235
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-reading-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.01886
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-search-foundation-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000012"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000012",
+        "00000000-0000-4000-9000-000000107163",
+        "00000000-0000-4000-9000-000000107156",
+        "00000000-0000-4000-9000-000000109473",
+        "00000000-0000-4000-9000-000000106008"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018807,
+        1.016275,
+        1.015605,
+        1.015354,
+        1.015064
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-car-work-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000014"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000014",
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000028",
+        "00000000-0000-4000-9000-000000102923",
+        "00000000-0000-4000-9000-000000102909"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.019548,
+        1.017043,
+        1.016639,
+        1.015982,
+        1.015474
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-proof-of-purchase-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000016"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000016",
+        "00000000-0000-4000-8000-000000000007",
+        "00000000-0000-4000-9000-000000105148",
+        "00000000-0000-4000-9000-000000108604",
+        "00000000-0000-4000-9000-000000105153"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.020375,
+        1.017135,
+        1.015829,
+        1.015569,
+        1.015209
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-offline-copy-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000018"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000026",
+        "00000000-0000-4000-8000-000000000027",
+        "00000000-0000-4000-8000-000000000018",
+        "00000000-0000-4000-8000-000000000032",
+        "00000000-0000-4000-8000-000000000029"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        3
+      ],
+      "actualScores": [
+        1.018842,
+        1.018577,
+        1.017567,
+        1.016444,
+        1.016037
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-coffee-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000019"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000019"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.017821
+      ],
+      "passed": true
+    },
+    {
+      "id": "semantic-rental-paraphrase",
+      "expectedNoteIds": [
+        "00000000-0000-4000-8000-000000000020"
+      ],
+      "excludedNoteIds": [],
+      "actualNoteIds": [
+        "00000000-0000-4000-8000-000000000020",
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-9000-000000104799",
+        "00000000-0000-4000-9000-000000104892",
+        "00000000-0000-4000-9000-000000104778"
+      ],
+      "citationFragmentMatched": null,
+      "expectedRanks": [
+        1
+      ],
+      "actualScores": [
+        1.018644,
+        1.016803,
+        1.015441,
+        1.015189,
+        1.014933
+      ],
+      "passed": true
+    }
+  ],
+  "passed": false,
+  "measurements": {
+    "loadMs": 853.950417,
+    "indexingWallMs": 746925.2910000001,
+    "indexInferenceMs": 742760.9018030001,
+    "embeddedSlices": 10001,
+    "elapsedSeconds": 749.963902458,
+    "sampledPeakRssMiB": 918.609375
+  }
+}

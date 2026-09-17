@@ -1,3 +1,4 @@
+import { nextOwnerSequence } from "./owner-request-test-support";
 import {
   createHash,
   generateKeyPairSync,
@@ -29,6 +30,112 @@ afterEach(() => {
 });
 
 describe("vault broker worker protocol", () => {
+  it("keeps Notes and owner controls available after an hour of semantic status polling", async () => {
+    let now = Date.parse("2026-09-16T12:00:00Z");
+    const fixture = workerFixture({ now: () => now, trustPath: "production-signed" });
+    const { worker } = fixture;
+    const client = { connectionId: randomUUID(), peerPid: 40195 };
+    const durable = p256(), session = p256();
+    const owner = { connectionId: randomUUID(), peerPid: 40194 };
+    await ownerRequest(worker, owner, "library.session.begin", {
+      requestedScopes: ["library.browse", "library.search"], ttlMs: 24 * 60 * 60 * 1000,
+    }, true);
+    for (let poll = 0; poll < 1800; poll++) {
+      now += 2000;
+      const status = await rawOwnerRequest(worker, owner, "library.refresh_search", { reloadModel: false });
+      expect(status, `poll ${poll + 1}`).toMatchObject({ ok: true });
+    }
+    expect(await rawOwnerRequest(worker, owner, "lifecycle.status", {})).toMatchObject({ ok: true });
+    expect(await rawOwnerRequest(worker, owner, "owner.connector_overview", {})).toMatchObject({ ok: true });
+    const active = await pairAndActivate(fixture, client, durable, session,
+      ["memory.remember", "memory.recall", "memory.get_note"], 900000, "secure-enclave");
+    const saved = await memoryRequest(fixture, client, active, "memory.remember",
+      { content: "Synthetic note survives sustained polling" }, session.privateKey);
+    const revoked = await beginRawOwnerRequest(worker, owner, "owner.revoke_connector", { kind: "codex" });
+    expect(revoked.ownerPresenceChallenge).toBeDefined();
+    expect(await completeOwnerPresence(worker, owner, revoked.ownerPresenceChallenge.challengeId))
+      .toMatchObject({ ok: true, result: { revoked: true } });
+    for (const [operation, body] of [
+      ["memory.remember", { content: "must not save after revocation" }],
+      ["memory.recall", { query: "Synthetic", limit: 5 }],
+      ["memory.get_note", { id: saved.note.id }],
+    ] as const) await expect(memoryRequest(fixture, client, active, operation, body, session.privateKey)).rejects.toThrow();
+    await ownerRequest(worker, owner, "lifecycle.lock", {}, true);
+    for (let poll = 0; poll < 1800; poll++) {
+      now += 2000;
+      expect(await rawOwnerRequest(worker, owner, "lifecycle.status", {}))
+        .toMatchObject({ ok: true, result: { state: "locked" } });
+    }
+    await ownerRequest(worker, owner, "lifecycle.unlock", {}, true);
+    await ownerRequest(worker, owner, "library.session.begin", {
+      requestedScopes: ["library.browse"], ttlMs: 900000,
+    }, true);
+    const notes = await ownerRequest(worker, owner, "library.browse", { cursor: null, limit: 10, view: null });
+    expect(JSON.stringify(notes)).toContain("Synthetic note survives sustained polling");
+  });
+
+  it.each(["development-only", "production-signed"] as const)("revokes from the passive Connections overview on %s with fresh approval and no inspection session", async (trustPath) => {
+    const fixture = workerFixture({ trustPath });
+    const connection = { connectionId: randomUUID(), peerPid: 40191 };
+    const owner = { connectionId: randomUUID(), peerPid: 40192 };
+    const durable = p256(), session = p256();
+    const active = await pairAndActivate(fixture, connection, durable, session,
+      ["memory.remember", "memory.recall", "memory.get_note"], 900000,
+      trustPath === "production-signed" ? "secure-enclave" : "development-exact-build");
+    await ownerRequest(fixture.worker, owner, "owner.connector_overview", {});
+    const denied = await rawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" }, false);
+    expect(denied).toMatchObject({ ok: false, error: { code: "owner_denied" } });
+    const saved = await memoryRequest(fixture, connection, active, "memory.remember",
+      { content: "Keep access until fresh revocation is approved" }, session.privateKey);
+    expect(saved.note.id).toBeString();
+    const forged = await rawRequest(fixture.worker, connection, "owner.revoke_connector", { kind: "codex" }, true);
+    expect(forged).toMatchObject({ ok: false, error: { code: "identity_mismatch" } });
+    const challenge = await beginRawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" });
+    expect(challenge.ownerPresenceChallenge.challengeId).toBeString();
+    const wrongPeer = await completeOwnerPresence(fixture.worker,
+      { connectionId: randomUUID(), peerPid: 40193 }, challenge.ownerPresenceChallenge.challengeId);
+    expect(wrongPeer).toMatchObject({ ok: false, error: { code: "identity_mismatch" } });
+    const revoked = await rawOwnerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" }, true);
+    expect(revoked).toMatchObject({ ok: true, result: { revoked: true, kind: "codex" } });
+    for (const [operation, body] of [
+      ["memory.remember", { content: "Revoked connector must not write" }],
+      ["memory.recall", { query: "access", limit: 5 }],
+      ["memory.get_note", { id: saved.note.id }],
+    ] as const) await expect(memoryRequest(fixture, connection, active, operation, body, session.privateKey)).rejects.toThrow();
+    const overview = await ownerRequest(fixture.worker, owner, "owner.connector_overview", {});
+    expect(overview.connectors.find((c: { kind: string }) => c.kind === "codex").status).toBe("revoked");
+  });
+
+  it("rejects old owner sequences across time and lock, independently of request IDs", async () => {
+    let now = Date.parse("2026-09-16T12:00:00Z");
+    const { worker } = workerFixture({ now: () => now });
+    const connection = { connectionId: randomUUID(), peerPid: 40196 };
+    const sequence = nextOwnerSequence(connection);
+    const envelope = (requestId = randomUUID()) => JSON.stringify({
+      kind: "client", peerRole: "owner-control", ...connection,
+      payload: { protocolVersion: 1, sequence, requestId, method: "lifecycle.status", params: {} },
+    });
+    const original = envelope();
+    expect(JSON.parse(await worker.handleSerialized(original)).ok).toBe(true);
+    await ownerRequest(worker, connection, "lifecycle.lock", {}, true);
+    now += 25 * 60 * 60 * 1000;
+    expect(JSON.parse(await worker.handleSerialized(original))).toMatchObject({ ok: false, error: { code: "replayed" } });
+    expect(JSON.parse(await worker.handleSerialized(envelope()))).toMatchObject({ ok: false, error: { code: "replayed" } });
+    await ownerRequest(worker, connection, "lifecycle.unlock", {}, true);
+    expect(JSON.parse(await worker.handleSerialized(original))).toMatchObject({ ok: false, error: { code: "replayed" } });
+    const other = { connectionId: randomUUID(), peerPid: 40197 };
+    expect(await rawOwnerRequest(worker, other, "lifecycle.status", {})).toMatchObject({ ok: true });
+  });
+
+  it("releases owner sequence capacity on transport disconnect", async () => {
+    const { worker } = workerFixture();
+    for (let i = 0; i < 1100; i++) {
+      const connection = { connectionId: randomUUID(), peerPid: 40198 };
+      expect(await rawOwnerRequest(worker, connection, "lifecycle.status", {})).toMatchObject({ ok: true });
+      await worker.handleSerialized(JSON.stringify({kind: "connection-closed", peerRole: "owner-control", ...connection, payload: {}}));
+    }
+  });
+
   it("preserves lock and replay precedence before method/role dispatch", async () => {
     const { worker } = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 39001 };
@@ -36,7 +143,7 @@ describe("vault broker worker protocol", () => {
     worker.closeLifecycleAdmissionForTest();
     const envelope = (method: string, peerRole = "owner-control", id = randomUUID()) => JSON.stringify({
       kind: "client", peerRole, ...connection,
-      payload: { protocolVersion: 1, requestId: id, method, params: {} },
+      payload: { protocolVersion: 1, ...(peerRole === "owner-control" ? { sequence: nextOwnerSequence(connection) } : {}), requestId: id, method, params: {} },
     });
     const blockedOwnerRequest = envelope("owner.unknown");
     expect(JSON.parse(await worker.handleSerialized(blockedOwnerRequest)).error.code).toBe("vault_locked");
@@ -62,7 +169,7 @@ describe("vault broker worker protocol", () => {
     const requestId = randomUUID();
     const response = JSON.parse(await worker.handleSerialized(JSON.stringify({
       kind: "client", peerRole: "owner-control", connectionId: randomUUID(), peerPid: 39002,
-      payload: { protocolVersion: 2, requestId, method: "health", params: {} },
+      payload: { protocolVersion: 2, sequence: 1, requestId, method: "health", params: {} },
     })));
     expect(response).toMatchObject({ requestId, ok: false, error: { code: "unsupported_version" } });
   });
@@ -259,7 +366,7 @@ describe("vault broker worker protocol", () => {
       peerRole: "owner-control",
       ...ownerConnection,
       payload: {
-        protocolVersion: 1,
+        protocolVersion: 1, sequence: nextOwnerSequence(ownerConnection),
         requestId: replayRequestId,
         method: "owner.inspect_connections",
         params: {},
@@ -291,7 +398,7 @@ describe("vault broker worker protocol", () => {
       peerRole: "owner-control",
       ...ownerConnection,
       payload: {
-        protocolVersion: 1,
+        protocolVersion: 1, sequence: nextOwnerSequence(ownerConnection),
         requestId: randomUUID(),
         method: "owner.revoke_client",
         params: {
@@ -787,7 +894,7 @@ describe("vault broker worker protocol", () => {
       peerRole: "owner-control",
       ...ownerConnection,
       payload: {
-        protocolVersion: 1,
+        protocolVersion: 1, sequence: nextOwnerSequence(ownerConnection),
         requestId: randomUUID(),
         method: "owner.revoke_client",
         params: {
@@ -2475,13 +2582,14 @@ async function pairAndActivate(
   session: ReturnType<typeof p256>,
   requestedCapabilities: MemoryCapability[],
   ttlMs = 15 * 60 * 1_000,
+  signingMode = "development-exact-build",
 ) {
   const begun = await request(fixture.worker, connection, "client.begin", {
     kind: "codex",
     displayName: "Codex",
     installIdentity: randomUUID(),
     publicKey: durable.publicKey,
-    signingMode: "development-exact-build",
+    signingMode,
     requestedCapabilities,
     forgetPolicy: "never",
   });
@@ -2579,7 +2687,7 @@ async function rawOwnerRequest(
     kind: "client",
     peerRole: "owner-control",
     ...connection,
-    payload: { protocolVersion: 1, requestId, method, params },
+    payload: { protocolVersion: 1, sequence: nextOwnerSequence(connection), requestId, method, params },
   })));
   if (!first.ownerPresenceChallenge) return first;
   return JSON.parse(await worker.handleSerialized(JSON.stringify({
@@ -2605,7 +2713,7 @@ async function beginRawOwnerRequest(
     kind: "client",
     peerRole: "owner-control",
     ...connection,
-    payload: { protocolVersion: 1, requestId, method, params },
+    payload: { protocolVersion: 1, sequence: nextOwnerSequence(connection), requestId, method, params },
   })));
 }
 

@@ -55,6 +55,7 @@ type ArtifactReport = {
   platform: string;
   releaseFlavor: string;
   semanticRuntimeIncluded: boolean;
+  semanticModelsIncluded: boolean;
   signing: string;
   portableDirectory: string;
   binaryPath: string;
@@ -130,7 +131,7 @@ export function assertPublicArtifactReport(
     !/^\d+(?:\.\d+){0,2}$/.test(report.bundleVersion)) {
     throw new Error("Release finalization requires valid Apple bundle version metadata");
   }
-  if (report.releaseFlavor !== "public" || !report.semanticRuntimeIncluded) {
+  if (report.releaseFlavor !== "public" || !report.semanticRuntimeIncluded || !report.semanticModelsIncluded) {
     throw new Error("Release finalization requires the public semantic-capable artifact");
   }
   if (!report.signing.startsWith("Developer ID hardened-runtime signature")) {

@@ -1,20 +1,29 @@
 import { runLocalCli } from "./local-cli";
 import {
   acquireLocalEmbeddingModel,
+  setSemanticSearchEnabled,
   localEmbeddingStatus,
+  semanticModelCatalog,
   openLocalEmbeddingModel,
 } from "./local-embedding";
 
+import { dirname, join } from "node:path";
+declare const AFTERNOTE_STANDALONE: boolean | undefined;
+const modelOptions = typeof AFTERNOTE_STANDALONE === "boolean" && AFTERNOTE_STANDALONE
+  ? { bundledModelPath: join(dirname(process.execPath), "semantic-model") } : undefined;
+
 try {
   await runLocalCli(process.argv.slice(2), {
-    open: openLocalEmbeddingModel,
-    status: localEmbeddingStatus,
+    open: (path) => openLocalEmbeddingModel(path, modelOptions),
+    status: (path) => localEmbeddingStatus(path, undefined, modelOptions),
+    catalog: (path) => semanticModelCatalog(path, modelOptions),
+    setEnabled: (path, enabled) => { setSemanticSearchEnabled(path, enabled); return semanticModelCatalog(path, modelOptions); },
     acquire: acquireLocalEmbeddingModel,
     help: `
   eval-recall [--semantic] [--noise 10|100] [--notes 10000]
                        Run deterministic Recall quality and noise-scaling gates
-  semantic status|install
-                       Inspect or install the pinned local semantic-search model`,
+  semantic status|catalog|check|enable|disable
+                       Inspect or change local search by meaning (on by default)`,
   });
 } catch (error) {
   const rawMessage = error instanceof Error ? error.message : "";

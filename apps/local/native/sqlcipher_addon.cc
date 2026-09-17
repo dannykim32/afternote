@@ -21,6 +21,7 @@
 #include <cstring>
 #include <limits>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -785,16 +786,36 @@ void ResetXpcBrokerConnection() {
 napi_value CopyKeyToJavaScript(napi_env environment, const void *bytes,
                                size_t length);
 
-napi_value XpcBrokerRequest(napi_env environment,
-                            napi_callback_info information) {
-  size_t count = 4;
-  napi_value arguments[4];
-  napi_get_cb_info(environment, information, &count, arguments, nullptr,
-                   nullptr);
+struct XpcRequestInput {
   std::string service;
   std::string code_requirement;
   std::string request;
   int32_t timeout_ms = 0;
+};
+
+struct XpcRequestResult {
+  std::string response;
+  std::string error;
+};
+
+// The reply block can outlive a timeout. Its shared state releases both the
+// semaphore and any late retained response after the last owner finishes.
+struct XpcPendingReply {
+  dispatch_semaphore_t completed = dispatch_semaphore_create(0);
+  xpc_object_t received = nullptr;
+  ~XpcPendingReply() {
+    if (received != nullptr) xpc_release(received);
+    dispatch_release(completed);
+  }
+};
+
+bool ReadXpcRequestInput(napi_env environment, napi_callback_info information,
+                         XpcRequestInput *input) {
+  size_t count = 4;
+  napi_value arguments[4];
+  napi_get_cb_info(environment, information, &count, arguments, nullptr,
+                   nullptr);
+  auto &[service, code_requirement, request, timeout_ms] = *input;
   if (count != 4 || !StringValue(environment, arguments[0], &service) ||
       !StringValue(environment, arguments[1], &code_requirement) ||
       !StringValue(environment, arguments[2], &request) ||
@@ -805,9 +826,14 @@ napi_value XpcBrokerRequest(napi_env environment,
       code_requirement.find('\n') != std::string::npos ||
       code_requirement.find('\r') != std::string::npos || request.empty() ||
       request.size() > 1024 * 1024 || timeout_ms < 1 || timeout_ms > 86400000) {
-    return Throw(environment, "XPC broker request is invalid");
+    return false;
   }
 
+  return true;
+}
+
+XpcRequestResult ExecuteXpcBrokerRequest(const XpcRequestInput &input) {
+  const auto &[service, code_requirement, request, timeout_ms] = input;
   std::lock_guard<std::mutex> lock(xpc_mutex);
   if (xpc_connection == nullptr || xpc_service != service ||
       xpc_code_requirement != code_requirement) {
@@ -816,7 +842,7 @@ napi_value XpcBrokerRequest(napi_env environment,
         service.c_str(), dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
         0);
     if (xpc_connection == nullptr) {
-      return Throw(environment, "Could not create the broker XPC connection");
+      return {"", "Could not create the broker XPC connection"};
     }
     xpc_service = service;
     xpc_code_requirement = code_requirement;
@@ -825,9 +851,7 @@ napi_value XpcBrokerRequest(napi_env environment,
             xpc_connection, code_requirement.c_str());
     if (requirement_status != 0) {
       ResetXpcBrokerConnection();
-      return Throw(environment,
-                   "Broker code-signing requirement is invalid (" +
-                       std::to_string(requirement_status) + ")");
+      return {"", "Broker code-signing requirement is invalid (" + std::to_string(requirement_status) + ")"};
     }
     xpc_connection_set_event_handler(xpc_connection, ^(xpc_object_t event) {
       (void)event;
@@ -837,42 +861,92 @@ napi_value XpcBrokerRequest(napi_env environment,
 
   xpc_object_t message = xpc_dictionary_create(nullptr, nullptr, 0);
   xpc_dictionary_set_string(message, "request", request.c_str());
-  dispatch_semaphore_t completed = dispatch_semaphore_create(0);
-  __block xpc_object_t received = nullptr;
+  auto pending = std::make_shared<XpcPendingReply>();
   xpc_connection_send_message_with_reply(
       xpc_connection, message,
       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
       ^(xpc_object_t response) {
-        received = xpc_retain(response);
-        dispatch_semaphore_signal(completed);
+        pending->received = xpc_retain(response);
+        dispatch_semaphore_signal(pending->completed);
       });
   xpc_release(message);
   const dispatch_time_t deadline = dispatch_time(
       DISPATCH_TIME_NOW, static_cast<int64_t>(timeout_ms) * NSEC_PER_MSEC);
-  if (dispatch_semaphore_wait(completed, deadline) != 0) {
+  if (dispatch_semaphore_wait(pending->completed, deadline) != 0) {
     ResetXpcBrokerConnection();
-    return Throw(environment, "Broker XPC request timed out");
+    return {"", "Broker XPC request timed out"};
   }
+  xpc_object_t received = pending->received;
   if (received == nullptr || xpc_get_type(received) == XPC_TYPE_ERROR) {
-    if (received != nullptr) xpc_release(received);
     ResetXpcBrokerConnection();
-    return Throw(environment, "Broker XPC service is unavailable");
+    return {"", "Broker XPC service is unavailable"};
   }
   const char *error = xpc_dictionary_get_string(received, "error");
   if (error != nullptr) {
     const std::string detail(error);
-    xpc_release(received);
-    return Throw(environment, detail);
+    return {"", detail};
   }
   const char *response = xpc_dictionary_get_string(received, "response");
   if (response == nullptr || strlen(response) > 1024 * 1024) {
-    xpc_release(received);
-    return Throw(environment, "Broker XPC response is invalid");
+    return {"", "Broker XPC response is invalid"};
   }
-  napi_value result;
-  napi_create_string_utf8(environment, response, NAPI_AUTO_LENGTH, &result);
-  xpc_release(received);
-  return result;
+  return {response, ""};
+}
+
+
+napi_value XpcBrokerRequest(napi_env environment, napi_callback_info information) {
+  XpcRequestInput input;
+  if (!ReadXpcRequestInput(environment, information, &input))
+    return Throw(environment, "XPC broker request is invalid");
+  const auto result = ExecuteXpcBrokerRequest(input);
+  if (!result.error.empty()) return Throw(environment, result.error);
+  napi_value response;
+  napi_create_string_utf8(environment, result.response.c_str(), result.response.size(), &response);
+  return response;
+}
+
+struct AsyncXpcRequest {
+  XpcRequestInput input;
+  XpcRequestResult result;
+  napi_deferred deferred = nullptr;
+  napi_async_work work = nullptr;
+};
+
+napi_value XpcBrokerRequestAsync(napi_env environment, napi_callback_info information) {
+  auto request = std::make_unique<AsyncXpcRequest>();
+  if (!ReadXpcRequestInput(environment, information, &request->input))
+    return Throw(environment, "XPC broker request is invalid");
+  napi_value promise, name;
+  if (napi_create_promise(environment, &request->deferred, &promise) != napi_ok ||
+      napi_create_string_utf8(environment, "Afternote private worker poll", NAPI_AUTO_LENGTH, &name) != napi_ok)
+    return Throw(environment, "Could not create asynchronous broker request");
+  const napi_status created = napi_create_async_work(environment, nullptr, name,
+      [](napi_env, void *data) {
+        auto *request = static_cast<AsyncXpcRequest *>(data);
+        request->result = ExecuteXpcBrokerRequest(request->input);
+      },
+      [](napi_env env, napi_status status, void *data) {
+        std::unique_ptr<AsyncXpcRequest> request(static_cast<AsyncXpcRequest *>(data));
+        if (status != napi_ok && request->result.error.empty())
+          request->result.error = "Asynchronous broker request was cancelled";
+        napi_value value;
+        if (request->result.error.empty()) {
+          napi_create_string_utf8(env, request->result.response.c_str(), request->result.response.size(), &value);
+          napi_resolve_deferred(env, request->deferred, value);
+        } else {
+          napi_value message;
+          napi_create_string_utf8(env, request->result.error.c_str(), request->result.error.size(), &message);
+          napi_create_error(env, nullptr, message, &value);
+          napi_reject_deferred(env, request->deferred, value);
+        }
+        napi_delete_async_work(env, request->work);
+      }, request.get(), &request->work);
+  if (created != napi_ok || napi_queue_async_work(environment, request->work) != napi_ok) {
+    if (request->work != nullptr) napi_delete_async_work(environment, request->work);
+    return Throw(environment, "Could not schedule asynchronous broker request");
+  }
+  request.release(); // Owned by the completion callback after successful queueing.
+  return promise;
 }
 
 enum class ProcessCodeValidation {
@@ -1966,6 +2040,10 @@ napi_value DeleteDataProtectionVaultKey(napi_env environment,
   return Undefined(environment);
 }
 #else
+napi_value XpcBrokerRequestAsync(napi_env environment, napi_callback_info) {
+  return Throw(environment, "XPC broker requests require macOS");
+}
+
 napi_value XpcBrokerRequest(napi_env environment, napi_callback_info) {
   return Throw(environment, "macOS XPC is required");
 }
@@ -2047,6 +2125,7 @@ napi_value Init(napi_env environment, napi_value exports) {
     {"enrollDataProtectionVaultKey", nullptr, EnrollDataProtectionVaultKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"deleteDataProtectionVaultKey", nullptr, DeleteDataProtectionVaultKey, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"xpcBrokerRequest", nullptr, XpcBrokerRequest, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"xpcBrokerRequestAsync", nullptr, XpcBrokerRequestAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"requireParentCodeSigningRequirement", nullptr, RequireParentCodeSigningRequirement, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"requireParentAndGrandparentCodeSigningRequirements", nullptr, RequireParentAndGrandparentCodeSigningRequirements, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"matchesAncestorCodeSigningRequirements", nullptr, MatchesAncestorCodeSigningRequirements, nullptr, nullptr, nullptr, napi_default, nullptr},

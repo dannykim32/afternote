@@ -1,3 +1,4 @@
+import { nextOwnerSequence } from "./owner-request-test-support";
 /* eslint-disable @typescript-eslint/no-explicit-any -- public protocol fixtures decode JSON */
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -24,6 +25,61 @@ afterEach(() => {
 });
 
 describe("native Library broker protocol", () => {
+  it("activates a newly installed model without reopening the vault or changing a note", async () => {
+    const note = "The launch cannot proceed until the security review is approved.";
+    const query = "What is preventing us from shipping?";
+    let installed = false;
+    let discoveries = 0;
+    const model = new FixtureEmbeddingModel(new Map([[note, [1, 0]], [query, [1, 0]]]));
+    const fixture = workerFixture({ embeddingModelProvider: () => { discoveries++; return installed ? model : null; } });
+    const connection = { connectionId: randomUUID(), peerPid: 51007 };
+    expect((await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES])).searchMode).toBe("exact");
+    const saved = (await ownerRequest(fixture.worker, connection, "library.remember", { content: note, source: null })).note;
+    installed = true;
+    const stranger = { connectionId: randomUUID(), peerPid: 51008 };
+    const denied = await rawOwnerRequest(fixture.worker, stranger, "library.refresh_search", {});
+    expect(denied.ok).toBe(false);
+    const refreshed = await ownerRequest(fixture.worker, connection, "library.refresh_search", {});
+    expect(["indexing", "hybrid"]).toContain(refreshed.searchMode);
+    expect(refreshed.modelId).toBe(model.descriptor.id);
+    const beforePoll = discoveries;
+    await ownerRequest(fixture.worker, connection, "library.refresh_search", { reloadModel: false });
+    expect(discoveries).toBe(beforePoll);
+    let searched;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      searched = await ownerRequest(fixture.worker, connection, "library.search", { cursor: null, limit: 10, query });
+      if (searched.searchMode === "hybrid") break;
+      await Bun.sleep(5);
+    }
+    expect(searched.searchMode).toBe("hybrid");
+    expect(searched.results).toMatchObject([{ citation: { noteId: saved.id, revision: 1 } }]);
+    expect((await ownerRequest(fixture.worker, connection, "library.get_note", { id: saved.id, revision: null })).note).toMatchObject({ content: note, revision: 1 });
+    expect((await ownerRequest(fixture.worker, connection, "library.refresh_search", {})).searchMode).toBe("hybrid");
+    installed = false;
+    expect((await ownerRequest(fixture.worker, connection, "library.refresh_search", {})).searchMode).toBe("exact");
+    expect((await ownerRequest(fixture.worker, connection, "library.search", {cursor: null, limit: 10, query})).results).toEqual([]);
+    expect((await ownerRequest(fixture.worker, connection, "library.get_note", {id: saved.id, revision: null})).note).toMatchObject({content: note, revision: 1});
+    installed = true;
+    await ownerRequest(fixture.worker, connection, "library.refresh_search", {});
+    expect((await ownerRequest(fixture.worker, connection, "library.search", {cursor: null, limit: 10, query})).results).toMatchObject([{citation: {noteId: saved.id}}]);
+  });
+
+  it("requires a current search scope and rejects activation parameters", async () => {
+    let now = Date.parse("2026-09-15T12:00:00.000Z");
+    const fixture = workerFixture({ now: () => now });
+    const connection = { connectionId: randomUUID(), peerPid: 51009 };
+    await beginLibrarySession(fixture.worker, connection, ["library.browse"]);
+    expect((await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", {})).ok).toBe(false);
+    await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES]);
+    expect(await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", { path: "/tmp/untrusted" }))
+      .toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", { reloadModel: "yes" }))
+      .toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    const session = await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES]);
+    now = Date.parse(session.expiresAt) + 1;
+    expect((await rawOwnerRequest(fixture.worker, connection, "library.refresh_search", {})).ok).toBe(false);
+  });
+
   it("reports and uses hybrid Library search when a verified local model is available", async () => {
     const note = "The launch cannot proceed until the security review is approved.";
     const query = "What is preventing us from shipping?";
@@ -1080,7 +1136,7 @@ async function beginRequest(
     kind: "client",
     peerRole,
     ...connection,
-    payload: { protocolVersion: 1, requestId: randomUUID(), method, params },
+    payload: { protocolVersion: 1, ...(peerRole === "owner-control" ? { sequence: nextOwnerSequence(connection) } : {}), requestId: randomUUID(), method, params },
   })));
 }
 

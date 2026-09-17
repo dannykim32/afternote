@@ -1,12 +1,16 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import {
   acquireLocalEmbeddingModel,
   localEmbeddingStatus,
+  selectedSemanticProfile, semanticModelCatalog,
 } from "./local-embedding";
-import { LOCAL_EMBEDDING_MODEL } from "./transformers-embedding";
+import { TransformersTextReranker } from "./transformers-reranker";
+import { SEMANTIC_MODELS, LOCAL_RERANKER } from "./semantic-model-catalog";
+import { createHash } from "node:crypto";
+import { LOCAL_EMBEDDING_MODEL, TransformersTextEmbeddingModel } from "./transformers-embedding";
 
 const directories: string[] = [];
 
@@ -17,6 +21,81 @@ afterEach(() => {
 });
 
 describe("local embedding installation", () => {
+  it("recommends a local profile without downloading and preserves an earlier explicit choice", () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-model-catalog-"));
+    directories.push(directory);
+    const vaultPath = join(directory, "vault.db");
+    const catalog = semanticModelCatalog(vaultPath);
+    expect(catalog.selected).toBe("balanced");
+    expect(catalog.models.map((model) => model.key)).toEqual(["light", "balanced", "large"]);
+    expect(catalog.models.every((model) => model.state === "not-installed")).toBe(true);
+    expect(existsSync(join(directory, "models"))).toBe(false);
+    mkdirSync(join(directory, "models"));
+    writeFileSync(join(directory, "models/selection.json"), JSON.stringify({version: 1, profile: "large"}));
+    expect(selectedSemanticProfile(vaultPath)).toBe("large");
+  });
+
+  it("rejects unknown, oversized and symlinked selections before loading or fetching", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-model-selection-"));
+    directories.push(directory);
+    const vaultPath = join(directory, "vault.db");
+    mkdirSync(join(directory, "models"));
+    const selection = join(directory, "models/selection.json");
+    for (const contents of ['{"version":1,"profile":"remote"}', ' '.repeat(257), 'null']) {
+      writeFileSync(selection, contents);
+      expect(() => selectedSemanticProfile(vaultPath)).toThrow();
+    }
+    rmSync(selection);
+    writeFileSync(join(directory, "outside"), '{"version":1,"profile":"light"}');
+    symlinkSync(join(directory, "outside"), selection);
+    expect(() => selectedSemanticProfile(vaultPath)).toThrow("could not be read");
+    let requests = 0;
+    await expect(acquireLocalEmbeddingModel(vaultPath, {
+      profile: "remote" as "light", fetch: async () => { requests++; return new Response(""); },
+    })).rejects.toThrow("must be light, balanced, or large");
+    expect(requests).toBe(0);
+  });
+
+  it("keeps the selected model after a failed switch", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-model-failure-"));
+    directories.push(directory);
+    const vaultPath = join(directory, "vault.db");
+    mkdirSync(join(directory, "models"));
+    writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
+    await expect(acquireLocalEmbeddingModel(vaultPath, { profile: "large", fetch: async () => new Response("bad") })).rejects.toThrow();
+    expect(selectedSemanticProfile(vaultPath)).toBe("light");
+  });
+
+  it("runtime-checks a cached model before committing selection, without redownloading", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "afternote-model-cached-"));
+    directories.push(directory);
+    const vaultPath = join(directory, "vault.db");
+    const profile = SEMANTIC_MODELS.large;
+    const originalFiles = profile.files;
+    const content = "pinned local test model";
+    // A tiny, genuinely digest-checked fixture exercises the installer workflow;
+    // runtime inference is the failure seam, and no remote files are needed.
+    profile.files = { "config.json": { bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex") } };
+    const runtime = spyOn(TransformersTextEmbeddingModel.prototype, "embed").mockRejectedValue(new Error("runtime unavailable"));
+    try {
+      const snapshot = join(directory, "models", profile.id, profile.revision);
+      mkdirSync(snapshot, {recursive: true});
+      writeFileSync(join(snapshot, "config.json"), content);
+      writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
+      expect(localEmbeddingStatus(vaultPath, "large").state).toBe("ready");
+      let requests = 0;
+      const options = { profile: "large" as const, fetch: async () => { requests++; return new Response(""); } };
+      await expect(acquireLocalEmbeddingModel(vaultPath, options)).rejects.toThrow("failed its runtime check");
+      expect(selectedSemanticProfile(vaultPath)).toBe("light");
+      expect(requests).toBe(0);
+      runtime.mockResolvedValue([new Float32Array(profile.dimensions)]);
+      await acquireLocalEmbeddingModel(vaultPath, options);
+      expect(selectedSemanticProfile(vaultPath)).toBe("large");
+      expect(requests).toBe(0);
+      expect(runtime).toHaveBeenCalledTimes(2);
+    } finally { profile.files = originalFiles; runtime.mockRestore(); }
+  });
+
   it("distinguishes an absent model from a partial or tampered installation", () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-model-status-"));
     directories.push(directory);
@@ -54,9 +133,65 @@ describe("local embedding installation", () => {
           return new Response("tampered", { status: 200 });
         }),
       }),
-    ).rejects.toThrow("failed verification: config.json");
+    ).rejects.toThrow("failed verification: reranker/config.json");
 
     expect(requests).toBe(1);
     expect(localEmbeddingStatus(vaultPath).state).toBe("not-installed");
   });
+});
+
+
+it("pins bundled relevance downloads and commits selection only after the relevance runtime works", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "afternote-relevance-install-"));
+  directories.push(directory);
+  const vaultPath = join(directory, "vault.db");
+  mkdirSync(join(directory, "models"));
+  writeFileSync(join(directory, "models/selection.json"), '{"version":1,"profile":"light"}');
+  const profile = SEMANTIC_MODELS.balanced, originalFiles = profile.files;
+  const content = "pinned relevance fixture";
+  profile.files = {"reranker/config.json": {bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex"),
+    source: {id: LOCAL_RERANKER.id, revision: LOCAL_RERANKER.revision, path: "config.json"}}};
+  const embed = spyOn(TransformersTextEmbeddingModel.prototype, "embed").mockResolvedValue([new Float32Array(768)]);
+  const score = spyOn(TransformersTextReranker.prototype, "score").mockRejectedValue(new Error("broken scorer"));
+  const urls: string[] = [];
+  const options = {profile: "balanced" as const, fetch: async (url: string | URL | Request) => {urls.push(String(url)); return new Response(content);} };
+  try {
+    await expect(acquireLocalEmbeddingModel(vaultPath, options)).rejects.toThrow("failed its runtime check");
+    expect(selectedSemanticProfile(vaultPath)).toBe("light");
+    expect(urls).toEqual([`https://huggingface.co/${LOCAL_RERANKER.id}/resolve/${LOCAL_RERANKER.revision}/config.json`]);
+    score.mockResolvedValue([4]);
+    await acquireLocalEmbeddingModel(vaultPath, options);
+    expect(selectedSemanticProfile(vaultPath)).toBe("balanced");
+    expect(urls).toHaveLength(1);
+  } finally { profile.files = originalFiles; embed.mockRestore(); score.mockRestore(); }
+});
+
+it("uses the verified bundled model by default without creating a cache, preserves off, and rejects invalid preferences", async () => {
+  const { discoverLocalEmbeddingModel, semanticSearchEnabled, setSemanticSearchEnabled } = await import("./local-embedding");
+  const directory = mkdtempSync(join(tmpdir(), "afternote-bundled-model-")); directories.push(directory);
+  const vaultPath = join(directory, "state/vault.db"), bundledModelPath = join(directory, "app/semantic-model");
+  const profile = SEMANTIC_MODELS.balanced, original = profile.files;
+  const content = "verified bundle fixture";
+  profile.files = {"config.json": {bytes: content.length, sha256: createHash("sha256").update(content).digest("hex")}};
+  try {
+    mkdirSync(bundledModelPath, {recursive: true}); writeFileSync(join(bundledModelPath, "config.json"), content);
+    expect(semanticSearchEnabled(vaultPath)).toBe(true);
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model?.descriptor.dimensions).toBe(768);
+    expect(existsSync(join(directory, "state"))).toBe(false);
+    setSemanticSearchEnabled(vaultPath, false);
+    expect(semanticModelCatalog(vaultPath, {bundledModelPath})).toMatchObject({enabled: false, bundled: true});
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model).toBeNull();
+    setSemanticSearchEnabled(vaultPath, true);
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath}).model).not.toBeNull();
+    writeFileSync(join(bundledModelPath, "config.json"), "tampered");
+    expect(discoverLocalEmbeddingModel(vaultPath, {bundledModelPath})).toMatchObject({model: null, status: {state: "invalid"}});
+    const preference = join(directory, "state/models/search.json");
+    for (const invalid of ['null', '{"version":1,"enabled":"yes"}', ' '.repeat(129)]) {
+      writeFileSync(preference, invalid);
+      expect(() => discoverLocalEmbeddingModel(vaultPath, {bundledModelPath})).toThrow();
+    }
+    rmSync(preference); symlinkSync(join(bundledModelPath, "config.json"), preference);
+    expect(() => semanticSearchEnabled(vaultPath)).toThrow("could not be read");
+    expect(existsSync(vaultPath)).toBe(false);
+  } finally { profile.files = original; }
 });

@@ -5,7 +5,7 @@ import {
 } from "./sqlcipher-database";
 import { runVaultBrokerWorkerXpc } from "./vault-broker-worker";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { discoverLocalEmbeddingModel } from "./local-embedding";
 
 declare const AFTERNOTE_BUILD_VERSION: string | undefined;
@@ -56,10 +56,12 @@ await runVaultBrokerWorkerXpc({
   vaultKeyCreator: (vaultId) =>
     createDataProtectionKeychainVaultKey(vaultId, accessGroup),
   embeddingDiscoveryProvider: (vaultPath) => {
-    const discovery = discoverLocalEmbeddingModel(vaultPath);
+    const discovery = discoverLocalEmbeddingModel(vaultPath, {
+      bundledModelPath: resolve(dirname(process.execPath), "../../..", "semantic-model"),
+    });
     return {
       model: discovery.model,
-      invalid: discovery.status.state === "invalid",
+      invalid: discovery.enabled && discovery.status.state !== "ready",
     };
   },
 }, {

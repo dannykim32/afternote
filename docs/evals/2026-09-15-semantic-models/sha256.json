@@ -1,0 +1,15 @@
+{
+  "light-current-10000.json": "044fc6172dee5f8709bda8c9df5eb1c7d0c9b7f344b2e3fe49ee8c9dd7b39690",
+  "balanced-current-10000.json": "960da92637cf96773eca8f312055f1a4d689bfcd1c900b12f21ee2447a9c4239",
+  "large-current-35.json": "29926032bdbec917dec9991419a1886611d1b05ce7ef724d5a2d2f07f012b56e",
+  "large-batch-padding-diagnostic.json": "e9b737212f804a5e70da81cd8279a42a2241616e0adda5d43d69863ea2d7e404",
+  "light-holdout.json": "ff5d6bb4b5a435218f72b8ac8201154f9075adff5ebe3131d5eea24e90947e20",
+  "light-holdout.json.calibration.json": "516c8d655f0dd235e84d18773da72c8d692cecc6c6ee36ff889906fe4384eb29",
+  "light-batch-stability.json": "36a2d5b899afbc9b76dfbbba161f8ebbfd9e87a0df1d415d37c43a049d37d5c9",
+  "balanced-holdout.json": "b8497f7829555f3bda5a202d5f13250cff7936b850522f4095677deb9e56405d",
+  "balanced-holdout.json.calibration.json": "d489ed3a46d011a7f1c98ca0ddaaf7c9a9125b50bc1519eaaf9eaacddad1854d",
+  "balanced-batch-stability.json": "6c17ec50421bd1eaa52ac0369cdafb4e6486eccc54c1bec41ffd1745809b907f",
+  "large-holdout.json": "a2293b92b582c7816eae05bd0f95d035520f6acaa747eef5d3169b44b1760d58",
+  "large-holdout.json.calibration.json": "d87533590a235499f95d07a8c52e5a01e847fdf53e038d677b7ce6e9ef80cd32",
+  "large-batch-stability.json": "1ce7b3adb8e823f30bfc8315c48da9a447dd5e8b8948bb530728972d5301f300"
+}

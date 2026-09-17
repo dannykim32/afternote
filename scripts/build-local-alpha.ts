@@ -23,6 +23,7 @@ import {
   VAULT_BROKER_IDENTIFIER,
   validatedAppleTeamId,
 } from "../apps/local/src/vault-broker-metadata";
+import { bundleSemanticModels } from "./prepare-semantic-release";
 import { writeReleaseSupplyChainArtifacts } from "./release-supply-chain";
 import {
   assertEmbeddedRuntimeMatchesPortable,
@@ -94,6 +95,7 @@ export type LocalAlphaArtifacts = {
   ownerPresenceMode: "required" | "development-bypass";
   releaseFlavor: "development" | "public";
   semanticRuntimeIncluded: boolean;
+  semanticModelsIncluded: boolean;
   sourceCommit: string;
   sourceTree: string;
   sourceTreeClean: boolean;
@@ -460,6 +462,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     join(repositoryRoot, "apps/local/native/connections_view.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_view.mm"),
     join(repositoryRoot, "apps/local/native/notes_retrieval.mm"),
+    join(repositoryRoot, "apps/local/native/semantic_settings.mm"),
     "-o",
     ownerControlBinaryPath,
   ]);
@@ -830,6 +833,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
       mode: filename.endsWith(".sh") ? 0o755 : 0o644,
     });
   }
+  if (signing.release) bundleSemanticModels(repositoryRoot, portableDirectory);
   const supplyChain = writeReleaseSupplyChainArtifacts({
     repositoryRoot,
     portableDirectory,
@@ -837,6 +841,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     version,
     release: signing.release,
     semanticRuntimeIncluded: includeSemanticRuntime,
+    semanticModelsIncluded: signing.release,
   });
   for (const metafilePath of metafilePaths) rmSync(metafilePath, { force: true });
 
@@ -942,6 +947,7 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     ownerPresenceMode: ownerPresenceBypass ? "development-bypass" : "required",
     releaseFlavor: signing.release ? "public" : "development",
     semanticRuntimeIncluded: includeSemanticRuntime,
+    semanticModelsIncluded: signing.release,
     sourceCommit,
     sourceTree,
     sourceTreeClean,

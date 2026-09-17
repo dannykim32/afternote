@@ -13,7 +13,7 @@ hosted service, customer data, deployment configuration, or release credentials.
 
 ## Try it
 
-Afternote is an early alpha for Apple Silicon Macs running macOS 13.3 or newer.
+Afternote is a beta for Apple Silicon Macs running macOS 13.3 or newer.
 
 Download the signed and notarized DMG and its `SHA256SUMS` from
 [GitHub Releases](https://github.com/dannykim32/afternote/releases), then follow
@@ -88,7 +88,7 @@ opening that host's MCP setup. Claude Desktop uses a small local MCPB package an
 own install confirmation. At runtime Afternote verifies Anthropic's launcher and its signed
 Claude Desktop parent as one process chain; it never writes Claude's private extension configuration.
 npm-installed scripts, wrapper launchers, and repackaged binaries are not supported in this
-alpha because they cannot satisfy the native runtime identity check.
+beta because they cannot satisfy the native runtime identity check.
 
 ### Connect Codex or Claude Code
 
@@ -181,7 +181,7 @@ connection to its process. The private worker owns the vault key, authorization 
 audit trail, and note mutations.
 
 Canonical notes and revisions share a transaction with their exact, temporal, and
-organizational projections. The optional semantic index is derived locally and can be
+organizational projections. The semantic index is derived locally and can be
 rebuilt without changing canonical notes. Connector lifecycle, owner-presence claims,
 release policy, XPC transport, and product-surface routing each have explicit module seams
 and focused tests.
@@ -201,7 +201,7 @@ and tests. The project's domain language is documented in [CONTEXT.md](CONTEXT.m
   manual vault lock, expiry, and policy changes require fresh approval.
 - Screen lock, sleep, logout, manual vault lock, and broker restart clear live authority.
   Export, deletion, recovery, lock, and unlock always require fresh owner approval.
-- Exact search, date-aware retrieval, and optional semantic inference run locally. The
+- Exact search, date-aware retrieval, and semantic inference run locally. The
   installed product has no Afternote account, sync endpoint, analytics transport, or
   telemetry transport.
 - Public artifacts are Developer ID signed, notarized, stapled, checksummed, and bound to a
@@ -225,9 +225,26 @@ current limits.
 
 ## Retrieval and verification
 
-Exact retrieval uses SQLite FTS5 and date-aware ranking. Optional semantic recall uses a
-locally downloaded, digest-verified model with local ONNX inference. Notes are not sent to an
-Afternote service for embedding or search.
+Search by meaning is on by default in the beta, in both Notes and Recall calls from
+approved connected tools. The app includes one local search engine: EmbeddingGemma for
+finding candidates and Ettin for checking their relevance. There is no first-run model
+download. Indexing and search happen on your Mac, without uploading notes to a model service.
+The included model files occupy about 375 MB; runtime memory use is higher.
+
+**Settings → Search by meaning** turns it on or off. Exact-text and date-aware search remain
+available while local search prepares and when it is off. Existing notes index while the
+vault is unlocked, and saved or edited notes update the same local index automatically.
+Turning search off leaves saved notes and their revisions intact. CLI status is available
+through `afternote semantic catalog` and `afternote semantic status`.
+
+Notes and connected tools use the same semantic relevance and ranking rules. A connected
+model can reformulate a query, but it cannot reason about a note Afternote has not returned.
+Search still has misses and can return related notes that do not answer a question; always
+inspect the original citation. See [beta evidence and limits](docs/BETA_READINESS.md) and
+[model licenses and use restrictions](apps/local/packaging/MODEL_TERMS.md).
+
+Results remain subject to that connector's approved access. What a connected AI host sends
+to its provider is governed by the host's own behavior.
 
 The repository contains deterministic exact, temporal, semantic, adversarial lifecycle,
 recovery, package, and 10,000-note scale tests. A passing evaluation is evidence for its

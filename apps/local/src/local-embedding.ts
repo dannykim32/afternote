@@ -2,43 +2,26 @@ import {
   closeSync,
   constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
   readSync,
+  readFileSync,
   renameSync,
   rmSync,
   writeSync,
   writeFileSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
+import { totalmem } from "node:os";
+import { SEMANTIC_MODELS, semanticProfile, modelDownloadBytes, type SemanticProfileId, type SemanticModelProfile } from "./semantic-model-catalog";
 import {
-  LOCAL_EMBEDDING_MODEL,
   TransformersTextEmbeddingModel,
 } from "./transformers-embedding";
 
-const MODEL_FILES = {
-  "config.json": {
-    sha256: "4599e8a5d74ed192b70919aa02124c2d68580070b22e89db956c0353618bccd9",
-    bytes: 611,
-  },
-  "tokenizer.json": {
-    sha256: "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
-    bytes: 711_661,
-  },
-  "tokenizer_config.json": {
-    sha256: "7580f5760152bd83122877e4c21d62b3d342cc2ab7232a1dbd0180d3b022798f",
-    bytes: 1_463,
-  },
-  "onnx/model_quantized.onnx": {
-    sha256: "0225a6e9c7b82e999fbf108daa02b825ac4b35173eb1d1073d8b3a0d4aa80251",
-    bytes: 22_843_695,
-  },
-} as const;
-
-type ModelFilePath = keyof typeof MODEL_FILES;
 type ModelFetch = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -46,64 +29,153 @@ type ModelFetch = (
 
 export type LocalEmbeddingStatus = {
   state: "not-installed" | "ready" | "invalid";
-  modelId: typeof LOCAL_EMBEDDING_MODEL.id;
-  revision: typeof LOCAL_EMBEDDING_MODEL.revision;
-  dtype: typeof LOCAL_EMBEDDING_MODEL.dtype;
-  dimensions: typeof LOCAL_EMBEDDING_MODEL.dimensions;
+  profile: SemanticProfileId;
+  modelId: string;
+  revision: string;
+  dtype: string;
+  dimensions: number;
   bytes: number;
   reason: string | null;
 };
 
 export type LocalEmbeddingDiscovery = {
   status: LocalEmbeddingStatus;
+  enabled: boolean;
   model: TransformersTextEmbeddingModel | null;
 };
 
-export function localEmbeddingStatus(vaultPath: string): LocalEmbeddingStatus {
-  const snapshot = modelSnapshotPath(vaultPath);
+export function selectedSemanticProfile(vaultPath: string): SemanticProfileId {
+  const path = join(modelCacheDirectory(vaultPath), "selection.json");
+  let fd: number;
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("Semantic model selection could not be read");
+    // Respect previous explicit Light installation; otherwise recommend Balanced.
+    return existsSync(modelSnapshotPath(vaultPath, SEMANTIC_MODELS.light)) ? "light" : "balanced";
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.size > 256) throw new Error("Semantic model selection is invalid");
+    const bytes = readFileSync(fd);
+    if (bytes.length > 256) throw new Error("Semantic model selection is invalid");
+    const data = JSON.parse(bytes.toString("utf8"));
+    if (Object.keys(data).length !== 2 || data.version !== 1) throw new Error("Semantic model selection is invalid");
+    return semanticProfile(data.profile).key;
+  } finally { closeSync(fd); }
+}
+
+function selectModel(vaultPath: string, profile: SemanticProfileId): void {
+  const directory = modelCacheDirectory(vaultPath);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const staging = join(directory, `.selection-${randomUUID()}`);
+  try {
+    writeFileSync(staging, JSON.stringify({ version: 1, profile }), { flag: "wx", mode: 0o600 });
+    renameSync(staging, join(directory, "selection.json"));
+  } finally { rmSync(staging, { force: true }); }
+}
+
+// The signed app supplies this path from its own executable layout. There is no
+// environment-variable or user-supplied model path in a release worker.
+export type LocalEmbeddingOptions = { bundledModelPath?: string };
+
+export function semanticSearchEnabled(vaultPath: string): boolean {
+  const path = join(modelCacheDirectory(vaultPath), "search.json");
+  let fd: number;
+  try { fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw new Error("Search preference could not be read");
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.size > 128) throw new Error("Search preference is invalid");
+    const bytes = readFileSync(fd);
+    if (bytes.length > 128) throw new Error("Search preference is invalid");
+    const data = JSON.parse(bytes.toString("utf8"));
+    if (!data || Object.keys(data).length !== 2 || data.version !== 1 || typeof data.enabled !== "boolean")
+      throw new Error("Search preference is invalid");
+    return data.enabled;
+  } finally { closeSync(fd); }
+}
+
+export function setSemanticSearchEnabled(vaultPath: string, enabled: boolean): void {
+  if (typeof enabled !== "boolean") throw new Error("Search preference is invalid");
+  const directory = modelCacheDirectory(vaultPath);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const staging = join(directory, `.search-${randomUUID()}`);
+  try {
+    writeFileSync(staging, JSON.stringify({ version: 1, enabled }), { flag: "wx", mode: 0o600 });
+    renameSync(staging, join(directory, "search.json"));
+  } finally { rmSync(staging, { force: true }); }
+}
+
+export function semanticModelCatalog(vaultPath: string, options?: LocalEmbeddingOptions) {
+  return {
+    selected: options?.bundledModelPath ? "balanced" : selectedSemanticProfile(vaultPath),
+    enabled: semanticSearchEnabled(vaultPath),
+    bundled: Boolean(options?.bundledModelPath),
+    recommended: totalmem() >= 8 * 1024 ** 3 ? "balanced" : "light",
+    memoryGiB: Math.round(totalmem() / 1024 ** 3),
+    models: Object.values(SEMANTIC_MODELS).map((profile) => ({
+      key: profile.key, name: profile.name, modelId: `${profile.id}:${profile.dtype}`, downloadBytes: modelDownloadBytes(profile),
+      state: localEmbeddingStatus(vaultPath, profile.key, options).state,
+    })),
+  };
+}
+
+export function localEmbeddingStatus(vaultPath: string, selected?: SemanticProfileId, options?: LocalEmbeddingOptions): LocalEmbeddingStatus {
+  const profile = semanticProfile(selected ?? (options?.bundledModelPath ? "balanced" : selectedSemanticProfile(vaultPath)));
+  const snapshot = options?.bundledModelPath && profile.key === "balanced" ? options.bundledModelPath : modelSnapshotPath(vaultPath, profile);
+  return verifyModelSnapshot(snapshot, profile);
+}
+
+export function verifyModelSnapshot(snapshot: string, profile: SemanticModelProfile): LocalEmbeddingStatus {
   let bytes = 0;
   let found = 0;
-  for (const [relativePath, expected] of Object.entries(MODEL_FILES)) {
+  for (const [relativePath, expected] of Object.entries(profile.files)) {
     const path = join(snapshot, relativePath);
     let info;
     try {
       info = lstatSync(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      return modelStatus("invalid", bytes, "model files could not be inspected");
+      return modelStatus(profile, "invalid", bytes, "model files could not be inspected");
     }
     found += 1;
     if (!info.isFile() || info.isSymbolicLink()) {
-      return modelStatus("invalid", bytes, `model file is not regular: ${relativePath}`);
+      return modelStatus(profile, "invalid", bytes, `model file is not regular: ${relativePath}`);
     }
     bytes += info.size;
     if (info.size !== expected.bytes || sha256(path) !== expected.sha256) {
-      return modelStatus("invalid", bytes, `model checksum failed: ${relativePath}`);
+      return modelStatus(profile, "invalid", bytes, `model checksum failed: ${relativePath}`);
     }
   }
-  if (found === 0) return modelStatus("not-installed", 0, null);
-  if (found !== Object.keys(MODEL_FILES).length) {
-    return modelStatus("invalid", bytes, "model installation is incomplete");
+  if (found === 0) return modelStatus(profile, "not-installed", 0, null);
+  if (found !== Object.keys(profile.files).length) {
+    return modelStatus(profile, "invalid", bytes, "model installation is incomplete");
   }
-  return modelStatus("ready", bytes, null);
+  return modelStatus(profile, "ready", bytes, null);
 }
 
 export function openLocalEmbeddingModel(
-  vaultPath: string,
+  vaultPath: string, options?: LocalEmbeddingOptions,
 ): TransformersTextEmbeddingModel | null {
-  return discoverLocalEmbeddingModel(vaultPath).model;
+  return discoverLocalEmbeddingModel(vaultPath, options).model;
 }
 
 export function discoverLocalEmbeddingModel(
-  vaultPath: string,
+  vaultPath: string, options?: LocalEmbeddingOptions,
 ): LocalEmbeddingDiscovery {
-  const status = localEmbeddingStatus(vaultPath);
+  const enabled = semanticSearchEnabled(vaultPath);
+  const status = localEmbeddingStatus(vaultPath, undefined, options);
   return {
     status,
-    model: status.state === "ready"
+    enabled,
+    model: enabled && status.state === "ready"
       ? new TransformersTextEmbeddingModel({
           cacheDirectory: modelCacheDirectory(vaultPath),
-          localModelPath: modelSnapshotPath(vaultPath),
+          localModelPath: options?.bundledModelPath ?? modelSnapshotPath(vaultPath, semanticProfile(status.profile)),
+          profile: semanticProfile(status.profile),
           allowRemoteModels: false,
         })
       : null,
@@ -112,65 +184,73 @@ export function discoverLocalEmbeddingModel(
 
 export async function acquireLocalEmbeddingModel(
   vaultPath: string,
-  options?: { fetch?: ModelFetch },
+  options?: { fetch?: ModelFetch; profile?: SemanticProfileId },
 ): Promise<LocalEmbeddingStatus> {
-  const existing = localEmbeddingStatus(vaultPath);
-  if (existing.state === "ready") return existing;
+  const profile = semanticProfile(options?.profile ?? selectedSemanticProfile(vaultPath));
+  const existing = localEmbeddingStatus(vaultPath, profile.key);
   const cacheDirectory = modelCacheDirectory(vaultPath);
   mkdirSync(cacheDirectory, { recursive: true, mode: 0o700 });
-  const snapshot = modelSnapshotPath(vaultPath);
-  const snapshotParent = dirname(snapshot);
-  mkdirSync(snapshotParent, { recursive: true, mode: 0o700 });
-  const staging = mkdtempSync(join(snapshotParent, ".install-"));
-  try {
-    for (const relativePath of Object.keys(MODEL_FILES) as ModelFilePath[]) {
-      await downloadVerifiedModelFile(
-        staging,
-        relativePath,
-        options?.fetch ?? globalThis.fetch,
-      );
+  const snapshot = modelSnapshotPath(vaultPath, profile);
+  if (existing.state !== "ready") {
+    const snapshotParent = dirname(snapshot);
+    mkdirSync(snapshotParent, { recursive: true, mode: 0o700 });
+    const staging = mkdtempSync(join(snapshotParent, ".install-"));
+    try {
+      for (const relativePath of Object.keys(profile.files)) {
+        await downloadVerifiedModelFile(
+          staging,
+          relativePath,
+          profile,
+          options?.fetch ?? globalThis.fetch,
+        );
+      }
+      if (existsSync(snapshot)) {
+        rmSync(snapshot, { recursive: true, force: true });
+      }
+      renameSync(staging, snapshot);
+    } catch (error) {
+      rmSync(staging, { recursive: true, force: true });
+      throw error;
     }
-    if (existsSync(snapshot)) {
-      rmSync(snapshot, { recursive: true, force: true });
-    }
-    renameSync(staging, snapshot);
-  } catch (error) {
-    rmSync(staging, { recursive: true, force: true });
-    throw error;
   }
 
   const model = new TransformersTextEmbeddingModel({
     cacheDirectory,
     localModelPath: snapshot,
+    profile,
     allowRemoteModels: false,
   });
   try {
     await model.embed(["Afternote local semantic search installation check."]);
+    if (model.reranker) await model.reranker.score("search installation", ["Afternote local semantic search installation check."]);
   } catch (error) {
-    rmSync(snapshot, { recursive: true, force: true });
+    // Digest-valid files remain reusable; selection changes only after a successful probe.
     throw new Error("Local embedding model failed its runtime check", {
       cause: error,
     });
   }
-  const status = localEmbeddingStatus(vaultPath);
+  const status = localEmbeddingStatus(vaultPath, profile.key);
   if (status.state !== "ready") {
     throw new Error(status.reason ?? "Local embedding model installation failed verification");
   }
+  selectModel(vaultPath, profile.key);
   return status;
 }
 
-async function downloadVerifiedModelFile(
+export async function downloadVerifiedModelFile(
   stagingDirectory: string,
-  relativePath: ModelFilePath,
+  relativePath: string,
+  profile: SemanticModelProfile,
   fetchImpl: ModelFetch,
 ): Promise<void> {
-  const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
-  const url = `https://huggingface.co/${LOCAL_EMBEDDING_MODEL.id}/resolve/${LOCAL_EMBEDDING_MODEL.revision}/${encodedPath}`;
+  const source = profile.files[relativePath]!.source ?? { id: profile.id, revision: profile.revision, path: relativePath };
+  const encodedPath = source.path.split("/").map(encodeURIComponent).join("/");
+  const url = `https://huggingface.co/${source.id}/resolve/${source.revision}/${encodedPath}`;
   const response = await fetchImpl(url, { redirect: "follow" });
   if (!response.ok) {
     throw new Error(`Local model download failed for ${relativePath}: HTTP ${response.status}`);
   }
-  const expected = MODEL_FILES[relativePath];
+  const expected = profile.files[relativePath]!;
   const advertisedLength = response.headers.get("content-length");
   if (advertisedLength !== null &&
     (!/^\d+$/.test(advertisedLength) || Number(advertisedLength) !== expected.bytes)) {
@@ -215,25 +295,27 @@ function modelCacheDirectory(vaultPath: string): string {
   return join(dirname(vaultPath), "models");
 }
 
-function modelSnapshotPath(vaultPath: string): string {
+function modelSnapshotPath(vaultPath: string, profile: SemanticModelProfile): string {
   return join(
     modelCacheDirectory(vaultPath),
-    LOCAL_EMBEDDING_MODEL.id,
-    LOCAL_EMBEDDING_MODEL.revision,
+    profile.id,
+    profile.revision,
   );
 }
 
 function modelStatus(
+  profile: SemanticModelProfile,
   state: LocalEmbeddingStatus["state"],
   bytes: number,
   reason: string | null,
 ): LocalEmbeddingStatus {
   return {
     state,
-    modelId: LOCAL_EMBEDDING_MODEL.id,
-    revision: LOCAL_EMBEDDING_MODEL.revision,
-    dtype: LOCAL_EMBEDDING_MODEL.dtype,
-    dimensions: LOCAL_EMBEDDING_MODEL.dimensions,
+    profile: profile.key,
+    modelId: profile.id,
+    revision: profile.revision,
+    dtype: profile.dtype,
+    dimensions: profile.dimensions,
     bytes,
     reason,
   };

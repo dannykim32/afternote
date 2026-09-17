@@ -64,7 +64,6 @@ describe("native Library production boundary", () => {
     expect(editorViewSource).toContain('action:@selector(toggleBulletList:)');
     expect(editorViewSource).toContain('action:@selector(toggleNumberedList:)');
     expect(editorViewSource).toContain('doCommandBySelector:(SEL)commandSelector');
-    expect(nativeAppSource).toContain('@"Semantic recall"');
     expect(nativeAppSource).toContain("libraryAuthenticateButton.hidden");
     // Refresh title, enabled state, and dispatch are covered by the standalone screen test.
     expect(nativeAppSource).not.toContain("VisibleNoteMetadata");
@@ -334,18 +333,6 @@ describe("native Library production boundary", () => {
     );
     expect(activation).toContain('isEqual:@"connections"');
     expect(activation).toContain("[self refreshConnections:nil];");
-  });
-
-  it("presents semantic recall from runtime truth while keeping exact search as the release default", () => {
-    expect(nativeAppSource).toContain('@"Active · local 23 MB model"');
-    expect(nativeAppSource).toContain(
-      '@"Exact search active · semantic model unavailable"',
-    );
-    expect(nativeAppSource).toContain("self.currentSearchMode = mode.length > 0");
-    expect(nativeAppSource).toContain(
-      'Optional local semantic recall can be installed explicitly. Exact search is the release default.',
-    );
-    expect(nativeAppSource).not.toContain('@"Optional · 23 MB"');
   });
 
   it("keeps note plaintext in native AppKit controls without storage or browser authority", () => {

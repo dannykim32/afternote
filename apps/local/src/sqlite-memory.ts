@@ -284,8 +284,8 @@ export class SqliteMemory implements Memory {
   readonly #ownsDatabase: boolean;
   readonly #databasePath: string;
   readonly #encryptionKey: Uint8Array | undefined;
-  readonly #embeddingModel: TextEmbeddingModel | null;
-  readonly #retrievalMode: RetrievalMode;
+  #embeddingModel: TextEmbeddingModel | null;
+  #retrievalMode: RetrievalMode;
   readonly #now: () => Date;
   readonly #timeZone: () => string;
   readonly #derivedIndexes: DerivedIndexCoordinator<Note>;
@@ -327,6 +327,7 @@ export class SqliteMemory implements Memory {
     this.#database = options.database
       ? options.database as unknown as Database
       : openNoteDatabase(databasePath, this.#encryptionKey, { create: true });
+    const memory = this;
     this.#derivedIndexes = new DerivedIndexCoordinator<Note>({
       model: this.#embeddingModel?.descriptor ?? null,
       rebuildSynchronous: () => {
@@ -338,6 +339,10 @@ export class SqliteMemory implements Memory {
         this.#replaceSmartViewAssignments(note);
         this.#replaceOrganizationAssignments(note);
         this.#replaceTemporalIndex(note);
+      },
+      get prepareSemanticModel() {
+        const model = memory.#embeddingModel;
+        return model?.prepare ? () => model.prepare!() : undefined;
       },
       missingSemanticNotes: () => this.#missingEmbeddingNotes(),
       indexSemanticNotes: (notes, reportError) =>
@@ -770,6 +775,7 @@ export class SqliteMemory implements Memory {
     semanticTimeoutMs: number,
   ): Promise<SearchNotesExecution> {
     if (this.#retrievalMode === "hybrid" && this.#embeddingModel) {
+      const model = this.#embeddingModel;
       this.#assertVault(vault);
       if (input.query.length > MAX_RECALL_QUERY_CHARACTERS) {
         throw new MemoryError(
@@ -796,12 +802,13 @@ export class SqliteMemory implements Memory {
         null,
         semanticTimeoutMs,
         Math.min(
-          this.#embeddingModel.minimumSimilarity,
+          this.#embeddingModel.uiMinimumSimilarity ?? this.#embeddingModel.minimumSimilarity,
           MINIMUM_EXPLORATORY_SEARCH_SIMILARITY,
         ),
       );
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], nextCursor: null, searchMode: this.#embeddingModel ? "indexing" : "exact" };
       const temporal = this.#queryTemporalAnnotations(input.query);
-      const lexicalIds = temporal.length === 0
+      const lexicalIds = temporal.length === 0 && !this.#embeddingModel.reranker
         ? new Set(this.#allLexicalResults(vault, input.query).map((result) => result.note.id))
         : null;
       const ranked = lexicalIds && lexicalIds.size > 0
@@ -1161,6 +1168,25 @@ export class SqliteMemory implements Memory {
     return result.changes > 0;
   }
 
+  enableSemanticSearch(vault: VaultContext, model: TextEmbeddingModel): void {
+    this.#assertVault(vault);
+    if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
+    const current = this.#embeddingModel?.descriptor;
+    if (current?.id === model.descriptor.id && current.revision === model.descriptor.revision &&
+        current.dimensions === model.descriptor.dimensions && this.#embeddingModel?.reranker?.id === model.reranker?.id) return;
+    this.#embeddingModel = model;
+    this.#retrievalMode = "hybrid";
+    this.#derivedIndexes.enableSemanticModel(model.descriptor);
+  }
+
+  disableSemanticSearch(vault: VaultContext): void {
+    this.#assertVault(vault);
+    if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
+    this.#embeddingModel = null;
+    this.#retrievalMode = "lexical";
+    this.#derivedIndexes.disableSemanticModel();
+  }
+
   async waitForDerivedIndex(): Promise<void> {
     await this.#derivedIndexes.wait();
   }
@@ -1253,6 +1279,7 @@ export class SqliteMemory implements Memory {
     this.#assertVault(vault);
     const model = this.#embeddingModel;
     if (!model) return { results: [], searchMode: "degraded" };
+    const deadline = performance.now() + semanticTimeoutMs;
     const temporal = this.#queryTemporalAnnotations(query);
     const rawLexical = this.#allLexicalResults(vault, query);
     const lexical = strongRecallLexicalResults(
@@ -1266,34 +1293,41 @@ export class SqliteMemory implements Memory {
     ) {
       return { results: [], searchMode: "hybrid" };
     }
+    const fallback = (searchMode: HybridRecallExecution["searchMode"]): HybridRecallExecution => {
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode };
+      return { results: this.#currentResults(this.#limitedTemporalResults(model.reranker ? literalRecallResults(query, rawLexical) : rawLexical, temporal, limit)), searchMode };
+    };
+    // A save queues local indexing. Give that work a bounded chance to finish so
+    // immediate recall can find the note; large imports still fall back promptly.
+    if (this.derivedIndexStatus(vault).state === "indexing") {
+      const exact = fallback("indexing");
+      if (exact.results.length > 0) return exact;
+      try { await withTimeout(this.#derivedIndexes.wait(), Math.max(1, deadline - performance.now())); }
+      catch { return fallback("indexing"); }
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+    }
     const indexState = this.derivedIndexStatus(vault).state;
     if (indexState !== "ready") {
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: indexState === "indexing" ? "indexing" : "degraded",
-      };
+      return fallback(indexState === "indexing" ? "indexing" : "degraded");
     }
 
     let queryVector: Float32Array;
     try {
       [queryVector] = await withTimeout(
-        model.embed([query + temporalEmbeddingContext(temporal)]),
-        semanticTimeoutMs,
+        model.embedQuery
+          ? model.embedQuery(query + temporalEmbeddingContext(temporal)).then((vector) => [vector])
+          : model.embed([query + temporalEmbeddingContext(temporal)]),
+        Math.max(1, deadline - performance.now()),
       );
       if (!queryVector) {
-        return {
-          results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-          searchMode: "degraded",
-        };
+        return fallback("degraded");
       }
       validateEmbedding(queryVector, model.descriptor);
     } catch {
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: "degraded",
-      };
+      return fallback("degraded");
     }
 
+    if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
     const descriptor = model.descriptor;
     const queryMagnitude = vectorMagnitude(queryVector);
     let semanticIndex: SemanticIndexCache;
@@ -1301,12 +1335,12 @@ export class SqliteMemory implements Memory {
       semanticIndex = this.#semanticIndex(descriptor);
     } catch (error) {
       if (!isInterrupted(error)) throw error;
-      return {
-        results: this.#limitedTemporalResults(rawLexical, temporal, limit),
-        searchMode: "degraded",
-      };
+      return fallback("degraded");
     }
-    const similarityThreshold = minimumSimilarity ?? model.minimumSimilarity;
+    // With a relevance model this is candidate generation, not the final
+    // relevance decision. A strict embedding cutoff would discard paraphrases
+    // before the reranker can read them.
+    const similarityThreshold = model.reranker ? 0.2 : minimumSimilarity ?? model.minimumSimilarity;
     const nativeSimilarities = cosineSimilaritiesNative(
       queryVector,
       semanticIndex.packedVectors,
@@ -1351,10 +1385,16 @@ export class SqliteMemory implements Memory {
       semanticCandidates = this.#withoutSupersededRevisionMatches(query, semanticCandidates);
     }
     const semantic = this.#hydrateSemanticCandidates(
-      limit === null
-        ? semanticCandidates
-        : semanticCandidates.slice(0, MAX_RECALL_RESULTS),
+      model.reranker ? semanticCandidates.slice(0, MAX_RECALL_RESULTS)
+        : limit === null ? semanticCandidates : semanticCandidates.slice(0, MAX_RECALL_RESULTS),
     );
+
+    if (model.reranker) {
+      const reranked = await this.#rerankRecall(query, model, lexical, semantic, Math.max(1, deadline - performance.now()));
+      if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+      const ranked = temporal.length > 0 ? this.#rankTemporalResults(reranked.results, temporal) : reranked.results;
+      return { results: limit === null ? ranked : ranked.slice(0, boundedLimit(limit, DEFAULT_RECALL_RESULTS, MAX_RECALL_RESULTS)), searchMode: reranked.searchMode };
+    }
 
     const fused = new Map<string, { result: RecallResult; score: number }>();
     lexical.forEach((result, index) => {
@@ -1393,6 +1433,68 @@ export class SqliteMemory implements Memory {
         : temporallyRanked.slice(0, boundedLimit(limit, DEFAULT_RECALL_RESULTS, MAX_RECALL_RESULTS)),
       searchMode: "hybrid",
     };
+  }
+
+  async #rerankRecall(
+    query: string,
+    model: TextEmbeddingModel,
+    lexical: readonly RecallResult[],
+    semantic: Array<{ row: HydratedEmbeddingRow; similarity: number }>,
+    timeoutMs: number,
+  ): Promise<HybridRecallExecution> {
+    const reranker = model.reranker!;
+    // Literal identifiers remain searchable beyond the reranking shortlist.
+    const literal = literalRecallResults(query, lexical);
+    const candidates = new Map<string, { result: RecallResult; passage: string }>();
+    for (const candidate of semantic) {
+      const result = semanticRowToResult(candidate.row, candidate.similarity);
+      const start = Math.max(0, candidate.row.content_start - 300);
+      const end = Math.min(result.note.content.length, candidate.row.content_end + 300);
+      candidates.set(result.note.id, { result, passage: result.note.content.slice(start, end) + sourceEmbeddingContext(result.note.source) });
+    }
+    for (const result of lexical.slice(0, MAX_RECALL_RESULTS)) {
+      if (!candidates.has(result.note.id)) {
+        const offset = Math.max(0, result.note.content.indexOf(result.citation.excerpt));
+        candidates.set(result.note.id, { result, passage: result.note.content.slice(Math.max(0, offset - 300), offset + 700) + sourceEmbeddingContext(result.note.source) });
+      }
+    }
+    const selected = [...candidates.values()];
+    const semanticRanks = new Map(semantic.map((candidate, index) => [candidate.row.id, index]));
+    let stopped = false;
+    let searchMode: HybridRecallExecution["searchMode"] = "hybrid";
+    const results = new Map(literal.map(result => [result.note.id, { ...result, score: 100 }]));
+    try {
+      const scores = await withTimeout(reranker.score(query, selected.map(candidate => candidate.passage),
+        () => stopped || this.#closed || this.#embeddingModel !== model), timeoutMs);
+      if (scores.length !== selected.length || scores.some(score => !Number.isFinite(score))) throw new Error("Invalid relevance scores");
+      // Fuse ranks rather than incomparable cosine/logit magnitudes. A shallow
+      // reciprocal-rank curve preserves a strong first-stage result even when
+      // many repetitive passages receive similar cross-encoder scores.
+      const relevanceOrder = selected.map((candidate, index) => ({ candidate, relevance: scores[index]! }))
+        .sort((a, b) => b.relevance - a.relevance || a.candidate.result.note.id.localeCompare(b.candidate.result.note.id));
+      relevanceOrder.forEach(({ candidate, relevance }, index) => {
+        if (relevance < reranker.minimumScore || results.has(candidate.result.note.id)) return;
+        const semanticRank = semanticRanks.get(candidate.result.note.id);
+        const score = 1 / (2 + index) + (semanticRank === undefined ? 0 : 1 / (2 + semanticRank));
+        results.set(candidate.result.note.id, { ...candidate.result, score });
+      });
+    } catch { searchMode = "degraded"; }
+    finally { stopped = true; }
+    if (this.#closed || this.#embeddingModel !== model) return { results: [], searchMode: "indexing" };
+    return {
+      results: this.#currentResults([...results.values()])
+        .sort((a, b) => b.score - a.score || b.note.createdAt.localeCompare(a.note.createdAt) || b.note.id.localeCompare(a.note.id)),
+      searchMode,
+    };
+  }
+
+  #currentResults(results: readonly RecallResult[]): RecallResult[] {
+    if (this.#closed) return [];
+    // Every asynchronous success/fallback path must reject edits and deletions
+    // that happened while inference was in progress.
+    const revision = this.#database.query<{ current_revision: number }, [string]>("select current_revision from notes where id = ?");
+    try { return results.filter(result => revision.get(result.note.id)?.current_revision === result.note.revision); }
+    finally { closePreparedStatement(revision); }
   }
 
   #hydrateSemanticCandidates(
@@ -1542,6 +1644,8 @@ export class SqliteMemory implements Memory {
     const status = this.derivedIndexStatus(this.vault);
     const hash = createHash("sha256")
       .update(query)
+      .update("\0")
+      .update(this.#embeddingModel?.reranker?.id ?? "embedding-only")
       .update("\0")
       .update(status.state)
       .update("\0")
@@ -2023,16 +2127,17 @@ export class SqliteMemory implements Memory {
     const vectors = await embedWithRetries(
       model,
       slices.map((slice) => slice.embeddingContent),
-      () => this.#closed,
+      () => this.#closed || this.#embeddingModel !== model,
       reportError,
     );
+    if (this.#closed || this.#embeddingModel !== model) return;
     if (vectors.length !== slices.length) {
       throw new Error(
         `Embedding model ${model.descriptor.id} returned ${vectors.length} vectors for ${slices.length} chunks`,
       );
     }
     vectors.forEach((vector) => validateEmbedding(vector, model.descriptor));
-    if (this.#closed) return;
+    if (this.#closed || this.#embeddingModel !== model) return;
     const descriptor = model.descriptor;
     const currentRevisionStatement = this.#database.query<
       { current_revision: number },
@@ -2541,7 +2646,7 @@ async function embedWithRetries(
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
     if (stopped()) return [];
     try {
-      return await model.embed(texts);
+      return await model.embed(texts, stopped);
     } catch (error) {
       lastError = error;
       if (attempt === EMBEDDING_ATTEMPTS) {
@@ -2767,6 +2872,14 @@ function normalizedTextTokens(value: string): string[] {
     .normalize("NFKC")
     .toLocaleLowerCase("en-US")
     .match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function literalRecallResults(query: string, results: readonly RecallResult[]): RecallResult[] {
+  const phrase = normalizedTextTokens(query).join(" ");
+  if (!phrase) return [];
+  return results.filter(result =>
+    (` ${normalizedTextTokens(result.note.content + " " + (sourceSearchText(result.note.source) ?? "")).join(" ")} `)
+      .includes(` ${phrase} `));
 }
 
 function strongRecallLexicalResults(

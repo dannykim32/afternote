@@ -1,8 +1,8 @@
 # Prelaunch second-Mac smoke test
 
-Run this against the signed and notarized **2.0.0-alpha.25** candidate containing the
-post-Alpha-22 refactors and both production reconnect fixes, not the existing Alpha 22 download.
-Packaging and signing must finish first.
+Run this against the signed and notarized **2.0.0-beta.1** candidate containing local
+semantic-search setup and shared retrieval for Notes and connected tools. Alpha 25 remains
+the previous accepted release. Packaging and signing must finish first.
 Record the candidate version and checksum supplied with that build. Allow about 30
 minutes, including a 16-minute connector-session check.
 
@@ -75,6 +75,14 @@ pagination as not exercised if the Vault has too few notes; do not manufacture a
 
 Resize the window narrow and wide. Notes and Connections should remain centered, action
 columns should align, and Refresh/Repair/Revoke should be legible without clipping.
+
+### Semantic search in Beta 1
+
+Run the five bounded checks in [BETA_READINESS.md](BETA_READINESS.md#bounded-semantic-acceptance-on-the-next-signed-candidate):
+offline first launch and the on/off control, ordinary paraphrase and exact search, first search after relaunch,
+lock/revocation during search, and interrupted indexing recovery. Use the same synthetic notes
+in Notes and a connected AI tool. A missed paraphrase is not automatically a release blocker;
+access leakage, lost data, or a repeatedly broken ordinary search flow is.
 
 ## 4. Read connection history
 

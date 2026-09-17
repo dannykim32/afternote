@@ -1,3 +1,4 @@
+import { SEMANTIC_MODELS, LOCAL_RERANKER } from "../apps/local/src/semantic-model-catalog";
 import {
   copyFileSync,
   existsSync,
@@ -34,7 +35,7 @@ type Component = {
   downloadLocation: string;
   licenseSource: string;
   licenseFilename: string;
-  kind: "runtime" | "library" | "native";
+  kind: "runtime" | "library" | "native" | "model";
 };
 
 type BunEmbeddedComponent = {
@@ -138,6 +139,7 @@ export function writeReleaseSupplyChainArtifacts(options: {
   version: string;
   release: boolean;
   semanticRuntimeIncluded: boolean;
+  semanticModelsIncluded?: boolean;
 }): ReleaseSupplyChainArtifacts {
   const packagingRoot = join(options.repositoryRoot, "apps/local/packaging");
   const applicationMetadata = JSON.parse(
@@ -235,6 +237,17 @@ export function writeReleaseSupplyChainArtifacts(options: {
     });
   }
 
+  if (options.semanticModelsIncluded) {
+    for (const [name, version, license, filename] of [
+      [SEMANTIC_MODELS.balanced.id, SEMANTIC_MODELS.balanced.revision, "LicenseRef-Gemma", "GEMMA_TERMS.txt"],
+      [LOCAL_RERANKER.id, LOCAL_RERANKER.revision, "Apache-2.0", "ETTIN_LICENSE.txt"],
+    ]) components.push({ name: name!, version: version!, license: license!,
+      downloadLocation: `https://huggingface.co/${name}/tree/${version}`,
+      licenseSource: join(packagingRoot, filename!), licenseFilename: filename!, kind: "model" });
+    for (const filename of ["GEMMA_PROHIBITED_USE_POLICY.txt", "GEMMA_NOTICE.txt", "MODEL_TERMS.md"])
+      copyFileSync(join(packagingRoot, filename), join(licenseDirectory, filename));
+  }
+
   const unique = new Map<string, Component>();
   for (const component of components) {
     const key = `${component.name}@${component.version}`;
@@ -261,7 +274,7 @@ export function writeReleaseSupplyChainArtifacts(options: {
   }
 
   const noticesPath = join(options.portableDirectory, "THIRD_PARTY_NOTICES.md");
-  writeFileSync(noticesPath, renderNotices(ordered, options.semanticRuntimeIncluded), {
+  writeFileSync(noticesPath, renderNotices(ordered, Boolean(options.semanticModelsIncluded)), {
     mode: 0o644,
   });
 
@@ -350,9 +363,10 @@ function renderNotices(components: Component[], semantic: boolean): string {
   if (semantic) {
     lines.push(
       "",
-      "The optional `onnx-community/GIST-all-MiniLM-L6-v2-ONNX` model is not bundled.",
-      "Afternote downloads the MIT-licensed model only after an explicit semantic install",
-      "and pins revision `c0339fdc3b6e11b7a7e7213695e36e55fcc732d8`.",
+      "EmbeddingGemma and Ettin are included for local search by meaning, enabled by default.",
+      "Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms.",
+      "Model use restrictions and redistribution terms: `LICENSES/MODEL_TERMS.md`.",
+      "Exact model revisions, file sizes and SHA-256 digests: `semantic-model/manifest.json`.",
     );
   }
   return `${lines.join("\n")}\n`;
@@ -395,6 +409,11 @@ function spdxDocument(
       created: new Date().toISOString(),
       creators: ["Tool: Afternote release builder"],
     },
+    ...(components.some((component) => component.license === "LicenseRef-Gemma") ? {
+      hasExtractedLicensingInfos: [{ licenseId: "LicenseRef-Gemma", name: "Gemma Terms of Use",
+        extractedText: readFileSync(components.find((component) => component.license === "LicenseRef-Gemma")!.licenseSource, "utf8"),
+        seeAlsos: ["https://ai.google.dev/gemma/terms", "https://ai.google.dev/gemma/prohibited_use_policy"] }],
+    } : {}),
     packages: [
       {
         SPDXID: appId,

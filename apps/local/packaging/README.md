@@ -32,9 +32,16 @@ distribution. A development archive deliberately refuses to replace an existing 
 installation because the two builds cannot share the release Keychain trust domain. Test it in
 a separate macOS account, or use the signed and notarized DMG when validating an upgrade.
 
-Exact search remains the release default. A user can explicitly run
-`afternote semantic install` to fetch the pinned, digest-verified local model after reviewing
-the additional disk and runtime requirements.
+Search by meaning is on by default in the public beta, for Notes and approved connected
+tools. The signed app includes the pinned EmbeddingGemma and Ettin models (375 MB of model
+files); setup and search work offline. Turn it off in **Settings → Search by meaning** to use
+exact search only. Indexing runs locally while the vault is unlocked. Exact search remains
+available while the semantic index prepares or if a model fails. The developer-only install
+command remains available for testing other pinned profiles outside a release.
+
+Included model weights have separate licenses and use restrictions. See
+[model terms](MODEL_TERMS.md), the Gemma Terms and Prohibited Use Policy, and the licenses
+bundled inside the application under `AfternoteRuntime/LICENSES/`.
 
 ## Public release
 

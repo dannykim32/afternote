@@ -29,6 +29,7 @@ Paths below are relative to the repository root.
 | `apps/local/native/note_editor_view.mm` | Editor draft, saved baseline, formatting, revision presentation, controls, and undo cleanup | Broker requests, authorization, conflict/delete approval, or navigation |
 | `apps/local/native/notes_retrieval.mm` | Submitted query/view, result rows, pagination cursor, and pending-request identity | Search-field drafts, AppKit, transport, authentication, or editor mutations |
 | `apps/local/native/native_appearance.mm` | Shared native colors, labels, date formatting, button appearance, and interaction feedback | Product state or authorization |
+| `apps/local/native/semantic_settings.mm` | Local search preferences, asynchronous command status, and passive indexing progress presentation | Vault access, authentication, note mutations, or model verification policy |
 | `apps/local/native/owner_control_app.mm` | Owner interaction, shared lifecycle coordination, Connections display-data assembly, and remaining screens | Direct Vault storage access |
 
 Filenames shortened in a row share its first directory. Connector lifecycle,
@@ -38,7 +39,7 @@ also have focused modules alongside these entry points.
 ## Invariants to preserve
 
 - Dispatch has two ordered phases. The worker first consumes protected Owner
-  request IDs, checks recovery, and checks vault-lock admission. Only then does it
+  request sequences, checks recovery, and checks vault-lock admission. Only then does it
   resolve an exact method and trusted-role route. Unknown methods retain their
   namespace admission requirements; a recovery/lifecycle exemption does not grant
   a callable route. Handlers retain all session, scope, and fresh-approval checks.
@@ -169,3 +170,9 @@ coordinator. Those can be separated further without moving shared lifecycle
 authority into a view. Settings, Recovery, test fixtures, and the broker modules
 remain follow-up work; moving methods merely to lower a line count would not
 settle their ownership.
+
+The private worker awaits its gateway long-poll through native asynchronous work. The
+blocking XPC exchange runs off the JavaScript event loop so model warm-up, inference
+callbacks and timers can complete while no client is calling. Request dispatch remains
+serial; the async exchange uses the same authenticated connection and validation as the
+synchronous client transport. Long-polling synchronously here starves background indexing.

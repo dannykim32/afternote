@@ -46,6 +46,19 @@ describeMacos("Foundation-only owner broker contract", () => {
     expect(result("recovery.status", { state: "unlocked" })).toBe(false);
   });
 
+  it("validates semantic activation replies", () => {
+    for (const searchMode of ["exact", "indexing", "hybrid", "degraded"]) {
+      expect(result("library.refresh_search", { searchMode, modelId: null, indexedNotes: 0, totalNotes: 1 })).toBe(true);
+    }
+    expect(result("library.refresh_search", { searchMode: "ready" })).toBe(false);
+    expect(result("library.refresh_search", { searchMode: "hybrid", note: "unexpected" })).toBe(false);
+    expect(result("library.refresh_search", {})).toBe(false);
+    expect(result("library.refresh_search", { searchMode: "indexing", modelId: "model:q8", indexedNotes: 2, totalNotes: 1 })).toBe(false);
+    expect(result("library.refresh_search", { searchMode: "hybrid", modelId: "model:q8", indexedNotes: 1, totalNotes: 1 })).toBe(true);
+    expect(result("library.refresh_search", { searchMode: "hybrid", modelId: 3 })).toBe(false);
+    expect(result("library.refresh_search", { searchMode: "hybrid", modelId: "x".repeat(257) })).toBe(false);
+  });
+
   it("binds export and identity-rotation acknowledgments to the request", () => {
     const params = { format: "json", destination: "/tmp/export.json" };
     const exported = { exported: true, format: "afternote-vault-v1", destination: params.destination };

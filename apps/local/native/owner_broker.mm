@@ -30,6 +30,7 @@ NSString *Identifier() {
 
 - (void)connectLocked {
   _connectionGeneration += 1;
+  _requestSequence = 0;
   NSUInteger generation = _connectionGeneration;
   _connection = xpc_connection_create_mach_service(
       _service.UTF8String, _connectionQueue, 0);
@@ -94,10 +95,18 @@ NSString *Identifier() {
                   @"message" : @"The Afternote broker connection changed." });
     return;
   }
+  // JSON integers must stay exactly representable by the worker. This cannot be
+  // reached through normal use; fail before sending rather than wrap the counter.
+  if (_requestSequence >= 9007199254740991ULL) {
+    reply(nil, @{ @"code" : @"broker_unavailable",
+                  @"message" : @"Reconnect to Afternote to continue." });
+    return;
+  }
   NSString *requestId = Identifier();
   NSDictionary *request = @{
     @"protocolVersion" : @1,
     @"requestId" : requestId,
+    @"sequence" : @(++_requestSequence),
     @"method" : method,
     @"params" : params,
   };

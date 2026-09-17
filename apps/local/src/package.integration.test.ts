@@ -56,7 +56,7 @@ public exact
     expect(renderPackagingText(template, {
       includeSemanticRuntime: true,
       release: true,
-    })).toBe("# public-alpha\nsemantic install\npublic exact\n");
+    })).toBe("# public-beta\nsemantic install\npublic exact\n");
   });
 
   it("allows owner-presence bypass only in an explicit development build", () => {

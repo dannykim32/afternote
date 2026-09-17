@@ -13,6 +13,7 @@
 #import "connections_view.h"
 #import "note_editor_view.h"
 #import "notes_retrieval.h"
+#import "semantic_settings.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
 #import "product_surface_router.h"
@@ -189,7 +190,8 @@ NSDictionary *RunIntegrationCommand(NSString *command, NSArray<NSString *> *argu
         message, @"Afternote could not start its integration helper.") };
   }
   __block BOOL timedOut = NO;
-  NSTimeInterval timeoutSeconds = kIntegrationCommandTimeoutSeconds;
+  NSTimeInterval timeoutSeconds = arguments.count >= 2 && [arguments[0] isEqualToString:@"semantic"] && [arguments[1] isEqualToString:@"install"]
+      ? 900.0 : kIntegrationCommandTimeoutSeconds;
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
   NSString *testingTimeout = NSProcessInfo.processInfo.environment[
       @"AFTERNOTE_TEST_INTEGRATION_TIMEOUT_MS"];
@@ -764,9 +766,17 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic) BOOL hasVisibleSmartCategories;
 @property(nonatomic, strong) NSTextField *resultsHeadingLabel;
 @property(nonatomic, strong) NSTableView *noteTable;
-@property(nonatomic, strong) NSTextField *searchModeLabel;
+@property(nonatomic, strong) AfternoteSearchProgress *searchProgress;
 @property(nonatomic, copy) NSString *currentSearchMode;
-@property(nonatomic, strong) NSTextField *semanticSettingsState;
+@property(nonatomic, strong) AfternoteSemanticSettings *semanticSettings;
+@property(nonatomic) BOOL semanticActivationInFlight;
+@property(nonatomic) BOOL semanticReloadPending;
+@property(nonatomic) BOOL semanticPollPending;
+@property(nonatomic) NSUInteger semanticPollSequence;
+@property(nonatomic) NSInteger semanticIndexedNotes;
+@property(nonatomic) NSInteger semanticTotalNotes;
+@property(nonatomic) NSTimeInterval semanticLastProgressAt;
+@property(nonatomic) NSUInteger semanticStatusFailures;
 @property(nonatomic, strong) NSButton *loadMoreNotesButton;
 @property(nonatomic, strong) NSButton *libraryRecentButton;
 @property(nonatomic, strong) NSButton *createNoteButton;
@@ -804,6 +814,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   if (self == nil) return nil;
   self.surfaceRouter = [[AfternoteProductSurfaceRouter alloc] init];
   self.notesRetrieval = [AfternoteNotesRetrieval new];
+  self.semanticIndexedNotes = -1;
+  self.semanticTotalNotes = -1;
   return self;
 }
 
@@ -970,6 +982,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self updateSetupBannerVisibility];
     [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-settings"]) {
+    [self.semanticSettings refresh];
     [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
   } else if ([arguments containsObject:@"--preview-new-note"]) {
     [self beginNewNote:nil];
@@ -1003,6 +1016,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self showLibraryMode:AfternoteLibraryModeAsk loadBrowse:NO];
     [self.window makeFirstResponder:self.librarySearch];
     self.askComposer.afternoteFocused = YES;
+  }
+  if ([arguments containsObject:@"--preview-indexing"] || [arguments containsObject:@"--preview-indexing-stalled"]) {
+    self.semanticIndexedNotes = 7;
+    self.semanticTotalNotes = 15;
+    [self applySearchMode:@"indexing"];
+    if ([arguments containsObject:@"--preview-indexing-stalled"])
+      self.semanticLastProgressAt = NSProcessInfo.processInfo.systemUptime - 61;
+    [self renderSemanticProgress];
   }
   [self updateProductNavigationState];
   NSUInteger renderIndex = [arguments indexOfObject:@"--render-preview"];
@@ -1179,41 +1200,41 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
           }];
 }
 
+- (void)renderSemanticProgress {
+  BOOL stalled = [self.currentSearchMode isEqual:@"indexing"] && self.semanticLastProgressAt > 0 &&
+      NSProcessInfo.processInfo.systemUptime - self.semanticLastProgressAt >= 60;
+  [self.searchProgress updateMode:self.currentSearchMode indexed:self.semanticIndexedNotes
+                           total:self.semanticTotalNotes stalled:stalled unavailable:self.semanticStatusFailures > 0];
+  [self.semanticSettings setProgressStalled:stalled unavailable:self.semanticStatusFailures > 0];
+}
+
 - (void)applySearchMode:(NSString *)mode {
+  NSString *previous = self.currentSearchMode;
   self.currentSearchMode = mode.length > 0 ? mode : @"checking";
-  if ([mode isEqualToString:@"hybrid"]) {
-    self.searchModeLabel.stringValue = @"Semantic recall";
-    self.searchModeLabel.textColor = AfternoteBrandCaptureColor();
-  } else if ([mode isEqualToString:@"indexing"]) {
-    self.searchModeLabel.stringValue = @"Exact search ready · improving recall";
-    self.searchModeLabel.textColor = StatusColor(@"warning");
-  } else if ([mode isEqualToString:@"degraded"]) {
-    self.searchModeLabel.stringValue = @"Exact search only";
-    self.searchModeLabel.textColor = StatusColor(@"error");
-  } else if ([mode isEqualToString:@"checking"]) {
-    self.searchModeLabel.stringValue = @"Search capability checking…";
-    self.searchModeLabel.textColor = AfternoteMutedTextColor();
+  if ([self.currentSearchMode isEqual:@"indexing"]) {
+    if (![previous isEqual:@"indexing"] || self.semanticLastProgressAt == 0)
+      self.semanticLastProgressAt = NSProcessInfo.processInfo.systemUptime;
   } else {
-    self.searchModeLabel.stringValue = @"Exact search only";
-    self.searchModeLabel.textColor = AfternoteMutedTextColor();
+    self.semanticLastProgressAt = 0;
+    self.semanticPollSequence += 1;
+    self.semanticPollPending = NO;
   }
-  self.searchModeLabel.accessibilityLabel =
-      [NSString stringWithFormat:@"Search mode: %@", self.searchModeLabel.stringValue];
-  if ([mode isEqualToString:@"hybrid"]) {
-    self.semanticSettingsState.stringValue = @"Active · local 23 MB model";
-    self.semanticSettingsState.textColor = StatusColor(@"success");
-  } else if ([mode isEqualToString:@"indexing"]) {
-    self.semanticSettingsState.stringValue = @"Indexing locally · exact fallback ready";
-    self.semanticSettingsState.textColor = StatusColor(@"warning");
-  } else if ([mode isEqualToString:@"exact"] || [mode isEqualToString:@"degraded"]) {
-    self.semanticSettingsState.stringValue = @"Exact search active · semantic model unavailable";
-    self.semanticSettingsState.textColor = StatusColor(
-        [mode isEqualToString:@"degraded"] ? @"error" : @"neutral");
-  } else {
-    self.semanticSettingsState.stringValue = @"Checked when Notes opens";
-    self.semanticSettingsState.textColor = AfternoteMutedTextColor();
+  if ([self.currentSearchMode isEqual:@"checking"]) {
+    self.semanticIndexedNotes = -1;
+    self.semanticTotalNotes = -1;
+    self.semanticStatusFailures = 0;
+    [self.semanticSettings setIndexedNotes:0 total:0];
   }
+  [self.semanticSettings setSearchMode:self.currentSearchMode];
+  [self renderSemanticProgress];
   [self renderSetupGuide];
+  [self scheduleSemanticStatusPoll];
+}
+
+- (void)retrySemanticProgress:(id)sender {
+  if ([self.currentSearchMode isEqual:@"degraded"]) { [self openSettings:sender]; return; }
+  self.semanticStatusFailures = 0;
+  [self refreshSemanticSearch:NO userInitiated:NO];
 }
 
 - (NSView *)buildSetupView {
@@ -1312,9 +1333,25 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSTextField *memoryHeading = [self label:@"Local memory" size:18 weight:NSFontWeightSemibold];
   NSTextField *vaultState = [self label:@"Encrypted on this Mac" size:12 weight:NSFontWeightMedium];
   vaultState.textColor = StatusColor(@"success");
-  self.semanticSettingsState = [self label:@"Checked when Notes opens"
-                                        size:12 weight:NSFontWeightMedium];
-  self.semanticSettingsState.textColor = AfternoteMutedTextColor();
+  __weak OwnerControlDelegate *weakSelf = self;
+  self.semanticSettings = [[AfternoteSemanticSettings alloc] initWithRunner:
+      ^(NSArray<NSString *> *arguments, AfternoteSemanticCompletion completion) {
+#if defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
+    completion(@{ @"enabled":@YES, @"models":@[@{@"key":@"balanced", @"modelId":@"preview:q4", @"state":@"ready"}] }, nil);
+#else
+    [weakSelf runPackagedCommand:arguments completion:completion];
+#endif
+  }];
+  self.semanticSettings.checkProgress = ^{
+    [weakSelf retrySemanticProgress:nil];
+  };
+  self.semanticSettings.activate = ^(BOOL userInitiated) {
+#if defined(AFTERNOTE_OWNER_CONTROL_UI_PREVIEW)
+    [weakSelf.semanticSettings activationCompleted:@"hybrid" modelId:@"preview:q4"];
+#else
+    [weakSelf activateSemanticSearch:userInitiated];
+#endif
+  };
   NSTextField *vaultLocationState = [self label:@"Afternote-managed" size:12 weight:NSFontWeightMedium];
   vaultLocationState.textColor = AfternoteMutedTextColor();
   NSButton *exportNotes = [AfternoteButton buttonWithTitle:@"Export notes"
@@ -1360,9 +1397,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       break;
     }
   }
-  NSTextField *identityState = [self label:@"One identity per tool" size:12 weight:NSFontWeightMedium];
-  identityState.textColor = AfternoteMutedTextColor();
-
   NSTextField *productHeading = [self label:@"Product" size:18 weight:NSFontWeightSemibold];
   NSString *packageVersion = [NSBundle.mainBundle
       objectForInfoDictionaryKey:@"AfternotePackageVersion"];
@@ -1411,10 +1445,6 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSTextField *developmentState = [self label:@"Owner presence bypass active"
                                            size:12 weight:NSFontWeightSemibold];
   developmentState.textColor = StatusColor(@"warning");
-#else
-  NSTextField *developmentState = [self label:@"Production authentication policy"
-                                           size:12 weight:NSFontWeightMedium];
-  developmentState.textColor = AfternoteMutedTextColor();
 #endif
 
   NSStackView *column = [NSStackView stackViewWithViews:@[
@@ -1422,13 +1452,14 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     memoryHeading,
     [self settingsRowWithTitle:@"Vault" detail:@"Canonical notes and derived recall data stay encrypted locally." control:vaultState],
     [self settingsRowWithTitle:@"Vault location" detail:@"The broker owns the encrypted database path; connectors never receive it." control:vaultLocationState],
-    [self settingsRowWithTitle:@"Semantic recall" detail:@"Optional local semantic recall can be installed explicitly. Exact search is the release default." control:self.semanticSettingsState],
+    self.semanticSettings,
     [self settingsRowWithTitle:@"Export & diagnostics" detail:@"Lossless export and share-safe diagnostics run through owner-approved native broker actions." control:exportControls],
     securityHeading,
     [self settingsRowWithTitle:@"Vault access" detail:@"Locking clears native plaintext and disconnects connector sessions." control:self.vaultAccessButton],
     [self settingsRowWithTitle:@"Routine authentication" detail:@"Used for Notes and for Codex, Claude Code, and Claude Desktop connections. Changing this setting applies to every connector. Export, deletion, recovery, lock, and unlock still require fresh approval." control:self.routineAuthenticationMenu],
-    [self settingsRowWithTitle:@"Connector identities" detail:@"Rotation and exact revocation remain scoped to one local connector." control:identityState],
+#if defined(AFTERNOTE_DEVELOPMENT_OWNER_PRESENCE_BYPASS)
     [self settingsRowWithTitle:@"Build policy" detail:@"Development convenience is isolated from release builds." control:developmentState],
+#endif
     productHeading,
     [self settingsRowWithTitle:@"Version" detail:@"Afternote V2 local memory." control:version],
     [self settingsRowWithTitle:@"Updates" detail:self.softwareUpdateController.available
@@ -1442,6 +1473,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   column.orientation = NSUserInterfaceLayoutOrientationVertical;
   column.alignment = NSLayoutAttributeLeading;
   column.spacing = 4;
+  [column setCustomSpacing:20 afterView:self.semanticSettings];
+  [self.semanticSettings.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
   column.edgeInsets = NSEdgeInsetsMake(30, 0, 30, 0);
   column.translatesAutoresizingMaskIntoConstraints = NO;
   [document addSubview:column];
@@ -1983,17 +2016,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [self.askButton.heightAnchor constraintEqualToConstant:kAskSubmitButtonSize],
     self.searchFieldHeightConstraint,
   ]];
-  self.searchModeLabel = [self label:@"Search capability checking…" size:11 weight:NSFontWeightMedium];
-  self.searchModeLabel.textColor = AfternoteMutedTextColor();
-  self.searchModeLabel.accessibilityLabel = @"Search capability checking";
-  NSTextField *localQueryLabel = [self label:@"Private to this Mac" size:11 weight:NSFontWeightRegular];
-  localQueryLabel.textColor = AfternoteMutedTextColor();
-  NSStackView *queryMeta = [NSStackView stackViewWithViews:@[
-    localQueryLabel, [NSView new], self.searchModeLabel
-  ]];
-  queryMeta.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  queryMeta.alignment = NSLayoutAttributeCenterY;
-  self.askControls = [NSStackView stackViewWithViews:@[ self.askComposer, queryMeta ]];
+  self.searchProgress = [AfternoteSearchProgress new];
+  self.searchProgress.retryButton.target = self;
+  self.searchProgress.retryButton.action = @selector(retrySemanticProgress:);
+  self.askControls = [NSStackView stackViewWithViews:@[ self.askComposer, self.searchProgress ]];
   self.askControls.orientation = NSUserInterfaceLayoutOrientationVertical;
   self.askControls.alignment = NSLayoutAttributeLeading;
   self.askControls.spacing = 8;
@@ -2083,7 +2109,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
     [discoveryColumn.widthAnchor constraintGreaterThanOrEqualToConstant:600],
     [discoveryColumn.widthAnchor constraintLessThanOrEqualToConstant:780],
     [self.askComposer.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
-    [queryMeta.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
+    [self.searchProgress.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
     [self.askControls.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
     [self.setupBanner.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
     [noteScroll.widthAnchor constraintEqualToAnchor:discoveryColumn.widthAnchor],
@@ -2156,9 +2182,82 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self refreshConnections:nil];
 }
 
+- (void)scheduleSemanticStatusPoll {
+  if (self.semanticPollPending || self.semanticActivationInFlight || self.semanticStatusFailures >= 3 || self.vaultLocked ||
+      self.libraryExpiresAt.length == 0 || ![self.currentSearchMode isEqualToString:@"indexing"]) return;
+  self.semanticPollPending = YES;
+  NSUInteger sequence = ++self.semanticPollSequence;
+  NSUInteger generation = self.librarySessionGeneration;
+  __weak OwnerControlDelegate *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    OwnerControlDelegate *view = weakSelf;
+    if (!view || generation != view.librarySessionGeneration || sequence != view.semanticPollSequence) return;
+    view.semanticPollPending = NO;
+    if ([view.currentSearchMode isEqualToString:@"indexing"])
+      [view refreshSemanticSearch:NO userInitiated:NO];
+  });
+}
+
+- (void)activateSemanticSearch:(BOOL)userInitiated {
+  [self refreshSemanticSearch:YES userInitiated:userInitiated];
+}
+
+- (void)refreshSemanticSearch:(BOOL)reloadModel userInitiated:(BOOL)userInitiated {
+  if (self.broker == nil) return;
+  if (self.semanticActivationInFlight) {
+    if (reloadModel) self.semanticReloadPending = YES;
+    return;
+  }
+  if (self.vaultLocked || self.libraryExpiresAt.length == 0) {
+    if (userInitiated) {
+      // Normal Notes authentication owns access and any draft-navigation policy.
+      [self displaySurface:AfternoteProductSurfaceMemory recoveryReady:YES];
+      [self setLibraryBusy:NO status:@"Open Notes with your usual authentication to activate semantic search."];
+    }
+    return;
+  }
+  self.semanticPollSequence += 1;
+  self.semanticPollPending = NO;
+  self.semanticActivationInFlight = YES;
+  NSUInteger generation = self.librarySessionGeneration;
+  [self.broker requestMethod:@"library.refresh_search" params:@{ @"reloadModel": @(reloadModel) }
+                       reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (generation != self.librarySessionGeneration) return;
+      self.semanticActivationInFlight = NO;
+      if (self.semanticReloadPending) {
+        self.semanticReloadPending = NO;
+        [self refreshSemanticSearch:YES userInitiated:NO];
+        return;
+      }
+      if (error != nil) {
+        [self showLibraryError:error];
+        if (reloadModel) [self.semanticSettings activationFailed];
+        if (self.libraryExpiresAt.length > 0 && !self.vaultLocked) {
+          self.semanticStatusFailures += 1;
+          [self renderSemanticProgress];
+          [self scheduleSemanticStatusPoll];
+        }
+        return;
+      }
+      NSInteger indexed = [result[@"indexedNotes"] integerValue];
+      NSInteger total = [result[@"totalNotes"] integerValue];
+      if (indexed != self.semanticIndexedNotes || total != self.semanticTotalNotes)
+        self.semanticLastProgressAt = NSProcessInfo.processInfo.systemUptime;
+      self.semanticIndexedNotes = indexed;
+      self.semanticTotalNotes = total;
+      self.semanticStatusFailures = 0;
+      [self.semanticSettings setIndexedNotes:indexed total:total];
+      [self applySearchMode:StringValue(result[@"searchMode"], @"exact")];
+      [self.semanticSettings activationCompleted:self.currentSearchMode modelId:StringValue(result[@"modelId"], @"")];
+    });
+  }];
+}
+
 - (void)openSettings:(id)sender {
   (void)sender;
   [self displaySurface:AfternoteProductSurfaceSettings recoveryReady:YES];
+  [self.semanticSettings refresh];
   if (self.broker == nil) return;
   [self refreshRoutineAuthenticationPreference];
   NSUInteger requestSequence = ++self.lifecycleStatusRequestSequence;
@@ -2890,6 +2989,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         }
       });
       [self loadLibraryViewsAndNotes];
+      [self.semanticSettings refresh];
     });
   }];
 }
@@ -3077,6 +3177,8 @@ doCommandBySelector:(SEL)commandSelector {
         return;
       }
       if (searching) [self applySearchMode:self.notesRetrieval.searchMode];
+      else if ([@[@"hybrid", @"indexing"] containsObject:self.currentSearchMode])
+        [self refreshSemanticSearch:NO userInitiated:NO];
       self.loadMoreNotesButton.hidden = self.notesRetrieval.cursor == nil;
       [self.noteTable reloadData];
       NSUInteger count = self.notesRetrieval.notes.count;
@@ -3606,6 +3708,8 @@ doCommandBySelector:(SEL)commandSelector {
     return;
   }
   self.librarySessionGeneration += 1;
+  self.semanticActivationInFlight = NO;
+  self.semanticReloadPending = NO;
   self.librarySensitiveTextView.string = @"";
   if (self.librarySensitiveAlert != nil) {
     self.librarySensitiveAlert.messageText = @"Notes session ended";
@@ -4526,6 +4630,7 @@ doCommandBySelector:(SEL)commandSelector {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
 #include "owner_control_connections_layout_smoke.inc"
 #include "owner_control_notes_retrieval_smoke.inc"
+#include "owner_control_semantic_smoke.inc"
 #include "owner_control_reconnect_smoke.inc"
 NSTextView *FixtureEditorText(NSView *view) {
   if ([view.identifier isEqualToString:@"note-editor-draft"]) return (NSTextView *)view;
@@ -5585,6 +5690,105 @@ int RunLibraryCleanupSmoke() {
       !serializedPlaintext ? 0 : 2;
 }
 
+// Real OwnerBrokerConnection -> XPC gateway -> encrypted worker. Available only
+// in the isolated test executable; owner approval is simulated by its test gateway.
+int RunOwnerControlPollingSmoke(BOOL locked) {
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+  auto request = ^NSDictionary *(NSString *method, NSDictionary *params) {
+    NSDictionary *result = nil;
+    NSDictionary *error = nil;
+    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error]) {
+      fprintf(stderr, "%s: %s\n", method.UTF8String, error.description.UTF8String);
+      return (NSDictionary *)nil;
+    }
+    return result;
+  };
+  NSDictionary *sessionParams = @{ @"requestedScopes" : @[ @"library.browse", @"library.search" ], @"ttlMs" : @900000 };
+  if (locked) {
+    if (request(@"lifecycle.lock", @{}) == nil) return 2;
+  } else if (request(@"library.session.begin", sessionParams) == nil) return 2;
+  for (NSUInteger poll = 0; poll < 2048; poll++) {
+    if (request(locked ? @"lifecycle.status" : @"library.refresh_search",
+                locked ? @{} : @{ @"reloadModel" : @NO }) == nil) return 2;
+  }
+  if (locked) {
+    if (request(@"lifecycle.unlock", @{}) == nil ||
+        request(@"library.session.begin", sessionParams) == nil) return 2;
+  }
+  NSDictionary *notes = request(@"library.browse", @{ @"view" : NSNull.null, @"limit" : @20, @"cursor" : NSNull.null });
+  if (notes == nil) return 2;
+  if (!locked) {
+    if (request(@"owner.connector_overview", @{}) == nil ||
+        request(@"owner.revoke_connector", @{ @"kind" : @"codex" }) == nil) return 2;
+  }
+  NSDictionary *output = @{ @"polls" : @2048, @"unlockedAfterPolling" : @(locked),
+                            @"revokedAfterPolling" : @(!locked), @"library" : notes };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
+  fwrite(data.bytes, 1, data.length, stdout);
+  fputc('\n', stdout);
+  return 0;
+}
+
+// Wait through real gateway idle periods; direct worker fixtures cannot cover this.
+int RunOwnerControlSemanticStartupSmoke() {
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+  auto request = ^NSDictionary *(NSString *method, NSDictionary *params) {
+    NSDictionary *result = nil, *error = nil;
+    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error] ||
+        error != nil || result == nil) {
+      fprintf(stderr, "%s: %s\n", method.UTF8String,
+              error != nil ? error.description.UTF8String : "No broker result received");
+      return (NSDictionary *)nil;
+    }
+    return result;
+  };
+  NSDictionary *session = @{ @"requestedScopes": @[@"library.browse", @"library.search"], @"ttlMs": @900000 };
+  if (request(@"library.session.begin", session) == nil ||
+      request(@"library.refresh_search", @{@"reloadModel": @YES}) == nil) return 2;
+  // A query awaits background work, establishing persisted embeddings first.
+  if (request(@"library.search", @{@"query": @"quartz unmatched paraphrase", @"limit": @5, @"cursor": NSNull.null}) == nil) return 2;
+  NSDictionary *before = nil;
+  for (NSUInteger i = 0; i < 100; i++) {
+    before = request(@"library.refresh_search", @{@"reloadModel": @NO});
+    if ([before[@"searchMode"] isEqual:@"hybrid"]) break;
+    [NSThread sleepForTimeInterval:0.1];
+  }
+  if (![before[@"searchMode"] isEqual:@"hybrid"] || [before[@"totalNotes"] integerValue] < 1) {
+    fprintf(stderr, "Initial semantic readiness failed: %s\n", before.description.UTF8String);
+    return 2;
+  }
+  if (request(@"lifecycle.lock", @{}) == nil) return 2;
+  // Lock intentionally invalidates owner peers. The app's disconnect recovery
+  // replaces this connection before further requests; this synchronous setup
+  // has no app delegate yet to perform that recovery for it.
+  [broker replaceConnection];
+  if (request(@"lifecycle.unlock", @{}) == nil) return 2;
+  NSDictionary *opened = request(@"library.session.begin", session);
+  if (opened == nil) return 2;
+  [NSApplication sharedApplication];
+  OwnerControlDelegate *delegate = [OwnerControlDelegate new];
+  [delegate buildWindow];
+  delegate.broker = broker;
+  delegate.libraryExpiresAt = opened[@"expiresAt"];
+  [delegate applySearchMode:opened[@"searchMode"]];
+  [delegate refreshSemanticSearch:NO userInitiated:NO];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:10];
+  while ((![delegate.currentSearchMode isEqual:@"hybrid"] || delegate.semanticActivationInFlight ||
+          delegate.semanticIndexedNotes < 0) && deadline.timeIntervalSinceNow > 0)
+    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  BOOL ready = [delegate.currentSearchMode isEqual:@"hybrid"];
+  BOOL reused = delegate.semanticIndexedNotes == [before[@"indexedNotes"] integerValue] &&
+      delegate.semanticTotalNotes == [before[@"totalNotes"] integerValue];
+  BOOL uiReady = [delegate.searchProgress.titleLabel.stringValue isEqual:@"Search by meaning ready"] &&
+      delegate.searchProgress.progressBar.hidden && !delegate.semanticPollPending;
+  NSDictionary *output = @{@"readyAfterIdleReopen": @(ready), @"preservedIndex": @(reused), @"uiReady": @(uiReady),
+      @"status": @{ @"searchMode": delegate.currentSearchMode ?: @"", @"indexedNotes": @(delegate.semanticIndexedNotes),
+                     @"totalNotes": @(delegate.semanticTotalNotes) }};
+  NSData *data = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
+  fwrite(data.bytes, 1, data.length, stdout);
+  return ready && reused && uiReady ? 0 : 2;
+}
+
 int RunProtocolSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 2;
@@ -5731,6 +5935,15 @@ int RunDiagnosticContractSmoke(const char *path) {
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--semantic-startup-smoke") == 0) return RunOwnerControlSemanticStartupSmoke();
+    if (argc == 2 && strcmp(argv[1], "--owner-polling-smoke") == 0) return RunOwnerControlPollingSmoke(NO);
+    if (argc == 2 && strcmp(argv[1], "--owner-locked-polling-smoke") == 0) return RunOwnerControlPollingSmoke(YES);
+    if (argc == 2 && strcmp(argv[1], "--semantic-progress-smoke") == 0) {
+      return RunSemanticProgressSmoke();
+    }
+    if (argc == 2 && strcmp(argv[1], "--semantic-coordinator-smoke") == 0) {
+      return RunSemanticCoordinatorSmoke();
+    }
     if (argc == 2 && strcmp(argv[1], "--notes-retrieval-smoke") == 0) {
       return RunNotesRetrievalCoordinatorSmoke();
     }

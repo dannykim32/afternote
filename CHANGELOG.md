@@ -6,6 +6,121 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.5 - 2026-09-17
+
+### Fixed
+
+- Let background search preparation finish while the native worker waits for requests.
+  The previous synchronous private XPC poll blocked the JavaScript event loop, leaving
+  search stuck at a complete note count even after lock/unlock. Existing embeddings remain
+  reusable; this change does not alter the model or rebuild policy.
+
+### Verification
+
+- Reproduced the stalled complete index through the native gateway before the fix.
+- Require real AppKit Notes readiness through the native gateway and encrypted worker after
+  lock/unlock, both with asynchronous fixture preparation and with pinned bundled models.
+  Test services simulate owner approval. Founder acceptance on the affected second Mac
+  confirmed ready status, cross-host recall from Codex, and revocation.
+
+## 2.0.0-beta.4 - 2026-09-16
+
+### Fixed
+
+- Keep Notes, unlock and revocation available after sustained search-status polling. Replace
+  the global 1,024-request owner replay cache with bounded per-connection sequence tracking.
+  Repeated and older requests remain rejected without a daily request limit.
+
+### Verification
+
+- Require native XPC integration in the release pipeline, including thousands of progress
+  checks followed by revocation, blocked connector access, lock/unlock and preserved notes.
+  The isolated test gateway simulates approval; physical owner-presence acceptance remains
+  a separate check on the installed candidate.
+
+At this checkpoint the affected-Mac semantic recall misses remained under investigation;
+Beta 5 records the subsequent fix and acceptance.
+
+## 2.0.0-beta.3 - 2026-09-16
+
+### Fixed
+
+- Request fresh owner approval when revoking directly from Connections, without requiring
+  a prior authenticated history inspection. Approved revocation stops reads and writes;
+  canceled approval leaves access unchanged.
+
+### Changed
+
+- Clarify connector recall instructions: search across approved connectors in the same vault,
+  start with the user's question, and try a focused rephrasing before reporting no match.
+  An empty result alone does not establish that no relevant note exists.
+
+At this checkpoint the reported cross-connector recall misses remained under investigation. The supplied canary
+queries pass against the bundled models in signed connector tests; this is not yet a verified
+fix for the affected Mac.
+
+## 2.0.0-beta.2 - 2026-09-16
+
+### Fixed
+
+- Keep checking indexing progress when a search starts background preparation, and update
+  Notes and Settings automatically when search by meaning is ready.
+- Show indexed-note counts and a progress bar. Distinguish delayed indexing from failed
+  status checks, with a Check again action that does not reload the model.
+- Open included model terms in a selectable offline window inside Afternote.
+
+### Changed
+
+- Explain that search models are included with the app and require no separate download.
+- Remove the static Connector identities and production Build policy rows from Settings.
+
+## 2.0.0-beta.1 - 2026-09-16
+
+### Changed
+
+- Search by meaning is on by default in Notes and approved connected tools. The app includes
+  the verified EmbeddingGemma and Ettin models; no first-run download or model choice is needed.
+- Settings has one right-aligned Enabled control, with local preparation and failure status.
+  Turning it off keeps notes intact and switches both surfaces to exact search.
+- The local engine prepares when the vault opens. Newly saved notes index automatically;
+  immediate recall can wait within its existing deadline, while exact matches remain fast.
+- Included model files, licenses and use restrictions are part of the signed release payload.
+
+### Fixed
+
+- Retire queued indexing and suppress late semantic results when search is disabled.
+- Stop using an active model if refreshed model verification fails.
+
+The accepted beta search limitations remain documented in [beta readiness](docs/BETA_READINESS.md).
+
+## 2.0.0-alpha.26 - 2026-09-15
+
+### Added
+
+- Enable local search by meaning from Settings with one explicit download, verification,
+  retry, and indexing status. The approximately 375 MB search bundle serves Notes and
+  connected AI tools; processing stays local after installation.
+- Combine semantic candidate retrieval with local relevance scoring so Notes and connected
+  tools can find saved notes without requiring the original wording.
+
+### Fixed
+
+- Keep incidental keyword matches from hiding semantic results in Notes search.
+- Preserve strong semantic matches when relevance scoring favors repetitive distractors.
+- Reject stale search results after edits, deletion, vault closure, or model replacement,
+  including query-inference failure paths.
+- Keep semantic-install command output machine-readable for the native app.
+
+### Beta limitations
+
+- Search can miss a relevant note or return related context that does not answer the question.
+  Returned notes include their original citations; relevance scores are not answer guarantees.
+- Initial indexing and the first search after restart take longer than subsequent searches.
+  Exact search remains available when authorized during indexing or semantic-search failure.
+
+Semantic search remains opt-in. See [beta readiness](docs/BETA_READINESS.md) for the
+measured limitations and acceptance scope.
+
 ## 2.0.0-alpha.25 - 2026-09-15
 
 ### Fixed

@@ -45,6 +45,26 @@ describe("derived-index coordinator interface", () => {
     expect(semanticRuns).toBe(0);
   });
 
+  it("commits a large rebuild in bounded batches and stops retired work between batches", async () => {
+    const notes = Array.from({length: 100}, (_, index) => ({id: `note-${index}`}));
+    const sizes: number[] = [];
+    let indexed = 0;
+    const coordinator = new DerivedIndexCoordinator<IndexedNote>({
+      model: {id: "fixture", revision: "1", dimensions: 2},
+      rebuildSynchronous: () => undefined, replaceSynchronous: () => undefined,
+      missingSemanticNotes: () => notes,
+      indexSemanticNotes: async (batch) => {
+        sizes.push(batch.length); indexed += batch.length;
+        expect(coordinator.status().indexedNotes).toBe(indexed);
+        if (sizes.length === 2) coordinator.close();
+      },
+      totalNotes: () => notes.length, indexedNotes: () => indexed,
+    });
+    coordinator.initialize(); await coordinator.wait();
+    expect(sizes).toEqual([32, 32]);
+    expect(indexed).toBe(64);
+  });
+
   it("reports disabled, indexing, ready, and degraded states from one owner", async () => {
     let release: (() => void) | undefined;
     const pending = new Promise<void>((resolve) => {
@@ -97,4 +117,20 @@ describe("derived-index coordinator interface", () => {
     });
     expect(disabled.status().state).toBe("disabled");
   });
+});
+
+it("prepares an empty vault, reports runtime failure, and does not prepare after close or disable", async () => {
+  let preparations = 0;
+  const create = () => new DerivedIndexCoordinator({
+    model: {id: "fixture", revision: "1", dimensions: 2},
+    rebuildSynchronous() {}, replaceSynchronous() {}, missingSemanticNotes: () => [],
+    async prepareSemanticModel() { preparations++; throw new Error("runtime failed"); },
+    async indexSemanticNotes() {}, totalNotes: () => 0, indexedNotes: () => 0,
+  });
+  const coordinator = create(); coordinator.initialize();
+  expect(coordinator.status().state).toBe("indexing"); await coordinator.wait();
+  expect(coordinator.status()).toMatchObject({state: "degraded", lastError: "runtime failed"});
+  const closed = create(); closed.initialize(); closed.close(); await closed.wait();
+  const disabled = create(); disabled.initialize(); disabled.disableSemanticModel(); await disabled.wait();
+  expect(disabled.status().state).toBe("disabled"); expect(preparations).toBe(1);
 });

@@ -62,6 +62,14 @@ automation, and do not treat a development package as a distributable artifact.
 The script deliberately stops after producing local release files. Publishing the GitHub
 Release and committing the generated appcast remain separate human actions.
 
+## Semantic-search beta acceptance
+
+The current learned-model candidate is accepted for beta subject to the bounded ordinary-use
+and security checks in [BETA_READINESS.md](BETA_READINESS.md). Its separate experimental recall
+and latency reports retain their original failures; they are not the deterministic fixture
+checks run by `test:quality`. This decision does not change or bypass any command in the guarded
+release pipeline above. Signed artifact and clean-user acceptance are still required.
+
 ## Signed-update bootstrap
 
 Alpha 11 and earlier do not contain the signed updater, so they cannot discover or install
@@ -80,3 +88,22 @@ Alpha 12 to Alpha 13. On a clean test account:
 6. Confirm the note, both revisions, connector state, export, and Remember/Recall still work.
 
 Do not claim the updater is production-verified until that transition has passed.
+
+## Beta 1 included search assets
+
+The guarded build runs `prepare:semantic-release` in its fresh checkout. It fetches only
+source-pinned model files, verifies byte counts and SHA-256 digests, and stages them under
+`build/semantic-model`. Packaging re-verifies the allowlist and copies it into both the
+portable runtime and the app's sealed runtime, with model terms and notices. The signed
+payload manifest covers these files, and the SBOM identifies both models and their licenses.
+
+`test:semantic-release` then compiles the production text-only inference runtime and exercises
+immediate paraphrase retrieval through a temporary encrypted broker using those exact staged
+models. Its synthetic owner-presence protocol is a test fixture, not production Touch ID
+acceptance. Ordinary unit/package tests do not download models.
+
+For independent artifact verification, mount the final DMG read-only and run its embedded
+`afternote semantic catalog` and `afternote semantic check` with `AFTERNOTE_VAULT_PATH` pointing
+to an empty temporary directory. The catalog must say enabled/bundled/ready without creating
+a model cache; the check loads both local runtimes without opening a vault. Verify off/on
+preference persistence too. Run with network denied to demonstrate offline operation.

@@ -18,6 +18,7 @@ const METHODS = {
   "owner.revoke_client": ["owner-control", "owner.revoke_client"],
   "owner.revoke_connector": ["owner-control", "owner.revoke_connector"],
   "library.session.begin": ["owner-control", "library.session.begin"],
+  "library.refresh_search": ["owner-control", "library.execute"],
   "library.views": ["owner-control", "library.execute"],
   "library.browse": ["owner-control", "library.execute"],
   "library.search": ["owner-control", "library.execute"],
@@ -41,19 +42,19 @@ const METHODS = {
 type BrokerDispatchTarget = (typeof METHODS)[keyof typeof METHODS][1];
 
 /** Phase one: admission requirements, including for unknown methods.
- * The worker must consume a protected request ID, check recovery, then require
+ * The worker must consume a protected request sequence, check recovery, then require
  * an unlocked vault in that order, before resolving the target below.
  * Namespace exemptions do not make unknown methods callable.
  */
 export function brokerRequestAdmission(method: string, peerRole: GatewayPeerRole): {
-  consumeOwnerRequestId: boolean;
+  consumeOwnerSequence: boolean;
   checkRecovery: boolean;
   requireUnlockedVault: boolean;
 } {
   const recovery = method.startsWith("recovery.");
   const lifecycle = method.startsWith("lifecycle.");
   return {
-    consumeOwnerRequestId: peerRole === "owner-control" && (
+    consumeOwnerSequence: peerRole === "owner-control" && (
       method.startsWith("owner.") || method.startsWith("library.") ||
       method.startsWith("admin.") || lifecycle || recovery
     ),

@@ -36,6 +36,11 @@ Connector authorization has idle and absolute deadlines. Manual lock, screen loc
 sleep, user-session resignation, broker restart, identity rotation, and revocation end live
 authority. Durable pairing never substitutes for a current session.
 
+Connector revocation from the passive Connections overview requires a fresh, single-use
+owner approval bound to the requesting native connection and the exact connector target.
+It does not require an inspection session first; that read session cannot substitute for
+revocation approval. Authenticated inspection remains required for detailed authority and audit data.
+
 ## Retrieval and untrusted content
 
 FTS5, temporal parsing, embeddings, and ranking operate locally. Recall has bounded query,
@@ -89,3 +94,24 @@ Do not restore a file whose provenance you do not trust.
 This is alpha software. It has automated security tests and internal adversarial review,
 but it is not represented as independently audited, appropriate for regulated data, or
 free of vulnerabilities. Use [SECURITY.md](../SECURITY.md) for private reporting.
+
+### Owner request replay protection
+
+The native owner client numbers requests monotonically on each XPC connection. The worker
+requires a positive safe integer and rejects a number at or below that connection's last
+accepted number before dispatch. One high-water mark is retained across vault lock/unlock
+until the trusted gateway reports disconnect. It has no time expiry or per-day request quota.
+The native serial send queue resets the counter only when replacing the XPC connection.
+Request UUIDs correlate replies; they do not authorize operations. A new connection has no
+inherited Library/inspection session or pending approval. All privileged actions retain their
+existing scope and fresh, exact-target, single-use owner-presence requirements.
+
+The worker bounds the number of tracked owner connections. Existing connections remain
+usable when that bound is reached; disconnect releases the corresponding entry. This avoids
+ordinary search progress checks consuming a global cache and blocking lock/unlock/revocation.
+
+The worker's private gateway poll is asynchronous with respect to JavaScript, but uses
+the same mutex-serialized XPC transport and exact gateway peer requirement. Its event
+loop remains available for local search preparation between requests. The worker still
+awaits each delivery and completes its request before submitting the next correlated
+response; no role, owner-presence or lifecycle checks are bypassed by this scheduling.

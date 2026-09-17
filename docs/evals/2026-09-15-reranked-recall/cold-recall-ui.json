@@ -1,0 +1,21 @@
+{
+  "mode": "hybrid",
+  "ms": 1287.529459,
+  "hit": true,
+  "results": [
+    "When the kitchen outlets lose power, reset the breaker marked K2 in the hall cupboard. If it trips again, call the electrician instead of resetting it repeatedly.",
+    "The cordless drill stopped holding a charge. Its replacement battery must be from the 18-volt range; the 12-volt packs do not fit."
+  ],
+  "index": {
+    "state": "ready",
+    "model": {
+      "id": "onnx-community/embeddinggemma-300m-ONNX:q4",
+      "revision": "5090578d9565bb06545b4552f76e6bc2c93e4a66:afternote-2",
+      "dimensions": 768
+    },
+    "totalNotes": 20,
+    "indexedNotes": 20,
+    "staleNotes": 0,
+    "lastError": null
+  }
+}

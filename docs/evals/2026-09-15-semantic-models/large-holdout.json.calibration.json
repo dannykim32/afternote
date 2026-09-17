@@ -1,0 +1,783 @@
+{
+  "profile": "large",
+  "chosen": {
+    "threshold": 0.44,
+    "hitAt5": 1,
+    "mrr": 0.9583333333333334,
+    "zeroResultRate": 1
+  },
+  "currentCalibration": {
+    "threshold": 0.3,
+    "supportedCases": 12,
+    "unsupportedCases": 8,
+    "hitAt5": 1,
+    "mrr": 0.9583333333333334,
+    "zeroResultRate": 0,
+    "citationIntegrity": 1,
+    "p95Ms": 61.23112499999979,
+    "rows": [
+      {
+        "query": "Who can fix the slipping gears on my cycle?",
+        "expected": "cal-bike",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-bike",
+            "score": 1.0187591785485712
+          },
+          {
+            "key": "eval-drip",
+            "score": 1.0164178185451287
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.0159327391111512
+          },
+          {
+            "key": "cal-tools",
+            "score": 1.0153270585778404
+          }
+        ],
+        "durationMs": 64.36216700000023
+      },
+      {
+        "query": "How can a visitor get online here?",
+        "expected": "cal-network",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-network",
+            "score": 1.0182930797620013
+          },
+          {
+            "key": "distractor-delivery",
+            "score": 1.0180124230017806
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0175493085567504
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0170862338555033
+          },
+          {
+            "key": "cal-cabin",
+            "score": 1.0166660985193696
+          }
+        ],
+        "durationMs": 49.82112499999994
+      },
+      {
+        "query": "Which ingredient swap makes the dessert safe for our guest?",
+        "expected": "cal-cake",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-cake",
+            "score": 1.0190756765431583
+          },
+          {
+            "key": "cal-soup",
+            "score": 1.0172139365880397
+          },
+          {
+            "key": "cal-garden",
+            "score": 1.016530409898734
+          },
+          {
+            "key": "eval-drip",
+            "score": 1.015579397915636
+          },
+          {
+            "key": "eval-long",
+            "score": 1.0152994931472323
+          }
+        ],
+        "durationMs": 52.71341600000005
+      },
+      {
+        "query": "Why do we wait to send the next welcome message?",
+        "expected": "cal-events",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-events",
+            "score": 1.018394781554188
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0167276486038417
+          },
+          {
+            "key": "eval-cancel",
+            "score": 1.016454206994575
+          },
+          {
+            "key": "eval-training",
+            "score": 1.0161606848057672
+          },
+          {
+            "key": "distractor-presentation",
+            "score": 1.0158465046040577
+          }
+        ],
+        "durationMs": 52.562124999999924
+      },
+      {
+        "query": "Where is Pepper getting vaccinated?",
+        "expected": "cal-pet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-pet",
+            "score": 1.0199778554270809
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.016453765068177
+          },
+          {
+            "key": "eval-supplier",
+            "score": 1.015184427490385
+          }
+        ],
+        "durationMs": 46.63166600000022
+      },
+      {
+        "query": "How did we brighten the taste of the legume dish?",
+        "expected": "cal-soup",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-soup",
+            "score": 1.0188932298194837
+          },
+          {
+            "key": "cal-garden",
+            "score": 1.0174750373364791
+          },
+          {
+            "key": "cal-cake",
+            "score": 1.0165218643675877
+          },
+          {
+            "key": "eval-long",
+            "score": 1.0156449478679628
+          },
+          {
+            "key": "eval-presentation",
+            "score": 1.0150527925053392
+          }
+        ],
+        "durationMs": 53.834084000000075
+      },
+      {
+        "query": "Where is the little tool for tightening the photography bracket?",
+        "expected": "cal-tools",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-tools",
+            "score": 1.0186603159299705
+          },
+          {
+            "key": "cal-bike",
+            "score": 1.0172176750451805
+          },
+          {
+            "key": "distractor-contract",
+            "score": 1.0165807793265147
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.016238259118965
+          },
+          {
+            "key": "cal-cabin",
+            "score": 1.015983142916744
+          }
+        ],
+        "durationMs": 52.512040999999954
+      },
+      {
+        "query": "What milestone makes a signup an activated account?",
+        "expected": "cal-metrics",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-metrics",
+            "score": 1.018565853639247
+          },
+          {
+            "key": "cal-events",
+            "score": 1.0171925532116588
+          },
+          {
+            "key": "distractor-password",
+            "score": 1.0165705237024965
+          },
+          {
+            "key": "eval-cancel",
+            "score": 1.0162994282675883
+          },
+          {
+            "key": "eval-contract",
+            "score": 1.0156902551407985
+          }
+        ],
+        "durationMs": 50.50404200000003
+      },
+      {
+        "query": "What proof do I need to get my travel costs paid back?",
+        "expected": "cal-receipts",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-receipts",
+            "score": 1.019061170382711
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0175196691138686
+          },
+          {
+            "key": "eval-cancel",
+            "score": 1.0165427367393625
+          },
+          {
+            "key": "eval-application",
+            "score": 1.0160633970592412
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0157294612652872
+          }
+        ],
+        "durationMs": 61.23112499999979
+      },
+      {
+        "query": "Which detour gets us to the holiday house?",
+        "expected": "cal-cabin",
+        "kind": "paraphrase",
+        "rank": 2,
+        "actual": [
+          {
+            "key": "eval-delivery",
+            "score": 1.0175971668830848
+          },
+          {
+            "key": "cal-cabin",
+            "score": 1.017270599166833
+          },
+          {
+            "key": "cal-pet",
+            "score": 1.0169335455682202
+          },
+          {
+            "key": "distractor-delivery",
+            "score": 1.016543938130013
+          },
+          {
+            "key": "eval-meeting",
+            "score": 1.0158967174729814
+          }
+        ],
+        "durationMs": 52.27579199999991
+      },
+      {
+        "query": "Where can our group talk without disturbing readers?",
+        "expected": "cal-quiet",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.0187730058027404
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0169055613595117
+          },
+          {
+            "key": "eval-long",
+            "score": 1.0163188602839166
+          },
+          {
+            "key": "eval-meeting",
+            "score": 1.0159276675050737
+          },
+          {
+            "key": "eval-cancel",
+            "score": 1.0156735630958682
+          }
+        ],
+        "durationMs": 49.125792000000274
+      },
+      {
+        "query": "Why has my cooking herb turned yellow?",
+        "expected": "cal-garden",
+        "kind": "paraphrase",
+        "rank": 1,
+        "actual": [
+          {
+            "key": "cal-garden",
+            "score": 1.0185555906089485
+          },
+          {
+            "key": "cal-soup",
+            "score": 1.016667136820778
+          },
+          {
+            "key": "eval-plant",
+            "score": 1.0162023985033795
+          },
+          {
+            "key": "eval-drip",
+            "score": 1.015634677387582
+          },
+          {
+            "key": "eval-storage",
+            "score": 1.0148485100960645
+          }
+        ],
+        "durationMs": 50.27829200000042
+      },
+      {
+        "query": "What is the serial number of my telescope?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "cal-tools",
+            "score": 1.0171913861152175
+          },
+          {
+            "key": "eval-long",
+            "score": 1.016220818427619
+          },
+          {
+            "key": "cal-network",
+            "score": 1.0157445826092446
+          },
+          {
+            "key": "distractor-paper",
+            "score": 1.0147960189267453
+          }
+        ],
+        "durationMs": 47.9120410000005
+      },
+      {
+        "query": "Where did I store the scuba diving certificate?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-ticket",
+            "score": 1.0172258480672822
+          },
+          {
+            "key": "eval-application",
+            "score": 1.016815467689595
+          },
+          {
+            "key": "eval-long",
+            "score": 1.0163301516665744
+          },
+          {
+            "key": "cal-receipts",
+            "score": 1.0156618088807738
+          },
+          {
+            "key": "eval-password",
+            "score": 1.0154054338603704
+          }
+        ],
+        "durationMs": 54.7260839999999
+      },
+      {
+        "query": "What are the instructions for changing the violin strings?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-laundry",
+            "score": 1.016666533668466
+          },
+          {
+            "key": "cal-bike",
+            "score": 1.0161345077836759
+          },
+          {
+            "key": "distractor-bike",
+            "score": 1.015562047921653
+          },
+          {
+            "key": "eval-storage",
+            "score": 1.0152561456107758
+          }
+        ],
+        "durationMs": 55.15191699999923
+      },
+      {
+        "query": "Who is teaching our archery lesson?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-delivery",
+            "score": 1.0168997690308175
+          },
+          {
+            "key": "eval-storage",
+            "score": 1.0163089656184612
+          },
+          {
+            "key": "eval-meeting",
+            "score": 1.01601697959104
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0155589614089882
+          },
+          {
+            "key": "eval-training",
+            "score": 1.015301853957883
+          }
+        ],
+        "durationMs": 52.69012500000008
+      },
+      {
+        "query": "Which currency did we choose for the accounting ledger?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "cal-receipts",
+            "score": 1.0174493719728963
+          },
+          {
+            "key": "cal-cake",
+            "score": 1.0168269321708252
+          },
+          {
+            "key": "cal-metrics",
+            "score": 1.0164727502931727
+          },
+          {
+            "key": "distractor-password",
+            "score": 1.0160797831231414
+          },
+          {
+            "key": "eval-presentation",
+            "score": 1.0158343874539677
+          }
+        ],
+        "durationMs": 57.088832999999795
+      },
+      {
+        "query": "How much is the swimming pool entry fee?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "distractor-delivery",
+            "score": 1.017669300765016
+          },
+          {
+            "key": "distractor-membership",
+            "score": 1.017187016509201
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.0165269411506137
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0159282724070449
+          },
+          {
+            "key": "cal-receipts",
+            "score": 1.0156145748523193
+          }
+        ],
+        "durationMs": 58.61762499999986
+      },
+      {
+        "query": "What is the order of planets in my astronomy worksheet?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "eval-storage",
+            "score": 1.0158470015119847
+          }
+        ],
+        "durationMs": 54.886375000000044
+      },
+      {
+        "query": "Where does our choir rehearse?",
+        "expected": null,
+        "kind": "unsupported",
+        "rank": null,
+        "actual": [
+          {
+            "key": "cal-quiet",
+            "score": 1.0173340002703097
+          },
+          {
+            "key": "cal-pet",
+            "score": 1.0170308604564626
+          },
+          {
+            "key": "distractor-delivery",
+            "score": 1.0167038922257212
+          },
+          {
+            "key": "eval-ticket",
+            "score": 1.0161557914920225
+          },
+          {
+            "key": "eval-delivery",
+            "score": 1.015898405404047
+          }
+        ],
+        "durationMs": 54.57058400000005
+      }
+    ]
+  },
+  "sweep": [
+    {
+      "threshold": 0.2,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.22,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.24,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.26,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.28,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.3,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0
+    },
+    {
+      "threshold": 0.32,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.125
+    },
+    {
+      "threshold": 0.34,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.25
+    },
+    {
+      "threshold": 0.36,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.25
+    },
+    {
+      "threshold": 0.38,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.25
+    },
+    {
+      "threshold": 0.4,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.25
+    },
+    {
+      "threshold": 0.42,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 0.5
+    },
+    {
+      "threshold": 0.44,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.46,
+      "hitAt5": 1,
+      "mrr": 0.9583333333333334,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.48,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.5,
+      "hitAt5": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.52,
+      "hitAt5": 0.75,
+      "mrr": 0.75,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.54,
+      "hitAt5": 0.6666666666666666,
+      "mrr": 0.6666666666666666,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.56,
+      "hitAt5": 0.5833333333333334,
+      "mrr": 0.5833333333333334,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.58,
+      "hitAt5": 0.25,
+      "mrr": 0.25,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.6,
+      "hitAt5": 0.08333333333333333,
+      "mrr": 0.08333333333333333,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.62,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.64,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.66,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.68,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.7,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.72,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.74,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.76,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.78,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.8,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.82,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.84,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.86,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.88,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    },
+    {
+      "threshold": 0.9,
+      "hitAt5": 0,
+      "mrr": 0,
+      "zeroResultRate": 1
+    }
+  ]
+}

@@ -1,0 +1,802 @@
+{
+  "version": "v3",
+  "baseline": true,
+  "fixtureSha256": "625bf5b7e4168219ae023cbd5d6da93b1bdb150586cc01f2772c6599e86e49a9",
+  "embedding": {
+    "id": "onnx-community/embeddinggemma-300m-ONNX:q4",
+    "revision": "5090578d9565bb06545b4552f76e6bc2c93e4a66:afternote-2",
+    "dimensions": 768
+  },
+  "reranker": null,
+  "runtime": {
+    "bun": "1.3.14",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "loadMs": 1331.427709,
+  "indexMs": 954.6647079999998,
+  "sampledPeakRssMiB": 798.53125,
+  "results": [
+    {
+      "surface": "agent",
+      "supported": 16,
+      "unsupported": 8,
+      "hitAt5": 1,
+      "mrr": 0.9375,
+      "zeroResultRate": 0.75,
+      "citationIntegrity": true,
+      "p95Ms": 72.8425830000001,
+      "qualityPassed": false,
+      "rows": [
+        {
+          "query": "How do I restore electricity to the cooking area's sockets?",
+          "expected": "fuse",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "fuse",
+              "score": 1.019642305927068
+            },
+            {
+              "key": "batteries",
+              "score": 1.0163118239506042
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 45.318624999999884
+        },
+        {
+          "query": "What does the tank sitter need to do during our trip?",
+          "expected": "fish",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "fish",
+              "score": 1.017582365149673
+            },
+            {
+              "key": "lodging",
+              "score": 1.0161919196218447
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 28.723749999999654
+        },
+        {
+          "query": "Which power pack should I buy for the tool that won't stay charged?",
+          "expected": "batteries",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "batteries",
+              "score": 1.0190534105764133
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 72.8425830000001
+        },
+        {
+          "query": "Does our language contractor's price include the outside of the box?",
+          "expected": "contract",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "contract",
+              "score": 1.0182613358137624
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 38.11108400000012
+        },
+        {
+          "query": "When is my introductory keyboard session and what should I take?",
+          "expected": "lesson",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "lesson",
+              "score": 1.0182283054489603
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 21.56116699999984
+        },
+        {
+          "query": "Why don't we capture video of the recurring team discussion anymore?",
+          "expected": "meeting",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "meeting",
+              "score": 1.0201773831109173
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 37.852750000000015
+        },
+        {
+          "query": "How do I keep the preserved vegetables crunchy next time?",
+          "expected": "pickles",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "pickles",
+              "score": 2.0350059780839
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 27.496874999999818
+        },
+        {
+          "query": "Who will deal with the limb scraping the roof drainage?",
+          "expected": "tree",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "tree",
+              "score": 1.0185455573385924
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 44.78437499999973
+        },
+        {
+          "query": "What ingredient must be kept away from Robin's outdoor lunch?",
+          "expected": "allergy",
+          "kind": "paraphrase",
+          "rank": 2,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "fish",
+              "score": 2.0163934426229506
+            },
+            {
+              "key": "allergy",
+              "score": 1.020214264855421
+            },
+            {
+              "key": "decoy-food",
+              "score": 1.0175427182738306
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 34.02187499999991
+        },
+        {
+          "query": "Where is the proof of payment for the coat I might take back?",
+          "expected": "refund",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "refund",
+              "score": 1.0191128198571515
+            },
+            {
+              "key": "decoy-lodging",
+              "score": 1.016244674375611
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 27.677208000000064
+        },
+        {
+          "query": "How are changes handled while we switch our data store?",
+          "expected": "database",
+          "kind": "paraphrase",
+          "rank": 2,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "fish",
+              "score": 2.0163934426229506
+            },
+            {
+              "key": "database",
+              "score": 1.0189539139558883
+            },
+            {
+              "key": "decoy-database",
+              "score": 1.0165756922340397
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 27.487167000000227
+        },
+        {
+          "query": "Whose sign-off is still required to send the funding application?",
+          "expected": "deadline",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "deadline",
+              "score": 1.0194414668929477
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 34.42820800000027
+        },
+        {
+          "query": "How do we get into our accommodation if we arrive late?",
+          "expected": "lodging",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "lodging",
+              "score": 1.0187158092540671
+            },
+            {
+              "key": "decoy-lodging",
+              "score": 1.0164041732810587
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 25.079334000000017
+        },
+        {
+          "query": "How should I prepare the pasta topping so the pungent ingredient is milder?",
+          "expected": "recipe",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "recipe",
+              "score": 1.018835943091794
+            },
+            {
+              "key": "pickles",
+              "score": 1.0171062779078803
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 34.090124999999716
+        },
+        {
+          "query": "How do I stop my earphones dropping out during online meetings?",
+          "expected": "headphones",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "headphones",
+              "score": 1.0196770746246158
+            },
+            {
+              "key": "meeting",
+              "score": 1.016639921287178
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 29.69962499999974
+        },
+        {
+          "query": "Which way should the sticky paper pass through the machine?",
+          "expected": "printer",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "printer",
+              "score": 1.0182395543585332
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 37.24220800000012
+        },
+        {
+          "query": "Where did I leave the snorkel?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "fish",
+              "score": 1.0168418412473523
+            },
+            {
+              "key": "lesson",
+              "score": 1.0160513419012582
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 25.546542000000045
+        },
+        {
+          "query": "What score did the basketball team finish with?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 25.864791999999852
+        },
+        {
+          "query": "Who is our divorce mediator?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 48.0659169999999
+        },
+        {
+          "query": "What is the violin's insurance valuation?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 31.690292000000227
+        },
+        {
+          "query": "How many laps did I swim yesterday?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 140.91820800000005
+        },
+        {
+          "query": "Which telescope eyepiece should I use to observe Saturn?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 22.991166999999678
+        },
+        {
+          "query": "What is the access code for my bicycle lock?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [
+            {
+              "key": "lodging",
+              "score": 2.033669416128321
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 25.9175409999998
+        },
+        {
+          "query": "When is the dentist extracting my wisdom tooth?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": null,
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 24.896416000000045
+        }
+      ]
+    },
+    {
+      "surface": "ui",
+      "supported": 16,
+      "unsupported": 8,
+      "hitAt5": 0.625,
+      "mrr": 0.5625,
+      "zeroResultRate": 0.625,
+      "citationIntegrity": true,
+      "p95Ms": 53.29841600000009,
+      "qualityPassed": false,
+      "rows": [
+        {
+          "query": "How do I restore electricity to the cooking area's sockets?",
+          "expected": "fuse",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "fuse",
+              "score": 1.019642305927068
+            },
+            {
+              "key": "batteries",
+              "score": 1.0163118239506042
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 22.078791999999794
+        },
+        {
+          "query": "What does the tank sitter need to do during our trip?",
+          "expected": "fish",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "lesson",
+              "score": 1.0150156960951453
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 52.660583000000315
+        },
+        {
+          "query": "Which power pack should I buy for the tool that won't stay charged?",
+          "expected": "batteries",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "fuse",
+              "score": 1.0161651248908754
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 53.29841600000009
+        },
+        {
+          "query": "Does our language contractor's price include the outside of the box?",
+          "expected": "contract",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 39.513958
+        },
+        {
+          "query": "When is my introductory keyboard session and what should I take?",
+          "expected": "lesson",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "lesson",
+              "score": 1.0182283054489603
+            },
+            {
+              "key": "lodging",
+              "score": 1.015973435180784
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 27.831541000000016
+        },
+        {
+          "query": "Why don't we capture video of the recurring team discussion anymore?",
+          "expected": "meeting",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "meeting",
+              "score": 1.0201773831109173
+            },
+            {
+              "key": "headphones",
+              "score": 1.0157931165410565
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 25.760291000000052
+        },
+        {
+          "query": "How do I keep the preserved vegetables crunchy next time?",
+          "expected": "pickles",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "pickles",
+              "score": 2.0350059780839
+            },
+            {
+              "key": "decoy-food",
+              "score": 1.0157318626799772
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 23.316290999999637
+        },
+        {
+          "query": "Who will deal with the limb scraping the roof drainage?",
+          "expected": "tree",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 21.965291999999863
+        },
+        {
+          "query": "What ingredient must be kept away from Robin's outdoor lunch?",
+          "expected": "allergy",
+          "kind": "paraphrase",
+          "rank": 2,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "fish",
+              "score": 2.0323720073118814
+            },
+            {
+              "key": "allergy",
+              "score": 1.020214264855421
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 26.52566700000034
+        },
+        {
+          "query": "Where is the proof of payment for the coat I might take back?",
+          "expected": "refund",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "refund",
+              "score": 1.0191128198571515
+            },
+            {
+              "key": "decoy-lodging",
+              "score": 1.016244674375611
+            },
+            {
+              "key": "lodging",
+              "score": 1.0156824195871208
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 51.838790999999674
+        },
+        {
+          "query": "How are changes handled while we switch our data store?",
+          "expected": "database",
+          "kind": "paraphrase",
+          "rank": 2,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "fish",
+              "score": 2.0163934426229506
+            },
+            {
+              "key": "database",
+              "score": 1.0189539139558883
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 41.58024999999998
+        },
+        {
+          "query": "Whose sign-off is still required to send the funding application?",
+          "expected": "deadline",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "meeting",
+              "score": 1.0161809911478716
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 26.357833000000028
+        },
+        {
+          "query": "How do we get into our accommodation if we arrive late?",
+          "expected": "lodging",
+          "kind": "paraphrase",
+          "rank": 0,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "lesson",
+              "score": 1.0156683079014435
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 24.3057919999992
+        },
+        {
+          "query": "How should I prepare the pasta topping so the pungent ingredient is milder?",
+          "expected": "recipe",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "recipe",
+              "score": 1.018835943091794
+            },
+            {
+              "key": "pickles",
+              "score": 1.0171062779078803
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 29.239916999999878
+        },
+        {
+          "query": "How do I stop my earphones dropping out during online meetings?",
+          "expected": "headphones",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "headphones",
+              "score": 1.0196770746246158
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 23.844083000000865
+        },
+        {
+          "query": "Which way should the sticky paper pass through the machine?",
+          "expected": "printer",
+          "kind": "paraphrase",
+          "rank": 1,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "printer",
+              "score": 1.0182395543585332
+            },
+            {
+              "key": "contract",
+              "score": 1.015870507234392
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 27.402791999999863
+        },
+        {
+          "query": "Where did I leave the snorkel?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "fish",
+              "score": 1.0168418412473523
+            },
+            {
+              "key": "lesson",
+              "score": 1.0160513419012582
+            },
+            {
+              "key": "lodging",
+              "score": 1.0155879746755827
+            },
+            {
+              "key": "decoy-lodging",
+              "score": 1.0152642933125167
+            },
+            {
+              "key": "refund",
+              "score": 1.014771207133031
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 23.565999999999804
+        },
+        {
+          "query": "What score did the basketball team finish with?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 26.42699999999968
+        },
+        {
+          "query": "Who is our divorce mediator?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 21.125457999999526
+        },
+        {
+          "query": "What is the violin's insurance valuation?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "contract",
+              "score": 1.016196738760312
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 17.397750000000087
+        },
+        {
+          "query": "How many laps did I swim yesterday?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 60.342209000000366
+        },
+        {
+          "query": "Which telescope eyepiece should I use to observe Saturn?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 17.835916999999426
+        },
+        {
+          "query": "What is the access code for my bicycle lock?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [
+            {
+              "key": "lodging",
+              "score": 2.033669416128321
+            }
+          ],
+          "citationIntegrity": true,
+          "ms": 16.281458000000384
+        },
+        {
+          "query": "When is the dentist extracting my wisdom tooth?",
+          "expected": null,
+          "kind": "unsupported",
+          "rank": null,
+          "searchMode": "hybrid",
+          "actual": [],
+          "citationIntegrity": true,
+          "ms": 17.955457999999453
+        }
+      ]
+    }
+  ]
+}
