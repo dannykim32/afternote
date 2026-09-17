@@ -6,6 +6,22 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.5 - 2026-09-16
+
+### Fixed
+
+- Let background search preparation finish while the native worker waits for requests.
+  The previous synchronous private XPC poll blocked the JavaScript event loop, leaving
+  search stuck at a complete note count even after lock/unlock. Existing embeddings remain
+  reusable; this change does not alter the model or rebuild policy.
+
+### Verification
+
+- Reproduced the stalled complete index through the native gateway before the fix.
+- Require real AppKit Notes readiness through the native gateway and encrypted worker after
+  lock/unlock, both with asynchronous fixture preparation and with pinned bundled models.
+  Test services simulate owner approval; affected-Mac installed acceptance remains separate.
+
 ## 2.0.0-beta.4 - 2026-09-16
 
 ### Fixed

@@ -5,6 +5,7 @@ import { PUBLIC_RELEASE_COMMANDS } from "./build-public-release";
 describe("public release command gates", () => {
   it("requires native XPC integration instead of accepting its default skip", () => {
     expect(PUBLIC_RELEASE_COMMANDS).toContainEqual({ args: ["run", "test:desktop"], phase: "quality" });
+    expect(PUBLIC_RELEASE_COMMANDS).toContainEqual({ args: ["run", "test:desktop:semantic"], phase: "quality" });
   });
   it("runs the 10,000-note performance gate in its own process", () => {
     expect(PUBLIC_RELEASE_COMMANDS).toContainEqual({

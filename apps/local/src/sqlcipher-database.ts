@@ -52,6 +52,7 @@ type NativeAddon = {
     request: string,
     timeoutMs: number,
   ): string;
+  xpcBrokerRequestAsync(service: string, codeRequirement: string, request: string, timeoutMs: number): Promise<string>;
   requireParentCodeSigningRequirement(codeRequirement: string): void;
   requireParentAndGrandparentCodeSigningRequirements(
     parentRequirement: string,
@@ -207,7 +208,7 @@ export function pollVaultBrokerGatewayXpc(
   service: string,
   codeRequirement: string,
   request: string,
-): string {
+): Promise<string> {
   if (!/^[A-Za-z0-9.-]{1,255}$/.test(service)) {
     throw new Error("Private worker Mach service name is invalid");
   }
@@ -215,7 +216,7 @@ export function pollVaultBrokerGatewayXpc(
     throw new Error("Private worker message is malformed or oversized");
   }
   assertCodeSigningRequirement(codeRequirement, "Gateway");
-  return loadAddon().xpcBrokerRequest(service, codeRequirement, request, 86_400_000);
+  return loadAddon().xpcBrokerRequestAsync(service, codeRequirement, request, 86_400_000);
 }
 
 export function cosineSimilaritiesNative(

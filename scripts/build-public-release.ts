@@ -24,6 +24,7 @@ export const PUBLIC_RELEASE_COMMANDS = [
   { args: ["run", "typecheck"], phase: "quality" },
   { args: ["run", "test"], phase: "quality" },
   { args: ["run", "test:desktop"], phase: "quality" },
+  { args: ["run", "test:desktop:semantic"], phase: "quality" },
   { args: ["run", "test:quality"], phase: "quality" },
   { args: ["run", "audit"], phase: "quality" },
   { args: ["run", "test:package"], phase: "quality" },

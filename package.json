@@ -1,11 +1,11 @@
 {
   "name": "afternote",
-  "version": "2.0.0-beta.4",
+  "version": "2.0.0-beta.5",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "bun@1.3.14",
   "afternote": {
-    "bundleVersion": "30"
+    "bundleVersion": "31"
   },
   "workspaces": [
     "apps/*",
@@ -24,7 +24,8 @@
     "test:package": "\"$npm_execpath\" test apps/local/src/package.integration.test.ts",
     "audit": "\"$npm_execpath\" run scripts/audit-lockfile.ts",
     "prepare:semantic-release": "\"$npm_execpath\" run scripts/prepare-semantic-release.ts",
-    "test:semantic-release": "AFTERNOTE_TEST_MODEL_DIRECTORY=\"$PWD/build/semantic-model\" \"$npm_execpath\" test apps/local/src/compiled-reranked-semantic.test.ts --timeout 120000"
+    "test:semantic-release": "AFTERNOTE_TEST_MODEL_DIRECTORY=\"$PWD/build/semantic-model\" \"$npm_execpath\" test apps/local/src/compiled-reranked-semantic.test.ts --timeout 120000",
+    "test:desktop:semantic": "AFTERNOTE_TEST_MODEL_DIRECTORY=\"$PWD/build/semantic-model\" AFTERNOTE_TEST_HOST_LAUNCHD=1 \"$npm_execpath\" test apps/local/src/vault-broker-gateway.integration.test.ts -t \"owns one authoritative\" --timeout 180000"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",

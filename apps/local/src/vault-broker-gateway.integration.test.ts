@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto"
 import {
   existsSync,
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -9,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createAfternoteMcpServer } from "@afternote/mcp";
 import {
@@ -17,7 +18,7 @@ import {
   InMemoryTransport,
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { buildLocalAlpha } from "../../../scripts/build-local-alpha";
+import { buildLocalAlpha, runTextOnlyTransformersCompile } from "../../../scripts/build-local-alpha";
 import {
   requestVaultBroker,
   VaultBrokerMemoryClient,
@@ -65,6 +66,12 @@ describeMacos("launchd-owned vault broker gateway", () => {
     const keyPath = join(directory, "test-vault-key");
     const closeFailurePath = join(directory, "inject-close-failure");
     writeFileSync(keyPath, randomBytes(32), { mode: 0o600 });
+    // launchd children must not read the developer's TCC-protected Documents folder.
+    // Use a real copy in this disposable service's directory, as installed runtime files
+    // likewise live outside Documents. Model discovery still checks every pinned digest.
+    if (process.env.AFTERNOTE_TEST_MODEL_DIRECTORY) {
+      cpSync(process.env.AFTERNOTE_TEST_MODEL_DIRECTORY, join(directory, "semantic-model"), {recursive: true});
+    }
     const plaintext = new SqliteMemory(vaultPath, localVaultContext(vaultPath));
     plaintext.close();
     const builtGatewayPath = join(
@@ -253,7 +260,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
       otherPeerPreserved: true,
       shortDeadlineBounded: true,
     });
-    const build = Bun.spawnSync([
+    runTextOnlyTransformersCompile([
       process.execPath,
       "build",
       "--compile",
@@ -262,8 +269,12 @@ describeMacos("launchd-owned vault broker gateway", () => {
       "--define=AFTERNOTE_ACCEPTANCE_TRACE=true",
       join(import.meta.dir, "vault-broker-worker-main.ts"),
       `--outfile=${workerPath}`,
-    ], { stdout: "pipe", stderr: "pipe" });
-    expect(build.exitCode, build.stderr.toString()).toBe(0);
+    ]);
+    const transformers = Bun.resolveSync("@huggingface/transformers", import.meta.dir);
+    const onnx = dirname(dirname(Bun.resolveSync("onnxruntime-node", dirname(transformers))));
+    for (const name of ["onnxruntime_binding.node", "libonnxruntime.1.21.0.dylib"]) {
+      copyFileSync(join(onnx, "bin/napi-v3/darwin/arm64", name), join(directory, name));
+    }
     const signedWorker = Bun.spawnSync([
       "codesign",
       "--force",
@@ -840,6 +851,11 @@ describeMacos("launchd-owned vault broker gateway", () => {
     expect(lockedPolling.exitCode, lockedPolling.stderr.toString()).toBe(0);
     expect(JSON.parse(lockedPolling.stdout.toString())).toMatchObject({ polls: 2048, unlockedAfterPolling: true });
     expect(lockedPolling.stdout.toString()).toContain("spruce-992");
+    writeFileSync(`${keyPath}.semantic`, "enabled", {mode: 0o600});
+    const startup = Bun.spawnSync([ownerControlPath, "--semantic-startup-smoke"], {stdout: "pipe", stderr: "pipe"});
+    expect(startup.exitCode, startup.stdout.toString() + startup.stderr.toString()).toBe(0);
+    console.log("Native semantic startup:", startup.stdout.toString());
+    expect(JSON.parse(startup.stdout.toString())).toMatchObject({readyAfterIdleReopen: true, preservedIndex: true, uiReady: true});
     const beforeDuplicate = vaultBrokerHealth({ service, codeRequirement: gatewayCodeRequirement });
 
     const legacyLock = join(directory, "dev.afternote.vault-broker.lock");
@@ -1017,6 +1033,7 @@ ${input.keyPath
 <key>AFTERNOTE_TEST_WORKER_CODE_REQUIREMENT</key><string>${input.workerCodeRequirement}</string>
 <key>AFTERNOTE_TEST_CLIENT_CODE_REQUIREMENT</key><string>${input.clientCodeRequirement}</string>
 <key>AFTERNOTE_TEST_OWNER_CONTROL_CODE_REQUIREMENT</key><string>${input.ownerControlRequirement}</string>
+${process.env.AFTERNOTE_TEST_MODEL_DIRECTORY ? `<key>AFTERNOTE_TEST_MODEL_DIRECTORY</key><string>${join(input.directory, "semantic-model")}</string>` : ""}
 <key>AFTERNOTE_TEST_VAULT_CLOSE_FAILURE_PATH</key><string>${input.closeFailurePath}</string>
 </dict>
 <key>MachServices</key><dict><key>${input.service}</key><true/><key>${input.ownerService}</key><true/><key>${workerService}</key><true/></dict>

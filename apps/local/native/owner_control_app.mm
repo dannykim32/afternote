@@ -5729,6 +5729,56 @@ int RunOwnerControlPollingSmoke(BOOL locked) {
   return 0;
 }
 
+// Wait through real gateway idle periods; direct worker fixtures cannot cover this.
+int RunOwnerControlSemanticStartupSmoke() {
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+  auto request = ^NSDictionary *(NSString *method, NSDictionary *params) {
+    NSDictionary *result = nil, *error = nil;
+    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error]) {
+      fprintf(stderr, "%s: %s\n", method.UTF8String, error.description.UTF8String);
+      return (NSDictionary *)nil;
+    }
+    return result;
+  };
+  NSDictionary *session = @{ @"requestedScopes": @[@"library.browse", @"library.search"], @"ttlMs": @900000 };
+  if (request(@"library.session.begin", session) == nil ||
+      request(@"library.refresh_search", @{@"reloadModel": @YES}) == nil) return 2;
+  // A query awaits background work, establishing persisted embeddings first.
+  if (request(@"library.search", @{@"query": @"quartz unmatched paraphrase", @"limit": @5, @"cursor": NSNull.null}) == nil) return 2;
+  NSDictionary *before = nil;
+  for (NSUInteger i = 0; i < 100; i++) {
+    before = request(@"library.refresh_search", @{@"reloadModel": @NO});
+    if ([before[@"searchMode"] isEqual:@"hybrid"]) break;
+    [NSThread sleepForTimeInterval:0.1];
+  }
+  if (![before[@"searchMode"] isEqual:@"hybrid"] || [before[@"totalNotes"] integerValue] < 1) return 2;
+  if (request(@"lifecycle.lock", @{}) == nil || request(@"lifecycle.unlock", @{}) == nil) return 2;
+  NSDictionary *opened = request(@"library.session.begin", session);
+  if (opened == nil) return 2;
+  [NSApplication sharedApplication];
+  OwnerControlDelegate *delegate = [OwnerControlDelegate new];
+  [delegate buildWindow];
+  delegate.broker = broker;
+  delegate.libraryExpiresAt = opened[@"expiresAt"];
+  [delegate applySearchMode:opened[@"searchMode"]];
+  [delegate refreshSemanticSearch:NO userInitiated:NO];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:10];
+  while ((![delegate.currentSearchMode isEqual:@"hybrid"] || delegate.semanticActivationInFlight ||
+          delegate.semanticIndexedNotes < 0) && deadline.timeIntervalSinceNow > 0)
+    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  BOOL ready = [delegate.currentSearchMode isEqual:@"hybrid"];
+  BOOL reused = delegate.semanticIndexedNotes == [before[@"indexedNotes"] integerValue] &&
+      delegate.semanticTotalNotes == [before[@"totalNotes"] integerValue];
+  BOOL uiReady = [delegate.searchProgress.titleLabel.stringValue isEqual:@"Search by meaning ready"] &&
+      delegate.searchProgress.progressBar.hidden && !delegate.semanticPollPending;
+  NSDictionary *output = @{@"readyAfterIdleReopen": @(ready), @"preservedIndex": @(reused), @"uiReady": @(uiReady),
+      @"status": @{ @"searchMode": delegate.currentSearchMode ?: @"", @"indexedNotes": @(delegate.semanticIndexedNotes),
+                     @"totalNotes": @(delegate.semanticTotalNotes) }};
+  NSData *data = [NSJSONSerialization dataWithJSONObject:output options:0 error:nil];
+  fwrite(data.bytes, 1, data.length, stdout);
+  return ready && reused && uiReady ? 0 : 2;
+}
+
 int RunProtocolSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   if (broker == nil) return 2;
@@ -5875,6 +5925,7 @@ int RunDiagnosticContractSmoke(const char *path) {
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
 #if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--semantic-startup-smoke") == 0) return RunOwnerControlSemanticStartupSmoke();
     if (argc == 2 && strcmp(argv[1], "--owner-polling-smoke") == 0) return RunOwnerControlPollingSmoke(NO);
     if (argc == 2 && strcmp(argv[1], "--owner-locked-polling-smoke") == 0) return RunOwnerControlPollingSmoke(YES);
     if (argc == 2 && strcmp(argv[1], "--semantic-progress-smoke") == 0) {

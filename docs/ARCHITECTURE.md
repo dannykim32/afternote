@@ -170,3 +170,9 @@ coordinator. Those can be separated further without moving shared lifecycle
 authority into a view. Settings, Recovery, test fixtures, and the broker modules
 remain follow-up work; moving methods merely to lower a line count would not
 settle their ownership.
+
+The private worker awaits its gateway long-poll through native asynchronous work. The
+blocking XPC exchange runs off the JavaScript event loop so model warm-up, inference
+callbacks and timers can complete while no client is calling. Request dispatch remains
+serial; the async exchange uses the same authenticated connection and validation as the
+synchronous client transport. Long-polling synchronously here starves background indexing.

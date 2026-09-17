@@ -3459,7 +3459,7 @@ export async function runVaultBrokerWorkerXpc(
   let terminateAfterDelivery = false;
   try {
     while (true) {
-      const delivery = pollVaultBrokerGatewayXpc(
+      const delivery = await pollVaultBrokerGatewayXpc(
         transport.service,
         transport.gatewayCodeRequirement,
         JSON.stringify({

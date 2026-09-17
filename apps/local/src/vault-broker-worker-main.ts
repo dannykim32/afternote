@@ -83,6 +83,21 @@ await runVaultBrokerWorkerXpc(testKeyPath
       ownerPresenceMode,
       vaultPath: process.env.AFTERNOTE_VAULT_PATH,
       vaultKeyProvider: () => readFileSync(testKeyPath),
+      // Only the compile-time test branch can inject asynchronous preparation.
+      embeddingModelProvider: () => {
+        if (!existsSync(`${testKeyPath}.semantic`)) return null;
+        if (process.env.AFTERNOTE_TEST_MODEL_DIRECTORY) {
+          return discoverLocalEmbeddingModel(process.env.AFTERNOTE_VAULT_PATH!, {
+            bundledModelPath: process.env.AFTERNOTE_TEST_MODEL_DIRECTORY,
+          }).model;
+        }
+        return {
+        descriptor: {id: "native-startup-fixture", revision: "1", dimensions: 2},
+        minimumSimilarity: 2,
+        prepare: async () => { await Bun.sleep(25); },
+        embed: async (texts) => { await Bun.sleep(25); return texts.map(() => new Float32Array([1, 0])); },
+        };
+      },
       onVaultHandleClosedForTest: testCloseFailurePath
         ? (handle) => {
             if (handle !== "memory" || !existsSync(testCloseFailurePath)) return;

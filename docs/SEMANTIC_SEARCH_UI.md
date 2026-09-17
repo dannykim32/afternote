@@ -100,3 +100,19 @@ mechanism; acceptance on the Mac that reported the hour-long status remains nece
   not evidence of physical Touch ID acceptance on the affected Mac.
 - Make the native gateway integration suite a required local release gate. Keep the prior
   Beta 3 installer immutable. No announcement while affected-Mac acceptance remains open.
+
+## Beta 4 idle-worker search startup (baseline `72ebddb`)
+
+- The private native gateway long-poll must not block the worker's JavaScript event loop.
+  Background model preparation and indexing must finish while the owner is idle or only
+  checking status, including after lock/unlock with all embeddings already persisted.
+- Retain serial worker dispatch, exact peer code requirements, bounded message validation,
+  connection identity, response correlation, owner approval and lock/revocation policy.
+- Exercise the real AppKit Notes controller over the native XPC gateway and encrypted
+  worker, with asynchronous model preparation. Assert it reaches ready automatically,
+  hides progress and stops polling after lock/unlock. No semantic query may be required
+  to make runtime preparation advance after reopening.
+- Require a second release run through that native path using the pinned bundled models.
+  Simulated presence in test services is not real installed-app owner approval.
+- Preserve the Beta 4 artifact. Any replacement installer uses Beta 5 / Apple build 31.
+  Do not claim the affected work Mac is verified before it runs the replacement.

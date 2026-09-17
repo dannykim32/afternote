@@ -109,3 +109,9 @@ existing scope and fresh, exact-target, single-use owner-presence requirements.
 The worker bounds the number of tracked owner connections. Existing connections remain
 usable when that bound is reached; disconnect releases the corresponding entry. This avoids
 ordinary search progress checks consuming a global cache and blocking lock/unlock/revocation.
+
+The worker's private gateway poll is asynchronous with respect to JavaScript, but uses
+the same mutex-serialized XPC transport and exact gateway peer requirement. Its event
+loop remains available for local search preparation between requests. The worker still
+awaits each delivery and completes its request before submitting the next correlated
+response; no role, owner-presence or lifecycle checks are bypassed by this scheduling.
