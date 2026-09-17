@@ -5751,7 +5751,10 @@ int RunOwnerControlSemanticStartupSmoke() {
     if ([before[@"searchMode"] isEqual:@"hybrid"]) break;
     [NSThread sleepForTimeInterval:0.1];
   }
-  if (![before[@"searchMode"] isEqual:@"hybrid"] || [before[@"totalNotes"] integerValue] < 1) return 2;
+  if (![before[@"searchMode"] isEqual:@"hybrid"] || [before[@"totalNotes"] integerValue] < 1) {
+    fprintf(stderr, "Initial semantic readiness failed: %s\n", before.description.UTF8String);
+    return 2;
+  }
   if (request(@"lifecycle.lock", @{}) == nil || request(@"lifecycle.unlock", @{}) == nil) return 2;
   NSDictionary *opened = request(@"library.session.begin", session);
   if (opened == nil) return 2;
