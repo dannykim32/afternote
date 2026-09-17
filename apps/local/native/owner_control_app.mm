@@ -5734,8 +5734,10 @@ int RunOwnerControlSemanticStartupSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
   auto request = ^NSDictionary *(NSString *method, NSDictionary *params) {
     NSDictionary *result = nil, *error = nil;
-    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error]) {
-      fprintf(stderr, "%s: %s\n", method.UTF8String, error.description.UTF8String);
+    if (![broker requestSynchronouslyMethod:method params:params result:&result error:&error] ||
+        error != nil || result == nil) {
+      fprintf(stderr, "%s: %s\n", method.UTF8String,
+              error != nil ? error.description.UTF8String : "No broker result received");
       return (NSDictionary *)nil;
     }
     return result;
@@ -5755,7 +5757,12 @@ int RunOwnerControlSemanticStartupSmoke() {
     fprintf(stderr, "Initial semantic readiness failed: %s\n", before.description.UTF8String);
     return 2;
   }
-  if (request(@"lifecycle.lock", @{}) == nil || request(@"lifecycle.unlock", @{}) == nil) return 2;
+  if (request(@"lifecycle.lock", @{}) == nil) return 2;
+  // Lock intentionally invalidates owner peers. The app's disconnect recovery
+  // replaces this connection before further requests; this synchronous setup
+  // has no app delegate yet to perform that recovery for it.
+  [broker replaceConnection];
+  if (request(@"lifecycle.unlock", @{}) == nil) return 2;
   NSDictionary *opened = request(@"library.session.begin", session);
   if (opened == nil) return 2;
   [NSApplication sharedApplication];
