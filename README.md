@@ -13,6 +13,9 @@ with local search by meaning and control over each connected tool.
 
 Free, open-source beta. Apple Silicon · macOS 13.3+ · No Afternote account.
 
+Independently maintained, best-effort software. Read the [beta notice](BETA_NOTICE.md),
+[license](LICENSE), and [Local privacy notice](https://afternote.dev/privacy#local).
+
 [![Afternote demo: save in Claude Desktop, recall by meaning in Codex](docs/images/afternote-demo.png)](https://afternote.dev/#demo)
 
 ## Save here. Find it there.

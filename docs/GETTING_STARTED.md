@@ -5,6 +5,8 @@
 ## Try it
 
 Afternote is a beta for Apple Silicon Macs running macOS 13.3 or newer.
+Read the [beta notice](../BETA_NOTICE.md) and [Local privacy notice](https://afternote.dev/privacy#local)
+before using it with information you need. Keep independent backups.
 
 Download the signed and notarized DMG and its `SHA256SUMS` from
 [GitHub Releases](https://github.com/dannykim32/afternote/releases), then follow
