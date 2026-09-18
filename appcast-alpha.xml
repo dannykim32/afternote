@@ -7,6 +7,31 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <title>Afternote</title>
         <item>
             <title>2.0.0</title>
+            <pubDate>Wed, 16 Sep 2026 23:26:04 -0600</pubDate>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.3</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## 2.0.0-beta.5 - 2026-09-16
+
+### Fixed
+
+- Let background search preparation finish while the native worker waits for requests.
+  The previous synchronous private XPC poll blocked the JavaScript event loop, leaving
+  search stuck at a complete note count even after lock/unlock. Existing embeddings remain
+  reusable; this change does not alter the model or rebuild policy.
+
+### Verification
+
+- Reproduced the stalled complete index through the native gateway before the fix.
+- Require real AppKit Notes readiness through the native gateway and encrypted worker after
+  lock/unlock, both with asynchronous fixture preparation and with pinned bundled models.
+  Test services simulate owner approval; affected-Mac installed acceptance remains separate.
+]]></description>
+            <enclosure url="https://github.com/dannykim32/afternote/releases/download/v2.0.0-beta.5/afternote-local-2.0.0-beta.5-darwin-arm64.dmg" length="366033007" type="application/octet-stream" sparkle:edSignature="GwurTAzme6U6G/gUMPzczTrnU3V+LmFXP8X5imUjb+xLzMUjDo2o85t9xuZYhc0D+8wgbf0mnZNnuR4qxyalDA=="/>
+        </item>
+        <item>
+            <title>2.0.0</title>
             <pubDate>Tue, 15 Sep 2026 15:34:54 -0500</pubDate>
             <sparkle:version>25</sparkle:version>
             <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
@@ -124,6 +149,6 @@ Mac. Includes the architecture and reconnect changes from private Alphas 23 and 
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: YZgYJpSkfybHWII7FUTzzNQJDIIHoK+RFfhy+X6dtNaw5HuXj/eOxcky6Us1IuSwdPLKnRpiQlznJGbHy8sqCA==
-length: 7722
+edSignature: ErtMnMmJGF0R9xvAXGAoJSvODhtJDP68SeDEuexmR4fgRtuSqirGj56lAonHrfWiLt9YXXbw4GpAAXGBjPz3BA==
+length: 9271
 -->
