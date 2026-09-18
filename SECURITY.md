@@ -7,12 +7,12 @@ reproduction steps, impact, and proof-of-concept material that is safe to share.
 
 Please do not open a public issue, access another person's data, run denial-of-service tests,
 or retain data encountered while verifying a report. We aim to acknowledge reports within
-five business days. Coordinated disclosure is welcome after a fix is available.
+five business days, but responses and fixes are best effort and no timing is guaranteed. Coordinated disclosure is welcome after a fix is available.
 
 ## Supported versions
 
-Security fixes apply to the current `main` branch and the latest signed alpha release. Older
-alpha builds and modified third-party distributions are not supported.
+Security fixes apply to the current `main` branch and the latest signed release. Older
+builds and modified third-party distributions are not supported.
 
 ## High-value areas
 
