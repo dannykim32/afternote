@@ -27,20 +27,20 @@ daily by default, but downloading and installing still require your approval.
 Once a connector is paired, the interaction stays deliberately small:
 
 ```text
-You: Remember that the spare bicycle key is behind the green planter.
-Codex: Saved to Afternote.
+You: Use Afternote to remember: The Atlas launch is on hold until Priya approves the security review.
+Claude Desktop: Saved to Afternote.
 
-Later, in Claude Desktop:
-You: Where did I put the spare bicycle key?
-Claude: Behind the green planter. [Afternote note, revision 1]
+Later, in Codex:
+You: Using Afternote, what's holding up the Atlas release?
+Codex: The launch is waiting for Priya to approve the security review. [Afternote note, revision 1]
 ```
 
 The note is visible and editable in the native app. Edits create immutable revisions;
 Recall cites the exact note revision it used.
 
-For a first check, ask your host: **Use Afternote to remember exactly: "My test key is
-in the green drawer."** Open Notes to confirm it was saved. In a new chat, ask the
-host to **use Afternote to recall where my test key is**. Confirm it actually calls
+For a first check, ask your host: **Use Afternote to remember exactly: "The Atlas launch is
+on hold until Priya approves the security review."** Open Notes to confirm it was saved. Once Notes reports **Search by meaning ready**,
+open a new chat and ask the host to **use Afternote to recall what’s holding up the Atlas release**. Confirm it actually calls
 an Afternote tool rather than answering from chat history.
 
 Afternote currently supports the official signed native macOS builds of Codex, Claude Code,

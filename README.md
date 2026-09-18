@@ -19,12 +19,13 @@ Free, open-source beta. Apple Silicon · macOS 13.3+ · No Afternote account.
 
 | In Claude Desktop | Later, in a new Codex conversation |
 | --- | --- |
-| “Use Afternote to remember: When the washing machine shakes, check that all four feet touch the floor before replacing parts.” | “Using Afternote, how can I stop my laundry appliance wobbling?” |
+| “Use Afternote to remember: The Atlas launch is on hold until Priya approves the security review.” | “Using Afternote, what’s holding up the Atlas release?” |
 
 Afternote returns the saved note with its source and revision. You can open the
 same note in the Mac app to read it, edit it, or inspect its history.
 
-This paraphrase was verified across Claude Desktop and Codex during beta testing.
+This synthetic example illustrates saving through one connected tool and recalling through another.
+The query is checked against the bundled local search models in an isolated vault.
 Search can still miss; the citation lets you check what was actually saved.
 
 ## Why I built it

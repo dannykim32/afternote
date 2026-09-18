@@ -909,34 +909,34 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 
   self.activeNote = @{
     @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3,
-    @"content" : @"The spare bicycle key is taped beneath the back edge of the green planter on the balcony.\n\nI put it there after the Saturday ride so it would stay dry but remain easy to reach.",
-    @"source" : @{ @"label" : @"Weekend errands", @"application" : @"Afternote" },
+    @"content" : @"The Atlas launch is on hold until Priya approves the security review.\n\nKeep the customer announcement in draft until the review is complete.",
+    @"source" : @{ @"label" : @"Atlas launch", @"application" : @"Claude Desktop" },
     @"createdAt" : @"2026-08-28T14:00:00.000Z", @"updatedAt" : @"2026-08-28T16:30:00.000Z"
   };
-  self.activeDeleteTarget = @"Weekend errands: The spare bicycle key is taped beneath the planter.";
+  self.activeDeleteTarget = @"Atlas launch: waiting for security approval.";
   self.revisionSummaries = @[
-    @{ @"noteId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3, @"excerpt" : @"The spare bicycle key is taped beneath…", @"createdAt" : @"2026-08-28T16:30:00.000Z" },
-    @{ @"noteId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @2, @"excerpt" : @"The spare key is behind the planter…", @"createdAt" : @"2026-08-28T15:10:00.000Z" },
+    @{ @"noteId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3, @"excerpt" : @"The Atlas launch is on hold until Priya approves…", @"createdAt" : @"2026-08-28T16:30:00.000Z" },
+    @{ @"noteId" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @2, @"excerpt" : @"The Atlas launch is waiting for security review…", @"createdAt" : @"2026-08-28T15:10:00.000Z" },
   ];
   self.libraryExpiresAt = @"2026-08-28T17:00:00.000Z";
   self.libraryStatusLabel.stringValue = @"Notes open until 5:00 PM";
   self.libraryProgress.hidden = YES;
   [self.libraryProgress stopAnimation:nil];
-  [self.notesRetrieval selectQuery:@"Where did I put the spare key for my bike?" view:nil];
+  [self.notesRetrieval selectQuery:@"What's holding up the Atlas release?" view:nil];
   self.librarySearch.stringValue = self.notesRetrieval.query;
   [self updateSearchComposerHeight];
   self.clearSearchButton.hidden = NO;
   [self applySearchMode:@"hybrid"];
   SeedNotesFixture(self.notesRetrieval, @[
     @{ @"id" : @"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", @"revision" : @3,
-       @"excerpt" : @"The spare bicycle key is taped beneath the back edge of the green planter on the balcony.",
+       @"excerpt" : @"The Atlas launch is on hold until Priya approves the security review.",
        kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @1,
-       @"source" : @{ @"label" : @"Weekend errands", @"application" : @"Afternote" },
+       @"source" : @{ @"label" : @"Atlas launch", @"application" : @"Claude Desktop" },
        @"createdAt" : @"2026-08-28T14:00:00.000Z", @"updatedAt" : @"2026-08-28T16:30:00.000Z" },
     @{ @"id" : @"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", @"revision" : @1,
-       @"excerpt" : @"A backup bicycle key is in the blue tool roll on the garage shelf.",
+       @"excerpt" : @"Atlas launch checklist: finish the security review before publishing the customer announcement.",
        kLibraryResultKindKey : kLibrarySearchResultKind, @"rank" : @2,
-       @"source" : @{ @"label" : @"Home reminders" },
+       @"source" : @{ @"label" : @"Release checklist" },
        @"createdAt" : @"2026-08-28T13:00:00.000Z", @"updatedAt" : @"2026-08-28T13:00:00.000Z" },
   ]);
   [self showLibraryMode:AfternoteLibraryModeAsk loadBrowse:NO];
