@@ -1,161 +1,64 @@
 # Afternote
 
-Local memory for Codex, Claude Code, and Claude Desktop on your Mac.
+### One home for the notes you choose to keep.
 
-Tell a connected host to remember a decision, deadline, or useful piece of context. Ask for it
-later from any connected host. Afternote keeps the note, its revision history, and its source in an
-encrypted local vault you control.
+Save a note in Claude. Find it later in Codex, even when you ask differently.
+Afternote gives the notes you explicitly save an encrypted home on your Mac,
+with local search by meaning and control over each connected tool.
 
-![Afternote Notes showing a local semantic recall with synthetic data](docs/images/afternote-notes.png)
+**[Download for Mac](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-beta.5)** ·
+[Watch the 40-second demo](https://afternote.dev/#demo) ·
+[Getting started](docs/GETTING_STARTED.md) ·
+[Security model](docs/SECURITY_MODEL.md)
 
-This repository is the complete local Mac product. It does not contain Afternote's former
-hosted service, customer data, deployment configuration, or release credentials.
+Free, open-source beta. Apple Silicon · macOS 13.3+ · No Afternote account.
 
-## Try it
+[![Afternote demo: save in Claude Desktop, recall by meaning in Codex](docs/images/afternote-demo.png)](https://afternote.dev/#demo)
 
-Afternote is a beta for Apple Silicon Macs running macOS 13.3 or newer.
+## Save here. Find it there.
 
-Download the signed and notarized DMG and its `SHA256SUMS` from
-[GitHub Releases](https://github.com/dannykim32/afternote/releases), then follow
-[the verification and installation steps](docs/VERIFY_RELEASE.md).
-The installed app requires no Bun or Node installation.
+| In Claude Desktop | Later, in a new Codex conversation |
+| --- | --- |
+| “Use Afternote to remember: When the washing machine shakes, check that all four feet touch the floor before replacing parts.” | “Using Afternote, how can I stop my laundry appliance wobbling?” |
 
-1. Download the DMG and `SHA256SUMS` from the **same release** and verify them.
-2. Open the DMG and drag **Afternote** into **Applications**. Replace the older app if
-   upgrading manually; do not delete your vault or Keychain items.
-3. Eject the installer, then open **/Applications/Afternote.app**. First launch installs
-   the private runtime and the optional command at `~/.local/bin/afternote`.
-4. Open **Connections** and connect the AI host you use, following the steps below.
-5. Ask that host to save a test note explicitly to Afternote, then find it in **Notes**.
+Afternote returns the saved note with its source and revision. You can open the
+same note in the Mac app to read it, edit it, or inspect its history.
 
-Already installed? Open **Settings** and choose **Check now** under Updates. Official builds check for updates
-daily by default, but downloading and installing still require your approval.
+This paraphrase was verified across Claude Desktop and Codex during beta testing.
+Search can still miss; the citation lets you check what was actually saved.
 
-### Build from source
+## Why I built it
 
-You can build the current candidate from source with Bun 1.3.14, Node, and Apple's
-command-line developer tools (`xcode-select --install` if they are missing).
-Check the Bun version before proceeding: Homebrew may install a newer version than the
-one this repository pins.
+I wanted to choose what was worth keeping, then get back to it through whichever
+app I was using. Saving something in one conversation shouldn't mean copying it
+into the next. I also wanted to decide which tools could access my notes and
+revoke that access myself. Afternote is a personal project I built outside my day job.
 
-```bash
-brew install bun node
-bun --version # must print 1.3.14
-git clone https://github.com/dannykim32/afternote.git
-cd afternote
-bun install --frozen-lockfile
-bun run prepare:native-release
-bun run typecheck
-bun run test
-bun run package:local
-```
+## Your notes, through the app or your tools
 
-The development archive and its `SHA256SUMS` file are written to `build/local-alpha`. Verify
-the checksum there, extract the archive, and run the enclosed `install.sh`. The app is ad hoc
-signed for local development; it does not carry the maintainer's Developer ID, notarization
-ticket, or release Keychain entitlements. Public binaries are produced only by the guarded
-release flow in [RELEASING.md](docs/RELEASING.md).
+- **Save deliberately.** Write in Afternote or ask an approved tool to remember something.
+- **Ask in your own words.** Search by meaning runs locally in the app and through connected tools. Models are included and search by meaning is on by default.
+- **Check the original.** Results cite the exact saved note revision and its source.
+- **Control access.** Approve each connection, inspect its activity, and revoke access from the app.
 
-Development and CI builds verify the pinned SQLCipher and OpenSSL source archives, record the
-Apple toolchain that compiled them, and require a macOS 13.3 deployment target. Public release
-builds additionally require the exact reviewed Apple toolchain and byte-for-byte native output
-digests recorded in `scripts/native-release-inputs.json`.
+![Afternote Notes with synthetic example notes](docs/images/afternote-notes.png)
 
-## Remember and Recall
+**Supported tools:** official signed native macOS builds of Codex, Claude Code,
+and Claude Desktop. No browser, Slack, or ChatGPT consumer-app connector in this beta.
 
-Once a connector is paired, the interaction stays deliberately small:
+Your vault and search stay on your Mac. Text you recall through an AI tool goes
+to that tool and may reach its model provider. Afternote collects no app usage telemetry.
 
-```text
-You: Remember that the spare bicycle key is behind the green planter.
-Codex: Saved to Afternote.
+## Get started
 
-Later, in Claude Desktop:
-You: Where did I put the spare bicycle key?
-Claude: Behind the green planter. [Afternote note, revision 1]
-```
+1. [Download the signed and notarized Mac beta](https://github.com/dannykim32/afternote/releases/tag/v2.0.0-beta.5), then drag **Afternote** into **Applications**.
+2. Open the app and use **Connections** to connect a supported tool.
+3. Ask it to save a note explicitly to Afternote. Recall it from a new chat or another connected tool.
 
-The note is visible and editable in the native app. Edits create immutable revisions;
-Recall cites the exact note revision it used.
-
-For a first check, ask your host: **Use Afternote to remember exactly: "My test key is
-in the green drawer."** Open Notes to confirm it was saved. In a new chat, ask the
-host to **use Afternote to recall where my test key is**. Confirm it actually calls
-an Afternote tool rather than answering from chat history.
-
-Afternote currently supports the official signed native macOS builds of Codex, Claude Code,
-and Claude Desktop. During setup it verifies the host's signing identity before changing or
-opening that host's MCP setup. Claude Desktop uses a small local MCPB package and keeps its
-own install confirmation. At runtime Afternote verifies Anthropic's launcher and its signed
-Claude Desktop parent as one process chain; it never writes Claude's private extension configuration.
-npm-installed scripts, wrapper launchers, and repackaged binaries are not supported in this
-beta because they cannot satisfy the native runtime identity check.
-
-### Connect Codex or Claude Code
-
-1. Install and launch the official signed native macOS build of your host.
-2. Open Afternote's **Connections** page and choose **Connect Afternote** under
-   **Codex** or **Claude Code**. Approve the macOS owner-presence prompt if requested.
-3. Restart the host so it loads its updated MCP configuration, then open a new chat.
-4. Return to Connections and refresh. Use the first-check prompt above to verify a
-   real Remember and Recall, not just an installed configuration.
-
-If you prefer Terminal, the installed command provides the same connector setup:
-
-```bash
-"$HOME/.local/bin/afternote" codex install
-"$HOME/.local/bin/afternote" codex status
-# Or, for Claude Code:
-"$HOME/.local/bin/afternote" claude-code install
-"$HOME/.local/bin/afternote" claude-code status
-```
-
-Install only the connector you intend to use. A healthy status checks the configuration
-and identity; the test note checks the full path through the host.
-
-### Connect Claude Desktop
-
-1. Install the official Claude Desktop app and open Afternote's **Connections** page.
-2. Choose **Connect Afternote** for Claude Desktop. Afternote verifies Claude's publisher,
-   creates a minimal local MCPB package, and opens it in Claude.
-3. Review the extension in Claude Desktop and approve **Install** there.
-4. Return to Afternote and choose **Check again**. The first Remember or Recall request asks
-   for the normal Afternote owner approval; later requests use the configured work-session
-   window.
-
-Disable or remove the connector from Claude Desktop's **Settings > Extensions**. Afternote
-does not edit Claude's private extension records directly.
-
-Managed Claude accounts may disallow custom extensions. Ask your administrator to approve
-Afternote; a disabled Install button is not a reason to bypass workplace policy.
-
-### Manage your notes and access
-
-- Use **Notes** to browse, search, edit, and inspect revision history. An unchanged save
-  does not create a revision.
-- Use **Settings** to change routine authentication, lock or unlock the vault, and export
-  notes. JSON exports preserve revisions; Markdown exports are for reading, not lossless
-  restore. Exports are plaintext: store them somewhere private.
-- Use **Connections** to inspect connector activity and revoke access. Locking the vault
-  blocks connector reads and writes; unlocking or starting a new work session can require
-  fresh approval. Quitting the app alone is not the same as locking the vault.
-
-### If something goes wrong
-
-Open **Settings > Save diagnostics** for a redacted diagnostic file, or run:
-
-```bash
-"$HOME/.local/bin/afternote" doctor
-```
-
-Report ordinary bugs through [GitHub Issues](https://github.com/dannykim32/afternote/issues)
-or **Settings > Send feedback** (email). Include the Afternote version, macOS version,
-connector, reproduction steps, and diagnostic output after reviewing it. Do not attach
-your vault, exports, credentials, or screenshots containing private notes.
-Report suspected vulnerabilities privately using [SECURITY.md](SECURITY.md).
-
-If an upgrade reports a missing vault key or recovery error, stop and ask for help before
-changing the vault or any Keychain item. Reinstalling is not a substitute for recovering
-the installation-bound key.
+No Bun, Node, or separate model download is needed for the installed app.
+See [installation and connector setup](docs/GETTING_STARTED.md) for the full steps,
+[release verification](docs/VERIFY_RELEASE.md) for checksums, and
+[beta readiness and limits](docs/BETA_READINESS.md) for what has been tested.
 
 ## How it is put together
 
@@ -259,6 +162,36 @@ bun run test
 bun run test:quality
 bun run audit
 ```
+
+## Build from source
+
+You can build the current candidate from source with Bun 1.3.14, Node, and Apple's
+command-line developer tools (`xcode-select --install` if they are missing).
+Check the Bun version before proceeding: Homebrew may install a newer version than the
+one this repository pins.
+
+```bash
+brew install bun node
+bun --version # must print 1.3.14
+git clone https://github.com/dannykim32/afternote.git
+cd afternote
+bun install --frozen-lockfile
+bun run prepare:native-release
+bun run typecheck
+bun run test
+bun run package:local
+```
+
+The development archive and its `SHA256SUMS` file are written to `build/local-alpha`. Verify
+the checksum there, extract the archive, and run the enclosed `install.sh`. The app is ad hoc
+signed for local development; it does not carry the maintainer's Developer ID, notarization
+ticket, or release Keychain entitlements. Public binaries are produced only by the guarded
+release flow in [RELEASING.md](docs/RELEASING.md).
+
+Development and CI builds verify the pinned SQLCipher and OpenSSL source archives, record the
+Apple toolchain that compiled them, and require a macOS 13.3 deployment target. Public release
+builds additionally require the exact reviewed Apple toolchain and byte-for-byte native output
+digests recorded in `scripts/native-release-inputs.json`.
 
 ## Contributing
 
