@@ -8,6 +8,8 @@ import { ConversationArchives } from "./conversation-archives";
 import { SqliteMemory } from "./sqlite-memory";
 import { readInterchange } from "./interchange";
 import { cleanVaultRestoreApprovalSnapshot, cleanVaultRestoreCoordinationDigest, restoreCleanEncryptedVault } from "./encrypted-vault-restore";
+import { restoredVaultPayloadDigests } from "./restored-vault-payload";
+import { SqlcipherDatabase } from "./sqlcipher-database";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); });
@@ -48,6 +50,18 @@ test("Archive writes join the encrypted broker transaction and roll back with it
     archives.completeInCurrentTransaction(id);
   })();
   expect(archives.read(id).passages[0]!.text).toBe("transaction canary");
+});
+
+test("closing a borrowed Archive store does not finalize another store's statements", () => {
+  const { archives, database } = fixture();
+  const id = archives.begin(manifest("shared connection")).id;
+  const other = new ConversationArchives(database);
+  expect(other.status(id).id).toBe(id);
+  other.close();
+  expect(archives.status(id).id).toBe(id);
+  archives.append(id, 0, ["shared connection"]);
+  archives.complete(id);
+  expect(archives.read(id).passages[0]!.text).toBe("shared connection");
 });
 
 test("an explicitly imported transcript becomes one readable Archive without changing its text", () => {
@@ -262,6 +276,33 @@ test("approved encrypted recovery verifies archive-inclusive backups after an in
   const restored = new ConversationArchives(restoredDatabase);
   try { expect(restored.read(archive.id).passages[0]!.text).toBe("recovery observatory canary"); }
   finally { restored.close(); restoredDatabase.close(); }
+});
+
+test("a historical schema-10 encrypted recovery candidate retains its notes-only payload digest", async () => {
+  const { path, key } = fixture(true);
+  const vault = { vaultId: "d".repeat(64), deployment: "local" as const };
+  const memory = new SqliteMemory(path, vault, { encryptionKey: key });
+  const exportPath = path + ".v1.json";
+  try {
+    await memory.remember(vault, { content: "historical recovery canary" });
+    memory.exportInterchange(vault, exportPath, "2.0.0-beta.5");
+  } finally { memory.close(); }
+  const expected = readInterchange(exportPath, "2.0.0-beta.5");
+  expect(expected.schemaVersion).toBe(1);
+  const historical = new SqlcipherDatabase(path, { key: key! });
+  try {
+    historical.exec(`drop trigger conversation_passages_insert;
+      drop trigger conversation_passages_delete;
+      drop table conversation_passages_fts;
+      drop table conversation_passages;
+      drop table conversation_archives;
+      pragma user_version = 10;`);
+  } finally { historical.close(); }
+  const candidate = new SqlcipherDatabase(path, { key: key!, readonly: true });
+  try {
+    expect(restoredVaultPayloadDigests(candidate, "2.0.0-beta.5")).toEqual([expected.manifest.payloadSha256]);
+    expect(candidate.query<{ user_version: number }, []>("pragma user_version").get()!.user_version).toBe(10);
+  } finally { candidate.close(); }
 });
 
 test("tampered Archive backups fail before a destination Vault is created", () => {

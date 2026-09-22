@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ConversationArchive } from "./conversation-archives";
-import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_VAULT_ARCHIVE_PASSAGES } from "./conversation-archive-limits";
+import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_VAULT_ARCHIVE_PASSAGES, validArchiveText } from "./conversation-archive-limits";
 
 export type InterchangeArchive = ConversationArchive & { passages: string[] };
 export type StreamingInterchangeArchive = ConversationArchive & { passages: () => Iterable<string> };
@@ -32,7 +32,7 @@ export function validateInterchangeArchives(value: unknown): asserts value is In
         "createdAt,expectedBytes,id,passageCount,passages,savedBytes,sha256,state,title") invalid();
     if (typeof archive.id !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(archive.id) || ids.has(archive.id)) invalid();
     ids.add(archive.id);
-    if (!validText(archive.title, 200) || typeof archive.createdAt !== "string" ||
+    if (!validArchiveText(archive.title, 200) || typeof archive.createdAt !== "string" ||
         !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt ||
         typeof archive.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(archive.sha256) ||
         !integer(archive.expectedBytes, 1, MAX_ARCHIVE_BYTES) ||
@@ -47,7 +47,7 @@ export function validateInterchangeArchives(value: unknown): asserts value is In
     let bytes = 0;
     const hash = createHash("sha256");
     for (const passage of archive.passages) {
-      if (!validText(passage, MAX_PASSAGE_CHARACTERS)) invalid();
+      if (!validArchiveText(passage, MAX_PASSAGE_CHARACTERS)) invalid();
       bytes += Buffer.byteLength(passage);
       hash.update(passage);
     }
@@ -59,11 +59,6 @@ export function validateInterchangeArchives(value: unknown): asserts value is In
 
 function integer(value: unknown, min: number, max: number): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
-}
-
-function validText(value: unknown, max: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= max * 2 &&
-    !/[\uD800-\uDFFF]/u.test(value) && Array.from(value).length <= max;
 }
 
 function invalid(): never { throw new Error("Interchange Archive is invalid or exceeds Vault limits"); }

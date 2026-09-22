@@ -3,7 +3,7 @@ import type { Database, SQLQueryBindings, Statement } from "bun:sqlite";
 import { MemoryError } from "@afternote/memory";
 import type { InterchangeArchive, StreamingInterchangeArchive } from "./archive-interchange";
 import { validateInterchangeArchives } from "./archive-interchange";
-import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH } from "./conversation-archive-limits";
+import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH, validArchiveText } from "./conversation-archive-limits";
 export { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH } from "./conversation-archive-limits";
 
 export type ArchiveManifest = { title: string; bytes: number; sha256: string };
@@ -49,7 +49,10 @@ export class ConversationArchives {
     // Passage. The caller closes this store before releasing its Vault connection.
     let statement = this.statements.get(sql);
     if (!statement) {
-      statement = this.database.query(sql);
+      // Bun.query caches across borrowers; prepare gives this store ownership.
+      // The SQLCipher adapter's query already creates an uncached statement.
+      statement = typeof this.database.prepare === "function"
+        ? this.database.prepare(sql) : this.database.query(sql);
       this.statements.set(sql, statement);
     }
     return statement as Statement<Row, Parameters>;
@@ -179,16 +182,7 @@ export class ConversationArchives {
   }
 
   cancelInCurrentTransaction(id: string): boolean {
-    const archive = this.query<{ state: string }, [string]>(
-      "select state from conversation_archives where id = ?",
-    ).get(id);
-    if (!archive) return false;
-    if (archive.state !== "importing") throw new MemoryError("conflict", "Cannot cancel a completed Archive");
-    // Borrowed connections may not enable foreign-key cascades. The explicit
-    // Passage delete also removes the FTS projection through its trigger.
-    this.query("delete from conversation_passages where archive_id = ?").run(id);
-    this.query("delete from conversation_archives where id = ?").run(id);
-    return true;
+    return this.removeInCurrentTransaction(id, "importing");
   }
 
   /** Storage only: the caller must obtain fresh Owner approval before deletion. */
@@ -197,11 +191,18 @@ export class ConversationArchives {
   }
 
   deleteInCurrentTransaction(id: string): boolean {
+    return this.removeInCurrentTransaction(id, "ready");
+  }
+
+  private removeInCurrentTransaction(id: string, expectedState: ConversationArchive["state"]): boolean {
     const archive = this.query<{ state: string }, [string]>(
       "select state from conversation_archives where id = ?",
     ).get(id);
     if (!archive) return false;
-    if (archive.state !== "ready") throw new MemoryError("conflict", "Discard an incomplete Archive instead");
+    if (archive.state !== expectedState) throw new MemoryError("conflict", expectedState === "ready"
+      ? "Discard an incomplete Archive instead" : "Cannot cancel a completed Archive");
+    // Borrowed connections may not enable cascades; the explicit Passage delete
+    // also removes the FTS projection through its trigger.
     this.query("delete from conversation_passages where archive_id = ?").run(id);
     this.query("delete from conversation_archives where id = ?").run(id);
     return true;
@@ -282,6 +283,5 @@ function boundedInteger(value: number, minimum: number, maximum: number): void {
 }
 
 function boundedText(value: string, maximum: number): void {
-  if (typeof value !== "string" || value.length === 0 || value.length > maximum * 2 ||
-      /[\uD800-\uDFFF]/u.test(value) || Array.from(value).length > maximum) invalidInput();
+  if (!validArchiveText(value, maximum)) invalidInput();
 }
