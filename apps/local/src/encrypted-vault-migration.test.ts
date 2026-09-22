@@ -21,6 +21,9 @@ import {
 } from "./encrypted-vault-migration";
 import { ExclusiveFileLock, SqlcipherDatabase } from "./sqlcipher-database";
 import { SqliteMemory } from "./sqlite-memory";
+import { ConversationArchives } from "./conversation-archives";
+import { createHash } from "node:crypto";
+import { openNoteDatabase } from "./note-database";
 
 const vault: VaultContext = { vaultId: "f".repeat(64), deployment: "local" };
 const directories: string[] = [];
@@ -30,6 +33,25 @@ afterEach(() => {
 });
 
 describe("plaintext-to-SQLCipher migration", () => {
+  it("preserves Archives and searchable Passages when encrypting an existing Vault", async () => {
+    const { path } = await plaintextVault();
+    const text = "Owner: observatory migration canary 🧭";
+    const source = new Database(path);
+    const archives = new ConversationArchives(source);
+    const archive = archives.begin({ title: "Transcript", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") });
+    archives.append(archive.id, 0, [text]);
+    archives.complete(archive.id);
+    source.close();
+    const key = randomBytes(32);
+    migratePlaintextVault({ databasePath: path, key, legacyDecision: { action: "keep" } });
+    const encrypted = openNoteDatabase(path, key, { readonly: true });
+    try {
+      const restored = new ConversationArchives(encrypted);
+      expect(restored.read(archive.id).passages[0]!.text).toBe(text);
+      expect(restored.search("observatory")[0]!.archiveId).toBe(archive.id);
+      expect(readFileSync(path).includes(Buffer.from(text))).toBe(false);
+    } finally { encrypted.close(); }
+  });
   it("atomically publishes exact current-schema data and keeps only explicitly selected plaintext", async () => {
     const { path, noteId, directory } = await plaintextVault();
     const key = randomBytes(32);
@@ -83,7 +105,7 @@ describe("plaintext-to-SQLCipher migration", () => {
         revision: 2,
         content: "current",
       });
-      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(10);
+      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(11);
     } finally {
       reopened.close();
     }
@@ -108,7 +130,7 @@ describe("plaintext-to-SQLCipher migration", () => {
       timeZone: "America/Denver",
     });
     try {
-      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(10);
+      expect(reopened.diagnosticSnapshot(vault).schemaVersion).toBe(11);
       expect(await reopened.getNote(vault, noteId)).toMatchObject({
         revision: 2,
         content: "current",

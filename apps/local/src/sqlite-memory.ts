@@ -2261,6 +2261,11 @@ export class SqliteMemory implements Memory {
     this.#assertVault(vault);
     assertCanContinue();
     this.#database.transaction(() => {
+      // Archive import is not exposed in this checkpoint. Keep the v1 backup
+      // path fail-closed until an Archive-aware export/restore format is wired.
+      if (this.#database.query("select 1 from conversation_archives limit 1").get()) {
+        throw new MemoryError("unsupported_capability", "This backup format cannot include Conversation Archives yet");
+      }
       const noteCount = this.#database
         .query<{ count: number }, []>("select count(*) as count from notes")
         .get()?.count ?? 0;

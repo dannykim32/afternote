@@ -299,9 +299,9 @@ function migratePlaintextVaultUnlocked(options: MigrationOptions): MigrationResu
     let before: VaultSnapshot;
     try {
       before = snapshot(source);
-      if (before.schemaVersion < 8 || before.schemaVersion > 10) {
+      if (before.schemaVersion < 8 || before.schemaVersion > 11) {
         throw new Error(
-          `Encryption migration requires schema 8 through 10, found ${before.schemaVersion}`,
+          `Encryption migration requires schema 8 through 11, found ${before.schemaVersion}`,
         );
       }
       if (before.integrity !== "ok") throw new Error("Plaintext vault failed integrity_check");
@@ -677,12 +677,14 @@ type VaultSnapshot = {
   facets: unknown[];
   temporalIndex: unknown[];
   temporalAnnotations: unknown[];
+  archiveDigest?: string;
 };
 
 type QueryDatabase = {
   query(sql: string): {
     get(): Record<string, unknown> | undefined;
     all(): Array<Record<string, unknown>>;
+    iterate(): Iterable<Record<string, unknown>>;
   };
 };
 
@@ -711,7 +713,24 @@ function snapshot(database: Database | SqlcipherDatabase): VaultSnapshot {
     temporalAnnotations: schemaVersion >= 9
       ? rows("select * from note_temporal_annotations order by note_id, annotation_index")
       : [],
+    ...(schemaVersion >= 11 ? { archiveDigest: archiveSnapshotDigest(queryable) } : {}),
   };
+}
+
+function archiveSnapshotDigest(database: QueryDatabase): string {
+  const hash = createHash("sha256");
+  // Iterate one bounded Passage at a time: never serialize an entire transcript
+  // through the native adapter's one-MiB response boundary.
+  for (const sql of [
+    "select * from conversation_archives order by id",
+    "select * from conversation_passages order by archive_id, passage_index",
+  ]) {
+    hash.update(sql);
+    for (const row of database.query(sql).iterate()) {
+      hash.update(JSON.stringify(normalizeRow(row)) + "\n");
+    }
+  }
+  return hash.digest("hex");
 }
 
 function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -736,7 +755,7 @@ function assertEncryptedCandidate(path: string, key: Uint8Array): void {
   try {
     const state = snapshot(database);
     if (
-      (state.schemaVersion < 8 || state.schemaVersion > 10) ||
+      (state.schemaVersion < 8 || state.schemaVersion > 11) ||
       state.integrity !== "ok"
     ) {
       throw new Error("Encrypted migration candidate failed validation");

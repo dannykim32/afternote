@@ -840,7 +840,7 @@ describe("SqliteMemory storage and schema migrations", () => {
       timeZone: "America/Denver",
     });
     try {
-      expect(upgraded.diagnosticSnapshot(localVault).schemaVersion).toBe(10);
+      expect(upgraded.diagnosticSnapshot(localVault).schemaVersion).toBe(11);
       expect(await upgraded.recall(localVault, "What happened on August 28?")).toMatchObject([
         { note: { id: note.id }, citation: { noteId: note.id } },
       ]);
@@ -939,7 +939,7 @@ describe("SqliteMemory storage and schema migrations", () => {
     tempDirectories.push(directory);
     const databasePath = join(directory, "vault.db");
     const futureDatabase = new Database(databasePath, { create: true });
-    futureDatabase.exec("PRAGMA user_version = 11;");
+    futureDatabase.exec("PRAGMA user_version = 12;");
     futureDatabase.close();
 
     try {
@@ -948,7 +948,7 @@ describe("SqliteMemory storage and schema migrations", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MemoryError);
       expect((error as MemoryError).code).toBe("incompatible_schema");
-      expect((error as Error).message).toContain("newer schema version 11");
+      expect((error as Error).message).toContain("newer schema version 12");
     }
 
     const inspected = new Database(databasePath);
@@ -956,7 +956,7 @@ describe("SqliteMemory storage and schema migrations", () => {
       .query<{ user_version: number }, []>("PRAGMA user_version;")
       .get();
     inspected.close();
-    expect(version?.user_version).toBe(11);
+    expect(version?.user_version).toBe(12);
   });
 
   it("reuses one content-bound backup when an unchanged migration keeps failing", () => {

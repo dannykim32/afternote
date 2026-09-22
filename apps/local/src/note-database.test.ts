@@ -26,7 +26,7 @@ for (const encrypted of [false, true]) {
         migrateNoteSchema(database, path, key);
         const before = database.query("select name, sql from sqlite_schema order by name").all();
         migrateNoteSchema(database, path, key);
-        expect(database.query("pragma user_version").get()).toEqual({ user_version: 10 });
+        expect(database.query("pragma user_version").get()).toEqual({ user_version: 11 });
         expect(database.query("select name, sql from sqlite_schema order by name").all()).toEqual(before);
         expect(readdirSync(directory).filter((name) => name.includes("pre-migration"))).toEqual([]);
         // The caller can still use its connection: migration never takes ownership.
@@ -51,7 +51,7 @@ for (const encrypted of [false, true]) {
         );
         database.exec("pragma user_version = 9");
         migrateNoteSchema(database, path, key);
-        expect(database.query("pragma user_version").get()).toEqual({ user_version: 10 });
+        expect(database.query("pragma user_version").get()).toEqual({ user_version: 11 });
         expect(database.query("select content from notes").get()).toEqual({ content: canary });
         const backups = readdirSync(directory).filter((name) => name.includes("pre-migration-v9-"));
         expect(backups).toHaveLength(1);
@@ -77,9 +77,9 @@ for (const encrypted of [false, true]) {
       const key = encrypted ? randomBytes(32) : undefined;
       const database = openNoteDatabase(path, key, { create: true });
       try {
-        database.exec("pragma user_version = 11");
-        expect(() => migrateNoteSchema(database, path, key)).toThrow("newer schema version 11");
-        expect(database.query("pragma user_version").get()).toEqual({ user_version: 11 });
+        database.exec("pragma user_version = 12");
+        expect(() => migrateNoteSchema(database, path, key)).toThrow("newer schema version 12");
+        expect(database.query("pragma user_version").get()).toEqual({ user_version: 12 });
         expect(readdirSync(directory).filter((name) => name.includes("pre-migration"))).toEqual([]);
       } finally {
         database.close();
