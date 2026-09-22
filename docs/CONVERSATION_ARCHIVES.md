@@ -115,3 +115,18 @@ transport limits or let Connectors read arbitrary filesystem paths to support th
   those fixes; no test threshold was weakened.
 - No app, connector, signing, or release artifacts were changed. App-level testing
   must wait for the remaining delivery checkpoints above.
+
+## Storage and backup checkpoint verification (2026-09-22)
+
+- At `8ea4a48`, typecheck passes and a fresh complete default suite passes:
+  668 passed, 10 skipped, 0 failed (678 tests across 80 files). The opt-in launchd,
+  model and performance release checks are not covered by this default run.
+- Archive-inclusive export/restore preserves ready and paused Archives. Tests cover
+  interrupted encrypted recovery, malformed/tampered backups, canonical/index
+  transaction rollback, pagination and completed-Archive deletion at the store.
+- Independent standards/spec reviews found and verified fixes for shared Bun
+  statement ownership and historical schema-10 encrypted recovery. The latter
+  remains read-only and retains the original notes-only payload digest.
+- The checkpoint is not a release candidate: broker authorization/audit wiring,
+  separate Connector approval, native import/viewer, truthful backup UI/protocol
+  reporting and end-to-end acceptance remain outstanding. No release was published.
