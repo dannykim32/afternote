@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings, Statement } from "bun:sqlite";
 import { MemoryError } from "@afternote/memory";
 
 export type ArchiveManifest = { title: string; bytes: number; sha256: string };
@@ -19,6 +19,7 @@ export type ArchiveSearchResult = { archiveId: string; index: number; title: str
 
 export const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 export const MAX_ARCHIVE_PASSAGES = 32_768;
+export const MAX_VAULT_ARCHIVE_PASSAGES = 32_768;
 export const MAX_PASSAGE_CHARACTERS = 8192;
 export const MAX_ARCHIVE_BATCH = 8;
 
@@ -27,25 +28,50 @@ const ARCHIVE_COLUMNS = `id, title, state, expected_bytes as expectedBytes,
 
 /** Borrows the authorized caller's Vault connection. Never opens a Vault or owns its key. */
 export class ConversationArchives {
+  private readonly statements = new Map<string, Statement>();
+  private closed = false;
   constructor(private readonly database: Database) {}
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const statement of this.statements.values()) {
+      const resource = statement as { finalize?: () => void; close?: () => void };
+      if (resource.finalize) resource.finalize();
+      else resource.close?.();
+    }
+    this.statements.clear();
+  }
+
+  private query<Row = unknown, Parameters extends SQLQueryBindings[] = SQLQueryBindings[]>(sql: string): Statement<Row, Parameters> {
+    if (this.closed) throw new MemoryError("unavailable", "Archive storage is closed");
+    // All SQL here is static: a fixed statement set, not one native handle per
+    // Passage. The caller closes this store before releasing its Vault connection.
+    let statement = this.statements.get(sql);
+    if (!statement) {
+      statement = this.database.query(sql);
+      this.statements.set(sql, statement);
+    }
+    return statement as Statement<Row, Parameters>;
+  }
 
   begin(manifest: ArchiveManifest): ConversationArchive {
     boundedText(manifest.title, 200);
     boundedInteger(manifest.bytes, 1, MAX_ARCHIVE_BYTES);
     if (typeof manifest.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(manifest.sha256)) invalidInput();
     return this.database.transaction(() => {
-      const pending = this.database.query<{ count: number }, []>(
+      const pending = this.query<{ count: number }, []>(
         "select count(*) as count from conversation_archives where state = 'importing'",
       ).get()!.count;
       if (pending >= 8) throw new MemoryError("rate_limited", "Finish or cancel pending Archive imports first");
-      const used = this.database.query<{ bytes: number; count: number }, []>(
+      const used = this.query<{ bytes: number; count: number }, []>(
         "select coalesce(sum(expected_bytes), 0) as bytes, count(*) as count from conversation_archives",
       ).get()!;
       if (used.bytes + manifest.bytes > 256 * 1024 * 1024 || used.count >= 4096) {
         throw new MemoryError("rate_limited", "Archive capacity for this Vault has been reached");
       }
       const id = randomUUID();
-      this.database.query(`insert into conversation_archives
+      this.query(`insert into conversation_archives
         (id, title, state, expected_bytes, sha256, created_at) values (?, ?, 'importing', ?, ?, ?)`)
         .run(id, manifest.title, manifest.bytes, manifest.sha256, new Date().toISOString());
       return this.status(id);
@@ -53,7 +79,7 @@ export class ConversationArchives {
   }
 
   status(id: string): ConversationArchive {
-    const archive = this.database.query<ConversationArchive, [string]>(
+    const archive = this.query<ConversationArchive, [string]>(
       `select ${ARCHIVE_COLUMNS} from conversation_archives where id = ?`,
     ).get(id);
     if (!archive) throw new MemoryError("not_found", "Archive was not found");
@@ -81,17 +107,17 @@ export class ConversationArchives {
       if (archive.savedBytes + bytes > archive.expectedBytes || startIndex + passages.length > MAX_ARCHIVE_PASSAGES) {
         invalidInput();
       }
-      const totalPassages = this.database.query<{ count: number }, []>(
+      const totalPassages = this.query<{ count: number }, []>(
         "select coalesce(sum(passage_count), 0) as count from conversation_archives",
       ).get()!.count;
-      if (totalPassages + passages.length > MAX_ARCHIVE_PASSAGES) {
+      if (totalPassages + passages.length > MAX_VAULT_ARCHIVE_PASSAGES) {
         throw new MemoryError("rate_limited", "Passage capacity for this Vault has been reached");
       }
       for (const [offset, text] of passages.entries()) {
-        this.database.query(`insert into conversation_passages (archive_id, passage_index, text)
+        this.query(`insert into conversation_passages (archive_id, passage_index, text)
           values (?, ?, ?)`).run(id, startIndex + offset, text);
       }
-      this.database.query(`update conversation_archives set saved_bytes = saved_bytes + ?,
+      this.query(`update conversation_archives set saved_bytes = saved_bytes + ?,
         passage_count = passage_count + ? where id = ?`).run(bytes, passages.length, id);
       return this.status(id);
     })();
@@ -107,25 +133,28 @@ export class ConversationArchives {
       if (archive.savedBytes !== archive.expectedBytes || hash.digest("hex") !== archive.sha256) {
         throw new MemoryError("conflict", "Transcript does not match its import manifest");
       }
-      this.database.query("update conversation_archives set state = 'ready' where id = ?").run(id);
+      this.query("update conversation_archives set state = 'ready' where id = ?").run(id);
       return this.status(id);
     })();
   }
 
   list(): ConversationArchive[] {
-    return this.database.query<ConversationArchive, []>(
+    return this.query<ConversationArchive, []>(
       `select ${ARCHIVE_COLUMNS} from conversation_archives where state = 'ready' order by created_at desc, id desc limit 20`,
     ).all();
   }
 
   cancel(id: string): boolean {
     return this.database.transaction(() => {
-      const archive = this.database.query<{ state: string }, [string]>(
+      const archive = this.query<{ state: string }, [string]>(
         "select state from conversation_archives where id = ?",
       ).get(id);
       if (!archive) return false;
       if (archive.state !== "importing") throw new MemoryError("conflict", "Cannot cancel a completed Archive");
-      this.database.query("delete from conversation_archives where id = ?").run(id);
+      // Borrowed SQLite connections need not have enabled foreign-key cascades.
+      // Explicit deletion also removes the FTS projection through its trigger.
+      this.query("delete from conversation_passages where archive_id = ?").run(id);
+      this.query("delete from conversation_archives where id = ?").run(id);
       return true;
     })();
   }
@@ -146,7 +175,7 @@ export class ConversationArchives {
     const terms = query.match(/[\p{L}\p{N}]+/gu);
     if (!terms?.length || terms.length > 32) invalidInput();
     const match = terms.map((term) => `"${term}"`).join(" AND ");
-    return this.database.query<ArchiveSearchResult, [string, number]>(`
+    return this.query<ArchiveSearchResult, [string, number]>(`
       select p.archive_id as archiveId, p.passage_index as 'index', a.title,
         substr(snippet(conversation_passages_fts, 0, '', '', '…', 24), 1, 1024) as excerpt
       from conversation_passages_fts
@@ -157,7 +186,7 @@ export class ConversationArchives {
   }
 
   private passages(id: string, startIndex: number, limit: number): ArchivePassage[] {
-    return this.database.query<ArchivePassage, [string, number, number]>(
+    return this.query<ArchivePassage, [string, number, number]>(
       `select archive_id as archiveId, passage_index as 'index', text from conversation_passages
        where archive_id = ? and passage_index >= ? order by passage_index limit ?`,
     ).all(id, startIndex, limit);

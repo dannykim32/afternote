@@ -45,13 +45,16 @@ export async function importConversationFile(
       throw new MemoryError("invalid_input", "Transcript must be a nonempty regular file of at most 64 MiB");
     }
     const hash = createHash("sha256");
+    const verifier = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
     let bytes = 0;
     for await (const chunk of fileChunks(descriptor)) {
       options.signal?.throwIfAborted();
       bytes += chunk.length;
       hash.update(chunk);
+      verifier.decode(chunk, { stream: true });
       options.onProgress?.({ phase: "verifying", totalBytes: file.size, savedBytes: 0 });
     }
+    verifier.decode();
     options.signal?.throwIfAborted();
     const sha256 = hash.digest("hex");
     const archive = options.resumeId

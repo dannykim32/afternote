@@ -41,16 +41,17 @@ describe("plaintext-to-SQLCipher migration", () => {
     const archive = archives.begin({ title: "Transcript", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") });
     archives.append(archive.id, 0, [text]);
     archives.complete(archive.id);
+    archives.close();
     source.close();
     const key = randomBytes(32);
     migratePlaintextVault({ databasePath: path, key, legacyDecision: { action: "keep" } });
     const encrypted = openNoteDatabase(path, key, { readonly: true });
+    const restored = new ConversationArchives(encrypted);
     try {
-      const restored = new ConversationArchives(encrypted);
       expect(restored.read(archive.id).passages[0]!.text).toBe(text);
       expect(restored.search("observatory")[0]!.archiveId).toBe(archive.id);
       expect(readFileSync(path).includes(Buffer.from(text))).toBe(false);
-    } finally { encrypted.close(); }
+    } finally { restored.close(); encrypted.close(); }
   });
   it("atomically publishes exact current-schema data and keeps only explicitly selected plaintext", async () => {
     const { path, noteId, directory } = await plaintextVault();

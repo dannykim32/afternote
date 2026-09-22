@@ -62,6 +62,11 @@ operation and stop import/read work when the Vault or Connection is invalidated.
 Archive schema work uses the verified pre-migration backup path. Canonical writes
 and synchronous index projections commit together. Content hashes detect transfer
 errors; they are not substitutes for authorization.
+The store owns a fixed set of prepared statements, not its borrowed connection.
+Close the store before closing the connection. An aborted file import is a pause:
+its checkpoint remains hidden and resumable. Explicit discard calls `cancel()`
+to remove that incomplete Archive and its Passages. Invalid UTF-8 is rejected
+during initial verification, before a pending import is created.
 
 ## Verification and release gates
 
@@ -80,3 +85,17 @@ Vault modification is authorized by this implementation task.
 Provider-specific structured exports, connector-driven capture, attachments,
 optional labeled summaries, and cross-device sync are separate work. Do not raise
 transport limits or let Connectors read arbitrary filesystem paths to support this.
+
+## Checkpoint verification (2026-09-22)
+
+- Typecheck passes. The focused storage/import/schema/encryption/Note regression
+  run passes 113 tests, including the synthetic 1,000,000-word (~6 MB) transcript.
+- The full run recorded 658 passes, 10 skips, and one failure in the unchanged
+  Codex readiness timing test (1,518 ms versus a 1,500 ms threshold). Its entire
+  13-test file passes on isolated rerun. This is not a claim of an all-green full run.
+- Checkpoint review found and corrected cancellation's foreign-key dependency,
+  unbounded prepared-statement creation, ambiguous per-Archive/Vault quota names,
+  and invalid UTF-8 consuming pending import slots. Focused tests were rerun after
+  those fixes; no test threshold was weakened.
+- No app, connector, signing, or release artifacts were changed. App-level testing
+  must wait for the remaining delivery checkpoints above.

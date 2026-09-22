@@ -20,7 +20,9 @@ function fixture(text: string | Uint8Array) {
   database.exec("pragma foreign_keys = on");
   migrateNoteSchema(database, vaultPath, key);
   cleanup.push(() => database.close());
-  return { path, archives: new ConversationArchives(database) };
+  const archives = new ConversationArchives(database);
+  cleanup.push(() => archives.close());
+  return { path, archives };
 }
 
 test("imports a transcript as ordered bounded Passages with its original Unicode, BOM and line endings", async () => {
@@ -117,4 +119,14 @@ test("passage boundaries do not split ordinary words and make them impossible to
   const { path, archives } = fixture(text);
   await importConversationFile(path, "Boundary", archives);
   expect(archives.search("observatory")).toHaveLength(1);
+});
+
+test("rejecting invalid UTF-8 never consumes an import slot", async () => {
+  const { path, archives } = fixture(Buffer.from([0xc0, 0xaf]));
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await expect(importConversationFile(path, "Malformed", archives)).rejects.toThrow();
+  }
+  writeFileSync(path, "Owner: a valid transcript.");
+  const saved = await importConversationFile(path, "Valid", archives);
+  expect(saved.state).toBe("ready");
 });

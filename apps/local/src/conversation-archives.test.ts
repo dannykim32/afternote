@@ -19,7 +19,9 @@ function fixture(encrypted = false) {
   database.exec("pragma foreign_keys = on");
   migrateNoteSchema(database, path, key);
   cleanups.push(() => database.close());
-  return { archives: new ConversationArchives(database), path, database, key };
+  const archives = new ConversationArchives(database);
+  cleanups.push(() => archives.close());
+  return { archives, path, database, key };
 }
 
 function manifest(content: string, title = "Project transcript") {
@@ -65,6 +67,7 @@ test("an interrupted import resumes in a new storage instance and exact retries 
   const archive = archives.begin(manifest("first second third"));
   archives.append(archive.id, 0, ["first ", "second "]);
   const resumed = new ConversationArchives(database);
+  cleanups.push(() => resumed.close());
   expect(resumed.status(archive.id).passageCount).toBe(2);
   expect(resumed.append(archive.id, 0, ["first ", "second "]).passageCount).toBe(2);
   expect(() => resumed.append(archive.id, 0, ["wrong ", "second "])).toThrow();
@@ -87,14 +90,14 @@ test("Archive text and its search index persist only inside the encrypted Vault"
   const started = archives.begin(manifest(text));
   archives.append(started.id, 0, [text]);
   const reopened = openNoteDatabase(path, key, { create: false });
+  const resumed = new ConversationArchives(reopened);
   try {
-    const resumed = new ConversationArchives(reopened);
     expect(resumed.status(started.id).savedBytes).toBe(34);
     resumed.complete(started.id);
     expect(resumed.search("SEQUOIA")[0]!.archiveId).toBe(started.id);
     expect(resumed.read(started.id).passages[0]!.text).toBe(text);
     expect(readFileSync(path).includes(Buffer.from(text))).toBe(false);
-  } finally { reopened.close(); }
+  } finally { resumed.close(); reopened.close(); }
 });
 
 test("cancelling a partial Archive frees its reservation and never removes a completed Archive", () => {
@@ -165,3 +168,16 @@ test("tiny Passages cannot bypass the Vault-wide storage quota by creating unlim
   expect(() => archives.append(other.id, 0, ["b"])).toThrow("Passage capacity");
   expect(archives.status(other.id).savedBytes).toBe(0);
 }, 30_000);
+
+test("closing Archive storage releases its resources without closing the caller's Vault", () => {
+  const { archives, database } = fixture(true);
+  const started = archives.begin(manifest("retained"));
+  archives.append(started.id, 0, ["retained"]);
+  archives.complete(started.id);
+  archives.close();
+  archives.close();
+  expect(() => archives.read(started.id)).toThrow("closed");
+  const next = new ConversationArchives(database);
+  try { expect(next.read(started.id).passages[0]!.text).toBe("retained"); }
+  finally { next.close(); }
+});
