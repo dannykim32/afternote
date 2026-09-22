@@ -1,11 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { migrateNoteSchema, openNoteDatabase } from "./note-database";
 import { ConversationArchives } from "./conversation-archives";
 import { SqliteMemory } from "./sqlite-memory";
+import { readInterchange } from "./interchange";
+import { cleanVaultRestoreApprovalSnapshot, cleanVaultRestoreCoordinationDigest, restoreCleanEncryptedVault } from "./encrypted-vault-restore";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); });
@@ -28,6 +30,26 @@ function manifest(content: string, title = "Project transcript") {
   return { title, bytes: Buffer.byteLength(content), sha256: createHash("sha256").update(content).digest("hex") };
 }
 
+test("Archive writes join the encrypted broker transaction and roll back with its audit failure", () => {
+  const { archives, database } = fixture(true);
+  let id = "";
+  expect(() => database.transaction(() => {
+    id = archives.beginInCurrentTransaction(manifest("transaction canary")).id;
+    archives.appendInCurrentTransaction(id, 0, ["transaction canary"]);
+    archives.completeInCurrentTransaction(id);
+    expect(archives.search("canary")).toHaveLength(1);
+    throw new Error("audit commit failed");
+  })()).toThrow("audit commit failed");
+  expect(() => archives.status(id)).toThrow("not found");
+  expect(archives.search("canary")).toEqual([]);
+  database.transaction(() => {
+    id = archives.beginInCurrentTransaction(manifest("transaction canary")).id;
+    archives.appendInCurrentTransaction(id, 0, ["transaction canary"]);
+    archives.completeInCurrentTransaction(id);
+  })();
+  expect(archives.read(id).passages[0]!.text).toBe("transaction canary");
+});
+
 test("an explicitly imported transcript becomes one readable Archive without changing its text", () => {
   const { archives } = fixture();
   const transcript = "Owner: keep this exact.\r\nAssistant: understood 🧭\n";
@@ -41,6 +63,49 @@ test("an explicitly imported transcript becomes one readable Archive without cha
   expect(archives.read(started.id, 0, 8)).toEqual({
     passages: [{ archiveId: started.id, index: 0, text: transcript }], nextIndex: null,
   });
+});
+
+test("owners page through all ready Archives separately from resumable imports", () => {
+  const { archives } = fixture();
+  const ids: string[] = [];
+  for (let index = 0; index < 23; index++) {
+    const archive = archives.begin(manifest("page canary", `Transcript ${index}`));
+    archives.append(archive.id, 0, ["page canary"]);
+    archives.complete(archive.id);
+    ids.push(archive.id);
+  }
+  const pending = archives.begin(manifest("unfinished"));
+  const first = archives.listPage({ limit: 20 });
+  expect(first.archives).toHaveLength(20);
+  expect(first.next).not.toBeNull();
+  const second = archives.listPage({ after: first.next!, limit: 20 });
+  expect(second.archives).toHaveLength(3);
+  expect(second.next).toBeNull();
+  expect([...first.archives, ...second.archives].map((archive) => archive.id).sort()).toEqual(ids.sort());
+  expect(archives.listPage({ state: "importing" }).archives.map((archive) => archive.id)).toEqual([pending.id]);
+  for (const limit of [0, 21, NaN, 1.5]) expect(() => archives.listPage({ limit })).toThrow();
+});
+
+test("approved deletion can join an audit transaction and removes ready text and search together", () => {
+  const { archives, database } = fixture(true);
+  const archive = archives.begin(manifest("removal canary"));
+  archives.append(archive.id, 0, ["removal canary"]);
+  archives.complete(archive.id);
+  expect(() => database.transaction(() => {
+    archives.deleteInCurrentTransaction(archive.id);
+    expect(archives.search("removal")).toEqual([]);
+    throw new Error("audit failed");
+  })()).toThrow("audit failed");
+  expect(archives.read(archive.id).passages[0]!.text).toBe("removal canary");
+  expect(archives.search("removal")).toHaveLength(1);
+  database.transaction(() => archives.deleteInCurrentTransaction(archive.id))();
+  expect(() => archives.read(archive.id)).toThrow("not found");
+  expect(archives.search("removal")).toEqual([]);
+  expect(archives.list()).toEqual([]);
+  expect(archives.delete(archive.id)).toBe(false);
+  const pending = archives.begin(manifest("pending"));
+  expect(() => archives.delete(pending.id)).toThrow("incomplete");
+  expect(archives.status(pending.id).state).toBe("importing");
 });
 
 test("imports and reads reject oversized or malformed input before saving any of that batch", () => {
@@ -143,20 +208,92 @@ test("search returns cited Passages, excludes partial imports, and bounds excerp
   expect(() => archives.search('" OR (DROP TABLE notes)')).not.toThrow();
 });
 
-test("the notes-only backup format cannot silently omit an Archive", () => {
+test("Vault backups round-trip completed and paused Archives alongside Notes", async () => {
   const { path, key, archives } = fixture(true);
   const vault = { vaultId: "a".repeat(64), deployment: "local" as const };
   const memory = new SqliteMemory(path, vault, { encryptionKey: key });
   const destination = path + ".export.json";
   try {
+    await memory.remember(vault, { content: "ordinary note" });
     const archive = archives.begin(manifest("private transcript"));
-    expect(() => memory.exportInterchange(vault, destination, "2.0.0-beta.5")).toThrow("Archives");
-    expect(existsSync(destination)).toBe(false);
     archives.append(archive.id, 0, ["private transcript"]);
     archives.complete(archive.id);
-    expect(() => memory.exportInterchange(vault, destination, "2.0.0-beta.5")).toThrow("Archives");
-    expect(existsSync(destination)).toBe(false);
+    const paused = archives.begin(manifest("first second"));
+    archives.append(paused.id, 0, ["first "]);
+    memory.exportInterchange(vault, destination, "2.0.0-beta.5");
+    expect(existsSync(destination)).toBe(true);
+    const restoredPath = path + ".restored";
+    SqliteMemory.restoreInterchange(destination, restoredPath, vault, "2.0.0-beta.5", { encryptionKey: key });
+    const restoredDatabase = openNoteDatabase(restoredPath, key, { create: false });
+    const restored = new ConversationArchives(restoredDatabase);
+    try {
+      expect(restored.status(archive.id)).toEqual(archives.status(archive.id));
+      expect(restored.read(archive.id).passages[0]!.text).toBe("private transcript");
+      expect(restored.search("private")[0]!.archiveId).toBe(archive.id);
+      expect(restored.status(paused.id)).toEqual(archives.status(paused.id));
+      restored.append(paused.id, 1, ["second"]);
+      restored.complete(paused.id);
+      expect(restored.read(paused.id).passages.map((p) => p.text).join("")).toBe("first second");
+    } finally { restored.close(); restoredDatabase.close(); }
   } finally { memory.close(); }
+});
+
+test("approved encrypted recovery verifies archive-inclusive backups after an interrupted candidate", () => {
+  const { path, key, archives } = fixture(true);
+  const vault = { vaultId: "b".repeat(64), deployment: "local" as const };
+  const memory = new SqliteMemory(path, vault, { encryptionKey: key });
+  const exportPath = path + ".json";
+  const destination = path + ".recovered";
+  const archive = archives.begin(manifest("recovery observatory canary"));
+  archives.append(archive.id, 0, ["recovery observatory canary"]);
+  archives.complete(archive.id);
+  try { memory.exportInterchange(vault, exportPath, "2.0.0-beta.5"); }
+  finally { memory.close(); }
+  const approvalSnapshot = cleanVaultRestoreApprovalSnapshot(exportPath, destination, "2.0.0-beta.5");
+  const options = { approvalSnapshot, coordinationDigest: cleanVaultRestoreCoordinationDigest(approvalSnapshot, destination, vault),
+    applicationVersion: "2.0.0-beta.5", databasePath: destination, key: key!, vault };
+  expect(() => restoreCleanEncryptedVault({ ...options, injectFault: (phase) => {
+    if (phase === "after_candidate_verified") throw new Error("interrupted candidate");
+  } })).toThrow("interrupted candidate");
+  expect(restoreCleanEncryptedVault({ ...options,
+    approvalSnapshot: cleanVaultRestoreApprovalSnapshot(exportPath, destination, "2.0.0-beta.5"),
+  })).toMatchObject({ auditComplete: false });
+  const restoredDatabase = openNoteDatabase(destination, key, { readonly: true });
+  const restored = new ConversationArchives(restoredDatabase);
+  try { expect(restored.read(archive.id).passages[0]!.text).toBe("recovery observatory canary"); }
+  finally { restored.close(); restoredDatabase.close(); }
+});
+
+test("tampered Archive backups fail before a destination Vault is created", () => {
+  const { path, key, archives } = fixture(true);
+  const vault = { vaultId: "c".repeat(64), deployment: "local" as const };
+  const memory = new SqliteMemory(path, vault, { encryptionKey: key });
+  const exportPath = path + ".json";
+  const archive = archives.begin(manifest("tamper canary"));
+  archives.append(archive.id, 0, ["tamper canary"]);
+  archives.complete(archive.id);
+  try { memory.exportInterchange(vault, exportPath, "2.0.0-beta.5"); }
+  finally { memory.close(); }
+  const original = readFileSync(exportPath, "utf8");
+  const mutations = [
+    (a: any) => { a.passages[0] = "different text"; },
+    (a: any) => { a.passageCount = 0; },
+    (a: any) => { a.state = "other"; },
+    (a: any) => { a.title = "changed title"; },
+    (a: any) => { a.extra = true; },
+    (a: any) => { a.expectedBytes = 67_108_865; },
+    (a: any) => { a.passages[0] = "\ud800"; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const changed = JSON.parse(original);
+    mutate(changed.archives[0]);
+    const changedPath = path + `.tampered-${index}.json`;
+    writeFileSync(changedPath, JSON.stringify(changed), { mode: 0o600 });
+    const destination = path + `.rejected-${index}`;
+    expect(() => readInterchange(changedPath, "2.0.0-beta.5")).toThrow();
+    expect(() => SqliteMemory.restoreInterchange(changedPath, destination, vault, "2.0.0-beta.5", { encryptionKey: key })).toThrow();
+    expect(existsSync(destination)).toBe(false);
+  }
 });
 
 test("tiny Passages cannot bypass the Vault-wide storage quota by creating unlimited rows", () => {

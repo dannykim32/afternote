@@ -21,12 +21,12 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import type { VaultContext } from "@afternote/memory";
 import {
-  AFTERNOTE_INTERCHANGE_FORMAT,
-  AFTERNOTE_INTERCHANGE_SCHEMA_VERSION,
+  interchangePayloadDigest,
   readInterchangeSnapshot,
 } from "./interchange";
 import { ExclusiveFileLock, SqlcipherDatabase } from "./sqlcipher-database";
 import { SqliteMemory } from "./sqlite-memory";
+import { ConversationArchives } from "./conversation-archives";
 
 export type CleanVaultRestoreFault =
   | "during_candidate"
@@ -771,8 +771,7 @@ function verifyEncryptedRestore(
       notes !== expectedNotes ||
       revisions !== expectedRevisions ||
       restoreAudit !== 1 ||
-      restoredPayloadSha256(database, sourceApplicationVersion) !==
-        expectedPayloadSha256
+      !restoredPayloadDigests(database, sourceApplicationVersion).includes(expectedPayloadSha256)
     ) {
       throw new Error("Restored vault failed recovery verification");
     }
@@ -781,10 +780,10 @@ function verifyEncryptedRestore(
   }
 }
 
-function restoredPayloadSha256(
+function restoredPayloadDigests(
   database: SqlcipherDatabase,
   sourceApplicationVersion: string,
-): string {
+): string[] {
   const noteRows = database.query<{
     id: string;
     current_revision: number;
@@ -816,12 +815,20 @@ function restoredPayloadSha256(
       createdAt: revision.created_at,
     })),
   }));
-  return createHash("sha256").update(JSON.stringify({
-    format: AFTERNOTE_INTERCHANGE_FORMAT,
-    schemaVersion: AFTERNOTE_INTERCHANGE_SCHEMA_VERSION,
-    applicationVersion: sourceApplicationVersion,
-    notes,
-  })).digest("hex");
+  const streamNotes = function* () {
+    for (const note of notes) yield { ...note, revisions: () => note.revisions };
+  };
+  const archives = new ConversationArchives(database as unknown as import("bun:sqlite").Database);
+  try {
+    const hasArchives = archives.listPage().archives.length > 0 ||
+      archives.listPage({ state: "importing" }).archives.length > 0;
+    const digests = [interchangePayloadDigest(streamNotes, sourceApplicationVersion,
+      () => archives.exportSnapshot()).payloadSha256];
+    // Historical authenticated restore markers omit the format version. A v1
+    // digest is eligible only when the candidate contains no Archive data.
+    if (!hasArchives) digests.push(interchangePayloadDigest(streamNotes, sourceApplicationVersion).payloadSha256);
+    return digests;
+  } finally { archives.close(); }
 }
 
 function canonicalSource(value: string | null): Record<string, string> | null {

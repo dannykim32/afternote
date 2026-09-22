@@ -376,7 +376,7 @@ describe("SqliteMemory interchange", () => {
     const future = JSON.parse(readFileSync(exportPath, "utf8")) as {
       schemaVersion: number;
     };
-    future.schemaVersion = 2;
+    (future as { schemaVersion: number }).schemaVersion = 3;
     writeFileSync(exportPath, `${JSON.stringify(future, null, 2)}\n`);
 
     expect(() =>
@@ -386,7 +386,7 @@ describe("SqliteMemory interchange", () => {
         localVault,
         "2.0.0-alpha.0",
       ),
-    ).toThrow("newer interchange schema version 2");
+    ).toThrow("newer interchange schema version 3");
     expect(existsSync(destinationPath)).toBe(false);
   });
 

@@ -3,18 +3,20 @@
 Status: implementation in progress. Not part of the published Beta 5 release.
 Review baseline: `a238c106eff79e9b2994c6c873a4877f250f01b9`.
 
-## Checkpoint 1
+## Current checkpoint
 
 Storage and the streaming file importer are implemented and exercised with
 synthetic encrypted Vaults. They are not wired to the CLI, MCP, or native app.
-Existing Note export fails closed when Archives exist until the next checkpoint
-adds an Archive-aware interchange format. No public build should enable import
-with that gate outstanding.
+Archive-inclusive backup and restore are now implemented at the storage seam.
+Notes-only exports remain schema 1; exports containing Archives use schema 2 and
+include paused imports. Both formats remain readable. Import must stay unavailable
+in a public build until the remaining broker, Connector and native app work passes.
 
-Still required: broker authorization/audit integration, transactional export and
-restore, approved deletion, Connector tools, the native viewer, and end-to-end
-lock/revoke tests. Connector archive-read permission policy is awaiting the Owner's
-choice; do not silently expand existing grants.
+Still required: broker authorization/audit integration, backup UI/protocol version
+reporting, approved deletion, Connector tools, the native viewer, and end-to-end
+lock/revoke tests. The Owner approved separate one-time archive-read authorization
+for each Connector. Existing Note permissions must not silently expand. Revoking
+a Connector removes its Archive permission along with its other access.
 
 ## Intent
 
@@ -68,6 +70,19 @@ its checkpoint remains hidden and resumable. Explicit discard calls `cancel()`
 to remove that incomplete Archive and its Passages. Invalid UTF-8 is rejected
 during initial verification, before a pending import is created.
 
+The broker uses the explicit `*InCurrentTransaction` methods so canonical mutations
+and its success audit commit or roll back together; ordinary storage callers use
+the transaction-owning methods. These methods do not grant authorization. Ready
+and importing Archives have separate bounded, keyset-paged listings. Completed
+Archive deletion requires fresh Owner approval at the broker, not at the store.
+
+Archive backups preserve IDs, timestamps, ordering and saved progress. Schema 2
+hashes the canonical Notes and Archives together, validates Archive bounds and
+completed-content hashes before restore, and rebuilds FTS in the unpublished
+encrypted candidate. The existing 256 MiB serialized backup ceiling still applies:
+oversized exports fail without publishing a partial backup. Backups are plaintext
+files explicitly exported by the Owner, like existing Note backups.
+
 ## Verification and release gates
 
 The Owner approved tests at transcript import/encrypted storage, authenticated
@@ -77,8 +92,9 @@ Unicode boundaries, export/restore, migration backups, and ordinary Note regress
 
 Delivery checkpoints: storage and streaming import; broker/CLI and backup lifecycle;
 Connector retrieval; native viewer and end-to-end verification. An internal
-checkpoint is not a shipped feature. No release, signing, publication, or production
-Vault modification is authorized by this implementation task.
+checkpoint is not a shipped feature. On 2026-09-22 the Owner authorized completion
+and a new public beta after verification. The dedicated release-account/host gate
+still applies; production Vault modification is not part of implementation tests.
 
 ## Later
 

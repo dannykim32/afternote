@@ -44,6 +44,7 @@ import {
   type VaultContext,
 } from "@afternote/memory";
 import type { Database, SQLQueryBindings } from "bun:sqlite";
+import { ConversationArchives } from "./conversation-archives";
 import {
   cosineSimilaritiesNative,
   SqlcipherDatabase,
@@ -2261,11 +2262,6 @@ export class SqliteMemory implements Memory {
     this.#assertVault(vault);
     assertCanContinue();
     this.#database.transaction(() => {
-      // Archive import is not exposed in this checkpoint. Keep the v1 backup
-      // path fail-closed until an Archive-aware export/restore format is wired.
-      if (this.#database.query("select 1 from conversation_archives limit 1").get()) {
-        throw new MemoryError("unsupported_capability", "This backup format cannot include Conversation Archives yet");
-      }
       const noteCount = this.#database
         .query<{ count: number }, []>("select count(*) as count from notes")
         .get()?.count ?? 0;
@@ -2317,14 +2313,35 @@ export class SqliteMemory implements Memory {
           };
         }
       };
-      writeInterchange(
+      const archives = new ConversationArchives(this.#database);
+      try {
+        const hasArchives = archives.listPage().archives.length > 0 ||
+          archives.listPage({ state: "importing" }).archives.length > 0;
+        const streamArchives = hasArchives ? function* () {
+          for (const archive of archives.exportSnapshot()) {
+            assertCanContinue();
+            yield { ...archive, passages: function* () {
+              for (const passage of archive.passages()) {
+                assertCanContinue();
+                yield passage;
+              }
+            } };
+          }
+        } : undefined;
+        writeInterchange(
         destinationPath,
         streamNotes,
         noteCount,
         revisionCount,
         applicationVersion,
         assertCanContinue,
+        streamArchives,
       );
+      } finally {
+        archives.close();
+        closePreparedStatement(noteStatement);
+        closePreparedStatement(revisionStatement);
+      }
     })();
   }
 
@@ -2407,6 +2424,12 @@ export class SqliteMemory implements Memory {
         encryptionKey: options.encryptionKey,
       });
       restored.#importInterchange(document.notes);
+      if (document.archives) {
+        const archives = new ConversationArchives(restored.#database);
+        try {
+          restored.#database.transaction(() => archives.restoreInCurrentTransaction(document.archives!))();
+        } finally { archives.close(); }
+      }
       restored.close();
       restored = undefined;
       const verification = openNoteDatabase(temporaryDatabasePath, options.encryptionKey, {
