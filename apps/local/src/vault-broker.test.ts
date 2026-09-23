@@ -13,6 +13,7 @@ import {
   VaultBrokerAuthorization,
   canonicalBrokerTranscript,
   type BrokerRequestEnvelope,
+  type BrokerCapability,
 } from "./vault-broker";
 import { SqlcipherDatabase } from "./sqlcipher-database";
 
@@ -28,6 +29,28 @@ afterEach(() => {
 });
 
 describe("VaultBrokerAuthorization", () => {
+  it("keeps Archives out of Note grants until separate approval and revokes both together", () => {
+    const { broker, owner } = brokerFixture();
+    const client = p256(), session = p256();
+    const paired = pair(broker, owner.privateKey, client.privateKey, {
+      publicKey: client.publicKey, requestedCapabilities: ["memory.recall"], forgetPolicy: "never",
+    });
+    const requested: BrokerCapability[] = ["memory.recall", "archive.search", "archive.read"];
+    const before = activate(broker, owner.privateKey, client.privateKey, session.privateKey, session.publicKey, paired, requested);
+    expect(before.capabilities).toEqual(["memory.recall"]);
+    const body = Buffer.from(JSON.stringify({ query: "canary", limit: 1 }));
+    expect(() => broker.authorize(envelope(broker, before, "archive.search", body, session.privateKey), body)).toThrow();
+    const target = broker.connectorRevocationTarget("codex");
+    broker.approveConnectorArchiveAccess(target);
+    expect(() => broker.approveConnectorArchiveAccess(target)).toThrow();
+    expect(() => broker.authorize(envelope(broker, before, "memory.recall", body, session.privateKey), body)).toThrow();
+    const after = activate(broker, owner.privateKey, client.privateKey, session.privateKey, session.publicKey, paired, requested);
+    expect(after.capabilities).toEqual(requested);
+    expect(broker.authorize(envelope(broker, after, "archive.search", body, session.privateKey), body).clientId).toBe(paired.clientId);
+    broker.revokeClient(paired.clientId);
+    expect(() => broker.authorize(envelope(broker, after, "archive.search", body, session.privateKey), body)).toThrow();
+  });
+
   it("pairs and activates an agent with exact non-destructive scope", () => {
     const fixture = brokerFixture();
     const client = p256();
@@ -1490,7 +1513,7 @@ function activate(
   sessionPrivateKey: string,
   sessionPublicKey: string,
   paired: { clientId: string; grantId: string },
-  requestedCapabilities: MemoryCapability[] = [
+  requestedCapabilities: BrokerCapability[] = [
     "memory.remember",
     "memory.recall",
     "memory.get_note",

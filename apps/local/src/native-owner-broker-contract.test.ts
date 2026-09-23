@@ -35,6 +35,26 @@ describeMacos("Foundation-only owner broker contract", () => {
   const epoch = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const nextEpoch = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
+  it("accepts bounded Archive pages and rejects inconsistent or oversized results", () => {
+    const archive = { id: epoch, title: "Transcript", state: "ready", expectedBytes: 5,
+      savedBytes: 5, passageCount: 1, sha256: "a".repeat(64), createdAt: "2026-09-23T00:00:00.000Z" };
+    for (const method of ["library.archive_begin", "library.archive_append", "library.archive_complete", "library.archive_status"]) {
+      expect(result(method, { archive })).toBe(true);
+      expect(result(method, { archive: { ...archive, savedBytes: 6 } })).toBe(false);
+      expect(result(method, { archive: { ...archive, title: "x".repeat(401) } })).toBe(false);
+      expect(result(method, { archive: { ...archive, sha256: "no" } })).toBe(false);
+    }
+    const passage = { archiveId: epoch, index: 0, text: "hello" };
+    expect(result("library.archive_read", { passages: [passage], nextIndex: null })).toBe(true);
+    expect(result("library.archive_read", { passages: Array(9).fill(passage), nextIndex: null })).toBe(false);
+    expect(result("library.archive_read", { passages: [{ ...passage, text: "x".repeat(16385) }], nextIndex: null })).toBe(false);
+    expect(result("library.archive_list", { archives: [archive], nextCursor: null })).toBe(true);
+    expect(result("library.archive_search", { results: [{ archiveId: epoch, index: 0, title: "Transcript", excerpt: "hello" }], searchMode: "exact" })).toBe(true);
+    expect(result("library.archive_search", { results: [], searchMode: "hybrid" })).toBe(false);
+    expect(result("library.archive_cancel", { discarded: true })).toBe(true);
+    expect(result("admin.archive_delete", { deleted: true })).toBe(true);
+  });
+
   it("binds results to a known method and rejects unexpected fields", () => {
     expect(result("library.browse", { notes: [], nextCursor: null })).toBe(true);
     expect(result("library.browse", { notes: [], nextCursor: null, secret: "unexpected" })).toBe(false);
@@ -63,6 +83,8 @@ describeMacos("Foundation-only owner broker contract", () => {
     const params = { format: "json", destination: "/tmp/export.json" };
     const exported = { exported: true, format: "afternote-vault-v1", destination: params.destination };
     expect(result("admin.export", exported, params)).toBe(true);
+    expect(result("admin.export", { ...exported, format: "afternote-vault-v2" }, params)).toBe(true);
+    expect(result("admin.export", { ...exported, format: "afternote-vault-v3" }, params)).toBe(false);
     expect(result("admin.export", exported, { ...params, destination: "/tmp/other.json" })).toBe(false);
     expect(result("admin.export", exported, { ...params, format: "markdown" })).toBe(false);
     const rotation = { kind: "claude-desktop", installIdentity: epoch, replacementInstallIdentity: nextEpoch };

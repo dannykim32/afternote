@@ -1,5 +1,5 @@
 const CODEX_MCP_SERVER_NAME = "afternote";
-const EXPECTED_CODEX_TOOLS = ["get_note", "recall", "remember"] as const;
+const EXPECTED_CODEX_TOOLS = ["get_note", "read_archive", "recall", "remember", "search_archives"] as const;
 const DEFAULT_STARTUP_TIMEOUT_MS = 10_000;
 const MAX_ERROR_CHARACTERS = 500;
 const MAX_INVENTORY_PAGES = 32;

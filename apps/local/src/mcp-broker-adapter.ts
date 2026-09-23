@@ -6,7 +6,7 @@ import {
   writeSync,
 } from "node:fs";
 import { isAbsolute } from "node:path";
-import { createAfternoteMcpServer } from "@afternote/mcp";
+import { createAfternoteMcpServer, type ArchiveReader, type ArchivePassagePage, type ArchiveSearchPage } from "@afternote/mcp";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
   MemoryError,
@@ -54,8 +54,8 @@ const MCP_CAPABILITIES: MemoryCapability[] = [
   "memory.get_note",
 ];
 
-type ActivatedBrokerMemory = Memory & { readonly vault: VaultContext };
-type BrokerOperation = "remember" | "recall" | "get_note";
+type ActivatedBrokerMemory = Memory & Partial<ArchiveReader> & { readonly vault: VaultContext };
+type BrokerOperation = "remember" | "recall" | "get_note" | "archive_search" | "archive_read";
 
 export type McpBrokerAcceptanceTraceEvent = {
   kind: "mcp-broker-activation" | "mcp-broker-operation";
@@ -66,7 +66,7 @@ export type McpBrokerAcceptanceTraceEvent = {
   durationMs: number;
 };
 
-export class DeferredVaultBrokerMemoryClient implements Memory {
+export class DeferredVaultBrokerMemoryClient implements Memory, ArchiveReader {
   readonly vault: VaultContext = {
     vaultId: "0".repeat(64),
     deployment: "local",
@@ -119,6 +119,20 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
 
   async forget(): Promise<boolean> {
     throw this.#unsupported();
+  }
+
+  async searchArchives(query: string, limit: number): Promise<ArchiveSearchPage> {
+    return this.#withReactivation("archive_search", (memory) => {
+      if (!memory.searchArchives) throw this.#unsupported();
+      return memory.searchArchives(query, limit);
+    });
+  }
+
+  async readArchive(id: string, startIndex: number, limit: number): Promise<ArchivePassagePage> {
+    return this.#withReactivation("archive_read", (memory) => {
+      if (!memory.readArchive) throw this.#unsupported();
+      return memory.readArchive(id, startIndex, limit);
+    });
   }
 
   async browseNotes(): Promise<BrowseNotesPage> {
@@ -235,6 +249,10 @@ export class DeferredVaultBrokerMemoryClient implements Memory {
   }
 
   #connectorAccessError(error: unknown): unknown {
+    if (error instanceof VaultBrokerRequestError && error.code === "denied" &&
+      /^Session does not grant archive\.(search|read)$/.test(error.message)) {
+      return new MemoryError("unauthorized", "Archive access requires separate approval. In Afternote Connections, choose Allow Archive access for this connector, then try again.");
+    }
     if (!this.#connectorKind || !connectorNeedsReconnect(error)) return error;
     const label = this.#connectorKind === "codex"
       ? "Codex"
@@ -281,6 +299,7 @@ export async function runBrokerMcpAdapter(
   );
   const server = await createAfternoteMcpServer(memory, memory.vault, {
     sourceApplication: connectorSourceApplication(kind),
+    archives: memory,
   });
   await serveStdio(() => server, {
     onerror(error) {

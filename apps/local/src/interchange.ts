@@ -22,9 +22,10 @@ import {
 } from "@afternote/memory";
 import { applicationMajor } from "./application-version";
 import { writeExclusivePrivateFile } from "./exclusive-export";
+import { archiveJson, validateInterchangeArchives, type InterchangeArchive, type StreamingInterchangeArchive } from "./archive-interchange";
 
 export const AFTERNOTE_INTERCHANGE_FORMAT = "afternote-vault";
-export const AFTERNOTE_INTERCHANGE_SCHEMA_VERSION = 1;
+export const AFTERNOTE_INTERCHANGE_SCHEMA_VERSION = 2;
 export const MAX_INTERCHANGE_BYTES = 256 * 1_024 * 1_024;
 export const MAX_INTERCHANGE_NOTES = 100_000;
 export const MAX_INTERCHANGE_REVISIONS = 500_000;
@@ -46,9 +47,10 @@ export type InterchangeManifest = {
 
 export type InterchangeDocument = {
   format: typeof AFTERNOTE_INTERCHANGE_FORMAT;
-  schemaVersion: typeof AFTERNOTE_INTERCHANGE_SCHEMA_VERSION;
+  schemaVersion: 1 | 2;
   applicationVersion: string;
   notes: InterchangeNote[];
+  archives?: InterchangeArchive[];
   manifest: InterchangeManifest;
 };
 
@@ -69,6 +71,7 @@ export function writeInterchange(
   expectedRevisionCount: number,
   applicationVersion: string,
   beforePublish: () => void = () => {},
+  archives?: () => Iterable<StreamingInterchangeArchive>,
 ): void {
   applicationMajor(applicationVersion);
   if (expectedNoteCount > MAX_INTERCHANGE_NOTES) {
@@ -79,7 +82,8 @@ export function writeInterchange(
       `Interchange cannot exceed ${MAX_INTERCHANGE_REVISIONS} revisions`,
     );
   }
-  const hashed = hashCanonicalCore(notes, applicationVersion);
+  const schemaVersion = archives ? 2 : 1;
+  const hashed = interchangePayloadDigest(notes, applicationVersion, archives);
   if (
     hashed.noteCount !== expectedNoteCount ||
     hashed.revisionCount !== expectedRevisionCount
@@ -96,7 +100,7 @@ export function writeInterchange(
       writeFileSync(descriptor, chunk);
     };
     write(`{\n  "format": ${JSON.stringify(AFTERNOTE_INTERCHANGE_FORMAT)},`);
-    write(`\n  "schemaVersion": ${AFTERNOTE_INTERCHANGE_SCHEMA_VERSION},`);
+    write(`\n  "schemaVersion": ${schemaVersion},`);
     write(`\n  "applicationVersion": ${JSON.stringify(applicationVersion)},`);
     write("\n  \"notes\": [");
     let noteIndex = 0;
@@ -107,7 +111,17 @@ export function writeInterchange(
       noteIndex += 1;
     }
     if (noteIndex > 0) write("\n  ");
-    write("],\n  \"manifest\": {\n    \"algorithm\": \"sha256\",");
+    write("]");
+    if (archives) {
+      write(',\n  "archives": [');
+      let archiveIndex = 0;
+      for (const archive of archives()) {
+        if (archiveIndex++ > 0) write(",");
+        for (const chunk of archiveJson(archive)) write(chunk);
+      }
+      write("]");
+    }
+    write(",\n  \"manifest\": {\n    \"algorithm\": \"sha256\",");
     write(`\n    "noteCount": ${expectedNoteCount},`);
     write(`\n    "revisionCount": ${expectedRevisionCount},`);
     write(`\n    "payloadSha256": ${JSON.stringify(hashed.payloadSha256)}`);
@@ -118,14 +132,15 @@ export function writeInterchange(
   }, beforePublish);
 }
 
-function hashCanonicalCore(
+export function interchangePayloadDigest(
   notes: () => Iterable<StreamingInterchangeNote>,
   applicationVersion: string,
+  archives?: () => Iterable<StreamingInterchangeArchive>,
 ): { payloadSha256: string; noteCount: number; revisionCount: number } {
   const hash = createHash("sha256");
   hash.update(
     `{"format":${JSON.stringify(AFTERNOTE_INTERCHANGE_FORMAT)},` +
-      `"schemaVersion":${AFTERNOTE_INTERCHANGE_SCHEMA_VERSION},` +
+      `"schemaVersion":${archives ? 2 : 1},` +
       `"applicationVersion":${JSON.stringify(applicationVersion)},"notes":[`,
   );
   let noteCount = 0;
@@ -154,7 +169,18 @@ function hashCanonicalCore(
     hash.update("]}");
     noteCount += 1;
   }
-  hash.update("]}");
+  hash.update("]");
+  if (archives) {
+    hash.update(',"archives":[');
+    let first = true;
+    for (const archive of archives()) {
+      if (!first) hash.update(",");
+      for (const chunk of archiveJson(archive)) hash.update(chunk);
+      first = false;
+    }
+    hash.update("]");
+  }
+  hash.update("}");
   return {
     payloadSha256: hash.digest("hex"),
     noteCount,
@@ -257,7 +283,8 @@ function parseInterchangeBytes(
   }
   assertExactObjectKeys(
     document,
-    ["format", "schemaVersion", "applicationVersion", "notes", "manifest"],
+    ["format", "schemaVersion", "applicationVersion", "notes", "manifest",
+      ...(document?.schemaVersion === 2 ? ["archives"] : [])],
     "Interchange",
   );
   if (document.format !== AFTERNOTE_INTERCHANGE_FORMAT) {
@@ -286,6 +313,7 @@ function parseInterchangeBytes(
   if (!Array.isArray(document.notes)) {
     throw new Error("Interchange notes must be an array");
   }
+  if (document.schemaVersion === 2) validateInterchangeArchives(document.archives);
   if (document.notes.length > MAX_INTERCHANGE_NOTES) {
     throw new Error(
       `Interchange cannot exceed ${MAX_INTERCHANGE_NOTES} notes`,
@@ -437,15 +465,17 @@ function parseInterchangeBytes(
   if (!/^[a-f0-9]{64}$/.test(document.manifest.payloadSha256)) {
     throw new Error("Interchange manifest checksum must be lowercase SHA-256");
   }
-  const core = {
-    format: document.format,
-    schemaVersion: document.schemaVersion,
-    applicationVersion: document.applicationVersion,
-    notes: canonicalizeNotes(document.notes),
+  const notes = function* () {
+    for (const note of canonicalizeNotes(document.notes)) {
+      yield { ...note, revisions: () => note.revisions };
+    }
   };
-  const expectedChecksum = createHash("sha256")
-    .update(JSON.stringify(core))
-    .digest("hex");
+  const archives = document.schemaVersion === 2 ? function* () {
+    for (const archive of [...document.archives!].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
+      yield { ...archive, passages: () => archive.passages };
+    }
+  } : undefined;
+  const expectedChecksum = interchangePayloadDigest(notes, document.applicationVersion, archives).payloadSha256;
   if (document.manifest?.payloadSha256 !== expectedChecksum) {
     throw new Error("Interchange checksum does not match its payload");
   }

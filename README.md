@@ -64,7 +64,24 @@ See [installation and connector setup](docs/GETTING_STARTED.md) for the full ste
 [release verification](docs/VERIFY_RELEASE.md) for checksums, and
 [beta readiness and limits](docs/BETA_READINESS.md) for what has been tested.
 
-## How it is put together
+## Large conversations: explicit Archives
+
+Available in the Beta 6 candidate; not included in the current Beta 5 download.
+
+For a transcript too large for a Note, open **Notes > Conversation Archives…** and
+import its UTF-8 text or Markdown file (up to 64 MiB). Afternote preserves the text
+in the encrypted Vault, with resumable imports and a paged, read-only viewer.
+Archive search matches exact words; semantic search still applies to Notes only.
+
+Each Connector needs separate **Allow Archive access** approval in Connections.
+Then `search_archives` finds excerpts and `read_archive` retrieves bounded pages.
+Afternote does not capture chats automatically or reconstruct missing history.
+The original file remains outside the Vault, and passages returned to an AI host
+may reach its provider. JSON Vault backups include Archives; Markdown exports do not.
+
+See the [Archive walkthrough and limits](docs/CONVERSATION_ARCHIVES.md#use).
+
+## Architecture
 
 ```text
 Codex / Claude Code / Claude Desktop

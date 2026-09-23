@@ -110,6 +110,8 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/product_surface_router.mm"),
       join(import.meta.dir, "../native/software_update.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
+      join(import.meta.dir, "../native/archive_import.mm"),
+      join(import.meta.dir, "../native/archive_window.mm"),
       join(import.meta.dir, "../native/owner_broker_contract.mm"),
       join(import.meta.dir, "../native/native_appearance.mm"),
       join(import.meta.dir, "../native/connections_view.mm"),
@@ -605,6 +607,8 @@ describeMacos("launchd-owned vault broker gateway", () => {
       join(import.meta.dir, "../native/product_surface_router.mm"),
       join(import.meta.dir, "../native/software_update.mm"),
       join(import.meta.dir, "../native/owner_control_app.mm"),
+      join(import.meta.dir, "../native/archive_import.mm"),
+      join(import.meta.dir, "../native/archive_window.mm"),
       join(import.meta.dir, "../native/owner_broker_contract.mm"),
       join(import.meta.dir, "../native/native_appearance.mm"),
       join(import.meta.dir, "../native/connections_view.mm"),
@@ -819,7 +823,7 @@ describeMacos("launchd-owned vault broker gateway", () => {
     await stdioClient.connect(stdioTransport);
     try {
       expect((await stdioClient.listTools()).tools.map((tool) => tool.name).sort())
-        .toEqual(["get_note", "recall", "remember"]);
+        .toEqual(["get_note", "read_archive", "recall", "remember", "search_archives"]);
       const remembered = await stdioClient.callTool({
         name: "remember",
         arguments: { content: "Complete stdio-to-broker trace: spruce-992." },
@@ -838,10 +842,30 @@ describeMacos("launchd-owned vault broker gateway", () => {
       await stdioClient.close();
     }
 
+    const transcriptPath = join(directory, "synthetic-transcript.txt");
+    const transcript = "Owner: archive boundary spruce canary.\n".repeat(20_000);
+    writeFileSync(transcriptPath, transcript, { mode: 0o600 });
+    const imported = Bun.spawnSync([ownerControlPath, "--admin-archive-import", transcriptPath, "XPC Archive", ""], { stdout: "pipe", stderr: "pipe" });
+    expect(imported.exitCode, imported.stderr.toString()).toBe(0);
+    const archive = JSON.parse(imported.stdout.toString()).archive;
+    expect(archive).toMatchObject({ state: "ready", savedBytes: Buffer.byteLength(transcript) });
+    const archiveClientOptions = { service, clientStatePath: join(directory, "codex-client.json"), signer, codeRequirement: gatewayCodeRequirement };
+    const beforeArchiveGrant = VaultBrokerMemoryClient.activate("codex", archiveClientOptions);
+    await expect(beforeArchiveGrant.readArchive(archive.id, 0, 2)).rejects.toThrow();
+    const granted = Bun.spawnSync([ownerControlPath, "--archive-grant-smoke"], { stdout: "pipe", stderr: "pipe" });
+    expect(granted.exitCode, granted.stderr.toString()).toBe(0);
+    const archiveClient = VaultBrokerMemoryClient.activate("codex", archiveClientOptions);
+    const archiveSearch = await archiveClient.searchArchives("spruce", 5);
+    expect(archiveSearch.results[0]?.archiveId).toBe(archive.id);
+    const archivePage = await archiveClient.readArchive(archive.id, 0, 2);
+    expect(archivePage.passages).toHaveLength(2);
+    expect(archivePage.nextIndex).toBe(2);
+    expect(archivePage.passages.map((p) => p.text).join("")).toBe(transcript.slice(0, archivePage.passages.map((p) => p.text).join("").length));
     const polling = Bun.spawnSync([ownerControlPath, "--owner-polling-smoke"], { stdout: "pipe", stderr: "pipe" });
     expect(polling.exitCode, polling.stderr.toString()).toBe(0);
     expect(JSON.parse(polling.stdout.toString())).toMatchObject({ polls: 2048, revokedAfterPolling: true });
     expect(polling.stdout.toString()).toContain("spruce-992");
+    await expect(archiveClient.readArchive(archive.id, 0, 2)).rejects.toThrow();
     expect(() => VaultBrokerMemoryClient.activate("codex", {
       service, clientStatePath: join(directory, "codex-client.json"), signer, codeRequirement: gatewayCodeRequirement,
     })).toThrow();

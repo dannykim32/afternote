@@ -21,12 +21,11 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import type { VaultContext } from "@afternote/memory";
 import {
-  AFTERNOTE_INTERCHANGE_FORMAT,
-  AFTERNOTE_INTERCHANGE_SCHEMA_VERSION,
   readInterchangeSnapshot,
 } from "./interchange";
 import { ExclusiveFileLock, SqlcipherDatabase } from "./sqlcipher-database";
 import { SqliteMemory } from "./sqlite-memory";
+import { restoredVaultPayloadDigests } from "./restored-vault-payload";
 
 export type CleanVaultRestoreFault =
   | "during_candidate"
@@ -45,6 +44,7 @@ type RestoreSourceIdentity = {
 };
 
 export type CleanVaultRestoreApprovalSnapshot = RestoreSourceIdentity & {
+  sourceSchemaVersion: 1 | 2;
   readiness: "clean" | "resumable";
   sourcePath: string;
   markerDigest: string | null;
@@ -135,6 +135,7 @@ export function cleanVaultRestoreApprovalSnapshot(
   }
   return {
     readiness: marker ? "resumable" : "clean",
+    sourceSchemaVersion: document.schemaVersion,
     sourcePath: resolvedSource,
     ...sourceIdentity,
     markerDigest: marker ? hashFile(markerPath) : null,
@@ -771,67 +772,13 @@ function verifyEncryptedRestore(
       notes !== expectedNotes ||
       revisions !== expectedRevisions ||
       restoreAudit !== 1 ||
-      restoredPayloadSha256(database, sourceApplicationVersion) !==
-        expectedPayloadSha256
+      !restoredVaultPayloadDigests(database, sourceApplicationVersion).includes(expectedPayloadSha256)
     ) {
       throw new Error("Restored vault failed recovery verification");
     }
   } finally {
     database.close();
   }
-}
-
-function restoredPayloadSha256(
-  database: SqlcipherDatabase,
-  sourceApplicationVersion: string,
-): string {
-  const noteRows = database.query<{
-    id: string;
-    current_revision: number;
-    created_at: string;
-    updated_at: string;
-  }, []>(
-    "select id, current_revision, created_at, updated_at from notes order by id asc",
-  ).all();
-  const revisionQuery = database.query<{
-    note_id: string;
-    revision: number;
-    content: string;
-    source_json: string | null;
-    created_at: string;
-  }, [string]>(
-    "select note_id, revision, content, source_json, created_at " +
-      "from note_revisions where note_id = ? order by revision asc",
-  );
-  const notes = noteRows.map((note) => ({
-    id: note.id,
-    currentRevision: note.current_revision,
-    createdAt: note.created_at,
-    updatedAt: note.updated_at,
-    revisions: revisionQuery.all(note.id).map((revision) => ({
-      noteId: revision.note_id,
-      revision: revision.revision,
-      content: revision.content,
-      source: canonicalSource(revision.source_json),
-      createdAt: revision.created_at,
-    })),
-  }));
-  return createHash("sha256").update(JSON.stringify({
-    format: AFTERNOTE_INTERCHANGE_FORMAT,
-    schemaVersion: AFTERNOTE_INTERCHANGE_SCHEMA_VERSION,
-    applicationVersion: sourceApplicationVersion,
-    notes,
-  })).digest("hex");
-}
-
-function canonicalSource(value: string | null): Record<string, string> | null {
-  if (!value) return null;
-  const source = JSON.parse(value) as Record<string, string>;
-  const canonical: Record<string, string> = {};
-  for (const key of ["application", "url", "author", "timestamp", "label"]) {
-    if (source[key] !== undefined) canonical[key] = source[key];
-  }
-  return Object.keys(canonical).length > 0 ? canonical : null;
 }
 
 function existingRegularFileDigest(path: string): string | null {

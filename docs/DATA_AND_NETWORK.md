@@ -7,7 +7,7 @@ vault, and Codex, Claude Code, and Claude Desktop connectors only.
 
 | Location | Contents | Uninstall behavior |
 | --- | --- | --- |
-| `~/.afternote/vault.db` | SQLCipher-encrypted notes, revisions, metadata, embeddings, grants, and audit records | Preserved so reinstall does not destroy notes |
+| `~/.afternote/vault.db` | SQLCipher-encrypted Notes, revisions, Archives, Passages, metadata, embeddings, grants, and audit records | Preserved so reinstall does not destroy saved content |
 | `~/.afternote/clients/` | Connector installation identifiers; no note text or private signing-key bytes | Preserved for reconnect after reinstall |
 | `~/.afternote/models/` | Search preference (`search.json`); developer builds may also cache explicitly installed models | Preserved |
 | `~/.afternote/.vault.db.afternote.lock` | Transient lifecycle lock containing process coordination state, not note text | Removed when the broker exits normally; stale locks are recovered safely |
@@ -25,6 +25,8 @@ Explicit JSON and Markdown exports are plaintext at the path the user selects. D
 contain coarse allowlisted status fields, not notes or queries. Migration can retain a
 plaintext source only when the owner explicitly chooses Keep or Move; deletion is normal
 filesystem unlinking, not a claim of forensic erasure on SSD storage or backups.
+Explicitly imported transcript files also remain at their original paths, outside the
+encrypted Vault. JSON backups include Archives and paused imports; Markdown is Notes-only.
 
 The data-protection Keychain stores the per-vault key under the worker's exact access group.
 Secure Enclave-backed connector signing keys use tags beginning
@@ -75,7 +77,7 @@ The developer-only `semantic install` command can still download pinned experime
 profiles when explicitly invoked; the app UI never invokes that command.
 
 Codex, Claude Code, and Claude Desktop are separate products with their own network and retention behavior.
-When one of those connectors calls Recall, Afternote returns the requested excerpts to that
+When one of those connectors calls Recall or separately approved Archive retrieval, Afternote returns the requested excerpts to that
 local host process. What the host sends to its model provider is governed by that provider,
 not by Afternote. Build and CI tooling separately queries `https://api.osv.dev` for dependency
 advisories; that code is not part of the installed application path.

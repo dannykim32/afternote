@@ -20,6 +20,24 @@ afterEach(() => {
 });
 
 describe("native owner administration broker protocol", () => {
+  it("requires separate fresh Owner presence for a Connector's Archive permission", async () => {
+    const { worker } = workerFixture();
+    const client = { connectionId: randomUUID(), peerPid: 52901 };
+    const owner = { connectionId: randomUUID(), peerPid: 52902 };
+    await pairMcpClient(worker, client, "claude-desktop", randomUUID());
+    const params = { kind: "claude-desktop" };
+    expect((await rawRequest(worker, client, "memory-client", "admin.approve_archive_access", params)).ok).toBe(false);
+    const denied = await beginOwnerRequest(worker, owner, "admin.approve_archive_access", params);
+    expect(denied.ownerPresenceChallenge.reason).toContain("Allow Claude Desktop to search and read Conversation Archives");
+    await completeOwnerPresence(worker, owner, denied.ownerPresenceChallenge.challengeId, "denied");
+    const before = await ownerRequest(worker, owner, "owner.connector_overview", {});
+    expect(before.connectors.find((c: any) => c.kind === "claude-desktop").activeScopes).not.toContain("archive.read");
+    expect(await ownerRequest(worker, owner, "admin.approve_archive_access", params, true))
+      .toEqual({ approved: true, kind: "claude-desktop" });
+    const after = await ownerRequest(worker, owner, "owner.connector_overview", {});
+    expect(after.connectors.find((c: any) => c.kind === "claude-desktop").activeScopes).toContain("archive.read");
+  });
+
   it("prepares an exact development MCP identity under fresh owner presence", async () => {
     const fixture = workerFixture();
     const clientConnection = { connectionId: randomUUID(), peerPid: 52001 };

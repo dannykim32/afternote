@@ -17,6 +17,8 @@ import {
 } from "@afternote/memory";
 import { z } from "zod/v4";
 import mcpPackage from "../package.json";
+import { registerArchiveTools, type ArchiveReader } from "./archive-tools";
+export type { ArchiveReader, ArchivePassagePage, ArchiveSearchPage } from "./archive-tools";
 
 const SourceContextSchema = z.object({
   application: boundedString(MAX_SOURCE_APPLICATION_CHARACTERS).optional(),
@@ -68,7 +70,7 @@ const CitationSchema = z.object({
 export async function createAfternoteMcpServer(
   memory: Memory,
   vault: VaultContext,
-  options: { sourceApplication?: string } = {},
+  options: { sourceApplication?: string; archives?: ArchiveReader } = {},
 ): Promise<McpServer> {
   const sourceApplication = options.sourceApplication === undefined
     ? undefined
@@ -103,6 +105,7 @@ export async function createAfternoteMcpServer(
         connectorBoundaryInstruction,
     },
   );
+  if (options.archives) registerArchiveTools(server, options.archives);
 
   if (granted.has("memory.remember")) server.registerTool(
     "remember",

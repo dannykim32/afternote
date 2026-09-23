@@ -92,6 +92,8 @@ BOOL IsAuditPrincipal(NSDictionary *event) {
         grantId == NSNull.null && sessionId == NSNull.null &&
         ([operation isEqualToString:@"audit.prune"] ||
          [operation isEqualToString:@"admin.export"] ||
+         [operation isEqualToString:@"admin.archive_delete"] ||
+         [operation isEqualToString:@"admin.approve_archive_access"] ||
          [operation isEqualToString:@"admin.diagnostics"] ||
          [operation isEqualToString:@"admin.telemetry.status"] ||
          [operation isEqualToString:@"admin.telemetry.enable"] ||
@@ -239,13 +241,63 @@ BOOL IsKnownBrokerError(NSDictionary *error) {
       [codes containsObject:error[@"code"]] && IsString(error[@"message"], 500, NO);
 }
 
+BOOL IsArchive(id value) {
+  if (![value isKindOfClass:[NSDictionary class]]) return NO;
+  NSDictionary *archive = value;
+  if (!ExactKeys(archive, @[ @"id", @"title", @"state", @"expectedBytes", @"sha256", @"savedBytes", @"passageCount", @"createdAt" ]) ||
+      !IsUUID(archive[@"id"]) || !IsString(archive[@"title"], 400, NO) ||
+      !IsOneOf(archive[@"state"], @[ @"importing", @"ready" ]) ||
+      !IsInteger(archive[@"expectedBytes"], 1, 64 * 1024 * 1024) ||
+      !IsInteger(archive[@"savedBytes"], 0, [archive[@"expectedBytes"] unsignedIntegerValue]) ||
+      !IsInteger(archive[@"passageCount"], 0, 32768) || !IsDate(archive[@"createdAt"]) ||
+      !IsString(archive[@"sha256"], 64, NO) || [archive[@"sha256"] length] != 64) return NO;
+  NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet];
+  if ([archive[@"sha256"] rangeOfCharacterFromSet:nonHex].location != NSNotFound) return NO;
+  return ![archive[@"state"] isEqual:@"ready"] ||
+      ([archive[@"savedBytes"] isEqual:archive[@"expectedBytes"]] && [archive[@"passageCount"] unsignedIntegerValue] > 0);
+}
+
+BOOL IsArchiveResult(NSString *method, NSDictionary *result) {
+  if ([@[ @"library.archive_begin", @"library.archive_append", @"library.archive_complete", @"library.archive_status" ] containsObject:method]) {
+    return ExactKeys(result, @[ @"archive" ]) && IsArchive(result[@"archive"]);
+  }
+  if ([method isEqual:@"library.archive_cancel"]) {
+    return ExactKeys(result, @[ @"discarded" ]) && IsBoolean(result[@"discarded"]);
+  }
+  if ([method isEqual:@"library.archive_list"]) {
+    return ExactKeys(result, @[ @"archives", @"nextCursor" ]) && IsCursor(result[@"nextCursor"]) &&
+        IsArrayOf(result[@"archives"], 20, ^BOOL(id item) { return IsArchive(item); });
+  }
+  if ([method isEqual:@"library.archive_read"]) {
+    return ExactKeys(result, @[ @"passages", @"nextIndex" ]) &&
+        (result[@"nextIndex"] == NSNull.null || IsInteger(result[@"nextIndex"], 1, 32767)) &&
+        IsArrayOf(result[@"passages"], 8, ^BOOL(id item) {
+          return [item isKindOfClass:[NSDictionary class]] && ExactKeys(item, @[ @"archiveId", @"index", @"text" ]) &&
+              IsUUID(item[@"archiveId"]) && IsInteger(item[@"index"], 0, 32767) && IsString(item[@"text"], 16384, NO);
+        });
+  }
+  if ([method isEqual:@"library.archive_search"]) {
+    return ExactKeys(result, @[ @"results", @"searchMode" ]) && [result[@"searchMode"] isEqual:@"exact"] &&
+        IsArrayOf(result[@"results"], 20, ^BOOL(id item) {
+          return [item isKindOfClass:[NSDictionary class]] && ExactKeys(item, @[ @"archiveId", @"index", @"title", @"excerpt" ]) &&
+              IsUUID(item[@"archiveId"]) && IsInteger(item[@"index"], 0, 32767) &&
+              IsString(item[@"title"], 400, NO) && IsString(item[@"excerpt"], 2048, NO);
+        });
+  }
+  return NO;
+}
+
 BOOL IsLibraryResult(NSString *method, NSDictionary *result) {
+  if ([method hasPrefix:@"library.archive_"]) return IsArchiveResult(method, result);
   if ([method isEqualToString:@"library.session.begin"]) {
     return ExactKeys(result, @[ @"sessionId", @"scopes", @"brokerBootId", @"vaultId", @"expiresAt", @"searchMode" ]) &&
         IsUUID(result[@"sessionId"]) && IsStringArrayFrom(result[@"scopes"], @[
           @"library.browse", @"library.search", @"library.get_note",
           @"library.list_revisions", @"library.inspect_source",
-          @"library.remember", @"library.update_note"
+          @"library.remember", @"library.update_note",
+          @"library.archive_begin", @"library.archive_append", @"library.archive_complete",
+          @"library.archive_cancel", @"library.archive_status", @"library.archive_list",
+          @"library.archive_read", @"library.archive_search"
         ], NO) &&
         IsUUID(result[@"brokerBootId"]) && IsString(result[@"vaultId"], 128, NO) &&
         IsDate(result[@"expiresAt"]) && IsSearchMode(result[@"searchMode"]);
@@ -350,7 +402,7 @@ BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params)
           IsNullableDate(client[@"revokedAt"]) && IsNullableDate(client[@"lastActivityAt"]) &&
           IsInteger(client[@"authorityRevision"], 1, NSUIntegerMax) &&
           IsStringArrayFrom(client[@"activeScopes"], @[
-            @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget"
+            @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget", @"archive.search", @"archive.read"
           ], YES) &&
           [summary isKindOfClass:[NSDictionary class]] &&
           ExactKeys(summary, @[ @"activeCount", @"latestStatus" ]) &&
@@ -363,7 +415,7 @@ BOOL IsOwnerResult(NSString *method, NSDictionary *result, NSDictionary *params)
       return ExactKeys(grant, @[ @"grantId", @"clientId", @"scopes", @"status", @"createdAt", @"expiresAt", @"revokedAt" ]) &&
           IsUUID(grant[@"grantId"]) && IsUUID(grant[@"clientId"]) &&
           IsStringArrayFrom(grant[@"scopes"], @[
-            @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget"
+            @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget", @"archive.search", @"archive.read"
           ], NO) &&
           IsOneOf(grant[@"status"], @[ @"active", @"revoked", @"expired" ]) &&
           IsDate(grant[@"createdAt"]) && IsNullableDate(grant[@"expiresAt"]) &&
@@ -522,15 +574,22 @@ BOOL IsDiagnosticResult(NSDictionary *result) {
 }
 
 BOOL IsAdminResult(NSString *method, NSDictionary *result, NSDictionary *params) {
+  if ([method isEqualToString:@"admin.approve_archive_access"]) {
+    return ExactKeys(result, @[ @"approved", @"kind" ]) && [result[@"approved"] isEqual:@YES] &&
+        IsOneOf(result[@"kind"], @[ @"codex", @"claude", @"claude-desktop" ]) && [result[@"kind"] isEqual:params[@"kind"]];
+  }
+  if ([method isEqualToString:@"admin.archive_delete"]) {
+    return ExactKeys(result, @[ @"deleted" ]) && IsBoolean(result[@"deleted"]);
+  }
   if ([method isEqualToString:@"admin.export"]) {
-    NSString *expectedFormat = [params[@"format"] isEqualToString:@"json"]
-        ? @"afternote-vault-v1"
+    NSArray *expectedFormats = [params[@"format"] isEqualToString:@"json"]
+        ? @[ @"afternote-vault-v1", @"afternote-vault-v2" ]
         : [params[@"format"] isEqualToString:@"markdown"]
-          ? @"afternote-markdown-v1" : nil;
+          ? @[ @"afternote-markdown-v1" ] : @[];
     return ExactKeys(result, @[ @"exported", @"destination", @"format" ]) &&
         [result[@"exported"] isEqual:@YES] && IsString(result[@"destination"], 4096, NO) &&
-        [result[@"destination"] isEqual:params[@"destination"]] && expectedFormat != nil &&
-        [result[@"format"] isEqual:expectedFormat];
+        [result[@"destination"] isEqual:params[@"destination"]] &&
+        IsOneOf(result[@"format"], expectedFormats);
   }
   if ([method isEqualToString:@"admin.diagnostics"]) return IsDiagnosticResult(result);
   if ([method isEqualToString:@"admin.prepare_client_rotation"] ||
@@ -576,7 +635,7 @@ BOOL IsRecoveryResult(NSString *method, NSDictionary *result) {
         [result[@"state"] isEqualToString:@"unlocked"] &&
         IsUUID(result[@"epoch"]) &&
         IsInteger(result[@"noteCount"], 0, NSUIntegerMax) &&
-        [result[@"format"] isEqualToString:@"afternote-vault-v1"];
+        IsOneOf(result[@"format"], @[ @"afternote-vault-v1", @"afternote-vault-v2" ]);
   }
   if (![method isEqualToString:@"recovery.migrate"] || !ExactKeys(result, @[
         @"migrated", @"state", @"epoch", @"encryptedRollbackCreated",

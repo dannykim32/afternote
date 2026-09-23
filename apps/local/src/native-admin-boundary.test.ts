@@ -153,7 +153,7 @@ describe("native owner administration production boundary", () => {
   });
 
   it("exposes owner-approved export and share-safe diagnostics in Settings", () => {
-    expect(nativeAppSource).toContain('buttonWithTitle:@"Export notes"');
+    expect(nativeAppSource).toContain('buttonWithTitle:@"Export Vault"');
     expect(nativeAppSource).toContain('action:@selector(exportNotes:)');
     expect(nativeAppSource).toContain('buttonWithTitle:@"Save diagnostics"');
     expect(nativeAppSource).toContain('action:@selector(saveDiagnostics:)');

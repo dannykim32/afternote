@@ -2,7 +2,7 @@
 
 ## Protected assets
 
-Afternote protects note content, note metadata, the SQLCipher key, connector grants, and
+Afternote protects Note and Archive content, metadata, the SQLCipher key, connector grants, and
 the integrity of installed release components. The primary boundary is the signed native
 gateway and its private worker. MCP clients do not receive the vault key or a database
 handle.
@@ -50,11 +50,21 @@ clients must not interpret it as system or developer instructions.
 
 ## Exports and restore
 
+Conversation Archives require explicit Owner-selected file import. The native Owner
+process verifies UTF-8 and SHA-256, then sends bounded text batches; neither Connectors
+nor the broker receive the source path. Incomplete imports are not readable by Connectors.
+Archive search/read require a separate fresh approval for each Connector, covering all
+completed Archives. Grant expansion invalidates existing sessions; revocation removes
+both Note and Archive grants. Transcript content is untrusted history, not instructions.
+The original file stays outside the encrypted Vault and is not deleted or encrypted by import.
+
 JSON exports and Markdown exports are plaintext. The JSON checksum is for corruption
 detection, not origin authentication. Restore is a deliberate owner action into a clean
 vault. It uses bounded stable-file reads, strict schema validation, duplicate-key rejection,
 transactional import, SQLCipher integrity checks, and an authenticated recovery marker.
 Do not restore a file whose provenance you do not trust.
+JSON schema 2 includes completed Archives and paused imports. Notes-only backups remain
+schema 1. Markdown exports contain current Notes only and cannot back up Archives.
 
 ## Threats outside the guarantee
 
@@ -70,7 +80,7 @@ Do not restore a file whose provenance you do not trust.
   session from an earlier broker boot, and using a restored grant still requires the matching
   connector signing identity and a new owner-authorized work session.
 - A compromised Codex, Claude Code, or Claude Desktop process can misuse the Remember/Recall scopes granted
-  to that connector during a live session.
+  to that connector during a live session, as well as Archive search/read if separately approved.
 - The MCP contract tells connectors to call Remember only for an explicit user request, but
   the broker cannot independently prove which natural-language instruction caused a signed
   host process to make a valid tool call.
@@ -91,7 +101,7 @@ Do not restore a file whose provenance you do not trust.
 
 ## Security status
 
-This is alpha software. It has automated security tests and internal adversarial review,
+This is beta software. It has automated security tests and internal adversarial review,
 but it is not represented as independently audited, appropriate for regulated data, or
 free of vulnerabilities. Use [SECURITY.md](../SECURITY.md) for private reporting.
 

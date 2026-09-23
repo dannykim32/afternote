@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { MemoryError } from "@afternote/memory";
 import { SqlcipherDatabase } from "./sqlcipher-database";
+import { CONVERSATION_ARCHIVE_SCHEMA } from "./conversation-archive-schema";
 
 type SchemaVersionRow = { user_version: number };
 
@@ -280,6 +281,7 @@ const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       on note_temporal_index (source_timestamp, note_revision, note_id);
     `,
   },
+  { version: 11, sql: CONVERSATION_ARCHIVE_SCHEMA },
 ] as const;
 
 const CURRENT_SCHEMA_VERSION = SCHEMA_MIGRATIONS.at(-1)?.version ?? 0;

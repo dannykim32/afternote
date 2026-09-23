@@ -111,6 +111,8 @@ function claudeDesktopManifest(packageVersion: string): Record<string, unknown> 
       { name: "remember", description: "Save a note to Afternote." },
       { name: "recall", description: "Recall relevant notes from Afternote." },
       { name: "get_note", description: "Read one Afternote note by ID." },
+      { name: "search_archives", description: "Search explicitly imported transcripts after separate Owner approval in Afternote Connections." },
+      { name: "read_archive", description: "Read a bounded page of transcript passages after separate Owner approval." },
     ],
   };
 }

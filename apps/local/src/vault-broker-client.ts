@@ -4,6 +4,8 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
+import type { ArchiveReader, ArchivePassagePage, ArchiveSearchPage } from "@afternote/mcp";
+import { ARCHIVE_CAPABILITIES, type BrokerCapability } from "./broker-capabilities";
 import { existsSync, lstatSync, readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -179,7 +181,7 @@ type ActivatedSession = {
   sessionId: string;
   clientId: string;
   grantId: string;
-  capabilities: MemoryCapability[];
+  capabilities: BrokerCapability[];
   forgetPolicy: "never" | "confirm_each" | "session";
   expiresAt: string;
   brokerBootId: string;
@@ -220,7 +222,7 @@ export function probeMcpClientIdentity(
   return { installIdentity, signingMode: signer.signingMode };
 }
 
-export class VaultBrokerMemoryClient implements Memory {
+export class VaultBrokerMemoryClient implements Memory, ArchiveReader {
   readonly vault: VaultContext;
   readonly #session: ActivatedSession;
   readonly #sessionPrivateKey: string;
@@ -305,7 +307,7 @@ export class VaultBrokerMemoryClient implements Memory {
       clientId: paired.clientId,
       grantId: paired.grantId,
       sessionPublicKey: ephemeral.publicKey,
-      requestedCapabilities,
+      requestedCapabilities: [...requestedCapabilities, ...ARCHIVE_CAPABILITIES],
       ttlMs: profile.sessionTtlMs,
     }, { service, codeRequirement: options?.codeRequirement }) as {
       activationId: string;
@@ -329,8 +331,12 @@ export class VaultBrokerMemoryClient implements Memory {
     }) as ActivatedSession;
     if (
       session.forgetPolicy !== "never" ||
+      !Array.isArray(session.capabilities) ||
+      session.capabilities.some((scope) => typeof scope !== "string") ||
       session.capabilities.includes("memory.forget") ||
-      session.capabilities.join("\n") !== requestedCapabilities.join("\n")
+      session.capabilities.filter((scope) => !scope.startsWith("archive.")).join("\n") !== requestedCapabilities.join("\n") ||
+      session.capabilities.some((scope) => ![...requestedCapabilities, ...ARCHIVE_CAPABILITIES].includes(scope)) ||
+      new Set(session.capabilities).size !== session.capabilities.length
     ) {
       throw new MemoryError("unauthorized", "Broker returned an invalid Memory grant");
     }
@@ -345,7 +351,15 @@ export class VaultBrokerMemoryClient implements Memory {
 
   async capabilities(vault: VaultContext): Promise<MemoryCapability[]> {
     this.#assertVault(vault);
-    return [...this.#session.capabilities];
+    return this.#session.capabilities.filter((scope): scope is MemoryCapability => scope.startsWith("memory."));
+  }
+
+  async searchArchives(query: string, limit: number): Promise<ArchiveSearchPage> {
+    return this.#execute(this.vault, "archive.search", { query, limit }) as ArchiveSearchPage;
+  }
+
+  async readArchive(id: string, startIndex: number, limit: number): Promise<ArchivePassagePage> {
+    return this.#execute(this.vault, "archive.read", { id, startIndex, limit }) as ArchivePassagePage;
   }
 
   async remember(vault: VaultContext, input: RememberInput): Promise<Note> {

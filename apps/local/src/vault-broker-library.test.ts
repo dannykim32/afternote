@@ -1,6 +1,6 @@
 import { nextOwnerSequence } from "./owner-request-test-support";
 /* eslint-disable @typescript-eslint/no-explicit-any -- public protocol fixtures decode JSON */
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +25,105 @@ afterEach(() => {
 });
 
 describe("native Library broker protocol", () => {
+  it("rolls back Archive mutations and deletion when terminal audit cannot commit", async () => {
+    const fixture = workerFixture();
+    const connection = { connectionId: randomUUID(), peerPid: 51905 };
+    await beginLibrarySession(fixture.worker, connection, [...LIBRARY_SCOPES]);
+    const text = "Archive terminal audit canary";
+    const manifest = { title: "Audit", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") };
+    const changeTrigger = (operation?: string) => {
+      const inspection = new SqlcipherDatabase(fixture.path, { key: fixture.key });
+      try {
+        inspection.exec("drop trigger if exists fail_archive_success_audit");
+        if (operation) inspection.exec(`create trigger fail_archive_success_audit before update on broker_audit_events
+          when new.operation = '${operation}' and new.outcome = 'success'
+          begin select raise(abort, 'forced archive audit failure'); end;`);
+      } finally { inspection.close(); }
+    };
+    changeTrigger("library.archive_begin");
+    expect(await rawOwnerRequest(fixture.worker, connection, "library.archive_begin", manifest))
+      .toMatchObject({ ok: false, error: { code: "audit_commit_failed" } });
+    changeTrigger();
+    expect((await ownerRequest(fixture.worker, connection, "library.archive_list", { state: "importing", cursor: null, limit: 20 })).archives).toEqual([]);
+    const { archive } = await ownerRequest(fixture.worker, connection, "library.archive_begin", manifest);
+    const append = { id: archive.id, startIndex: 0, passages: [text] };
+    changeTrigger("library.archive_append");
+    expect((await rawOwnerRequest(fixture.worker, connection, "library.archive_append", append)).ok).toBe(false);
+    expect((await ownerRequest(fixture.worker, connection, "library.archive_status", { id: archive.id })).archive.savedBytes).toBe(0);
+    changeTrigger();
+    await ownerRequest(fixture.worker, connection, "library.archive_append", append);
+    changeTrigger("library.archive_complete");
+    expect((await rawOwnerRequest(fixture.worker, connection, "library.archive_complete", { id: archive.id })).ok).toBe(false);
+    expect((await ownerRequest(fixture.worker, connection, "library.archive_status", { id: archive.id })).archive.state).toBe("importing");
+    changeTrigger();
+    await ownerRequest(fixture.worker, connection, "library.archive_complete", { id: archive.id });
+    changeTrigger("admin.archive_delete");
+    expect((await rawOwnerRequest(fixture.worker, connection, "admin.archive_delete", { id: archive.id }, true)).ok).toBe(false);
+    expect((await ownerRequest(fixture.worker, connection, "library.archive_read", { id: archive.id, startIndex: 0, limit: 1 })).passages[0].text).toBe(text);
+    expect(JSON.stringify(fixture.worker.readAuditForTest())).not.toContain(text);
+    changeTrigger();
+  });
+
+  it("requires fresh, single-use Owner approval to delete a completed Archive", async () => {
+    const { worker } = workerFixture();
+    const connection = { connectionId: randomUUID(), peerPid: 51903 };
+    await beginLibrarySession(worker, connection, [...LIBRARY_SCOPES]);
+    const text = "Archive deletion canary";
+    const { archive } = await ownerRequest(worker, connection, "library.archive_begin", {
+      title: "Deletion canary", bytes: Buffer.byteLength(text),
+      sha256: createHash("sha256").update(text).digest("hex"),
+    });
+    await ownerRequest(worker, connection, "library.archive_append", { id: archive.id, startIndex: 0, passages: [text] });
+    await ownerRequest(worker, connection, "library.archive_complete", { id: archive.id });
+    const denied = await beginOwnerRequest(worker, connection, "admin.archive_delete", { id: archive.id });
+    expect(denied.ownerPresenceChallenge.reason).toContain("Delete this Conversation Archive");
+    await completeOwnerPresence(worker, connection, denied.ownerPresenceChallenge.challengeId, "denied");
+    expect((await ownerRequest(worker, connection, "library.archive_status", { id: archive.id })).archive.state).toBe("ready");
+    const pending = await beginOwnerRequest(worker, connection, "admin.archive_delete", { id: archive.id });
+    expect(await completeOwnerPresence(worker, connection, pending.ownerPresenceChallenge.challengeId, "approved"))
+      .toMatchObject({ ok: true, result: { deleted: true } });
+    expect((await completeOwnerPresence(worker, connection, pending.ownerPresenceChallenge.challengeId, "approved")).ok).toBe(false);
+    expect((await rawOwnerRequest(worker, connection, "library.archive_status", { id: archive.id })).ok).toBe(false);
+  });
+
+  it("reports the archive-inclusive backup format through the Owner protocol", async () => {
+    const { worker, path } = workerFixture({ applicationVersion: "2.0.0-test" });
+    const connection = { connectionId: randomUUID(), peerPid: 51904 };
+    await beginLibrarySession(worker, connection, ["library.archive_begin"]);
+    const text = "Paused archive backup";
+    await ownerRequest(worker, connection, "library.archive_begin", {
+      title: "Paused", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex"),
+    });
+    const destination = `${path}.archive-backup.json`;
+    expect(await ownerRequest(worker, connection, "admin.export", { destination, format: "json" }, true))
+      .toMatchObject({ exported: true, format: "afternote-vault-v2" });
+    expect(JSON.parse(readFileSync(destination, "utf8")).schemaVersion).toBe(2);
+  });
+
+  it("imports and reads an Archive only through approved Owner scopes and stops access on lock", async () => {
+    const { worker } = workerFixture();
+    const connection = { connectionId: randomUUID(), peerPid: 51901 };
+    const text = "Owner: observatory transcript canary 🧭\n";
+    const manifest = { title: "Observatory", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") };
+    await beginLibrarySession(worker, connection, ["library.browse", "library.remember"]);
+    expect((await rawOwnerRequest(worker, connection, "library.archive_begin", manifest)).ok).toBe(false);
+    await beginLibrarySession(worker, connection, ["library.archive_begin", "library.archive_append",
+      "library.archive_complete", "library.archive_read", "library.archive_search", "library.archive_list"]);
+    const { archive } = await ownerRequest(worker, connection, "library.archive_begin", manifest);
+    await ownerRequest(worker, connection, "library.archive_append", { id: archive.id, startIndex: 0, passages: [text] });
+    expect((await rawOwnerRequest(worker, connection, "library.archive_read", { id: archive.id, startIndex: 0, limit: 1 })).ok).toBe(false);
+    await ownerRequest(worker, connection, "library.archive_complete", { id: archive.id });
+    expect(await ownerRequest(worker, connection, "library.archive_search", { query: "observatory", limit: 5 }))
+      .toMatchObject({ searchMode: "exact", results: [{ archiveId: archive.id, index: 0 }] });
+    expect(await ownerRequest(worker, connection, "library.archive_read", { id: archive.id, startIndex: 0, limit: 1 }))
+      .toMatchObject({ passages: [{ text }], nextIndex: null });
+    expect(await ownerRequest(worker, connection, "library.archive_list", { state: "ready", cursor: null, limit: 20 }))
+      .toMatchObject({ archives: [{ id: archive.id }], nextCursor: null });
+    expect((await rawRequest(worker, { connectionId: randomUUID(), peerPid: 51902 }, "memory-client",
+      "library.archive_read", { id: archive.id, startIndex: 0, limit: 1 })).ok).toBe(false);
+    await ownerRequest(worker, connection, "lifecycle.lock", {}, true);
+    expect((await rawOwnerRequest(worker, connection, "library.archive_read", { id: archive.id, startIndex: 0, limit: 1 })).ok).toBe(false);
+  });
   it("activates a newly installed model without reopening the vault or changing a note", async () => {
     const note = "The launch cannot proceed until the security review is approved.";
     const query = "What is preventing us from shipping?";
@@ -1005,6 +1104,7 @@ describe("native Library broker protocol", () => {
 });
 
 function workerFixture(options: {
+  applicationVersion?: string;
   now?: () => number;
   embeddingModel?: TextEmbeddingModel;
   embeddingModelProvider?: (vaultPath: string) => TextEmbeddingModel | null;
@@ -1026,7 +1126,7 @@ function workerFixture(options: {
   const key = randomBytes(32);
   const vault: VaultContext = { vaultId: "9".repeat(64), deployment: "local" };
   const worker = new VaultBrokerWorker({
-    applicationVersion: "test-worker",
+    applicationVersion: options.applicationVersion ?? "test-worker",
     vaultPath: path,
     vaultKey: key,
     vault,

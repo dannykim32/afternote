@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   manageCodexIntegration,
   parseCodexIntegrationAction,
@@ -82,6 +82,16 @@ export async function runLocalCli(
     case "export":
       await exportVault(requiredPath(args[1], "export destination"));
       return;
+    case "archive": {
+      if (args[1] !== "import" || args.length < 3 || args.length > 5) {
+        throw new Error("Usage: afternote archive import <file> [title] [resume-archive-id]");
+      }
+      const path = requiredPath(args[2], "transcript file");
+      console.log(JSON.stringify(await runNativeAdminCommand([
+        "--admin-archive-import", path, args[3] ?? basename(path), args[4] ?? "",
+      ])));
+      return;
+    }
     case "export-markdown":
       await exportMarkdown(requiredPath(args[1], "Markdown export destination"));
       return;
@@ -502,6 +512,7 @@ function isReleaseArtifact(): boolean {
 
 export async function runNativeAdminCommand(
   args: ["--admin-diagnostics"] |
+    ["--admin-archive-import", string, string, string] |
     ["--admin-export", "json" | "markdown", string] |
     ["--admin-migrate", RecoveryCliPolicy, RecoveryCliPolicy] |
     ["--admin-restore", string] |
@@ -703,6 +714,8 @@ Commands:
                        Open Connections in the signed native Afternote app
   ui [--no-open]       Open Library in the signed native Afternote app
   export <path>       Create a lossless versioned JSON vault export
+  archive import <file> [title] [resume-archive-id]
+                      Import a UTF-8 transcript (up to 64 MiB) with Owner approval
   export-markdown <file>
                        Create a human-readable current-note Markdown export
   restore <path>      Restore a validated JSON export into a clean vault path

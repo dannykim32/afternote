@@ -5,8 +5,8 @@ import {
   randomUUID,
   verify,
 } from "node:crypto";
-import type { MemoryCapability } from "@afternote/memory";
-import { MEMORY_CAPABILITIES } from "@afternote/memory";
+import { BROKER_CAPABILITIES, ARCHIVE_CAPABILITIES, type BrokerCapability } from "./broker-capabilities";
+export type { BrokerCapability } from "./broker-capabilities";
 import { brokerClientDisplayLabel, type BrokerClientKind } from "./broker-client-kind";
 import {
   BrokerAuditReader,
@@ -47,9 +47,6 @@ const MAX_OWNER_RECORDS = 256;
 const MAX_PENDING_PAIRING_REQUESTS = 16;
 const MAX_RETAINED_PAIRING_REQUESTS = 1_000;
 const PAIRING_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
-
-export type BrokerCapability = MemoryCapability;
-const BROKER_CAPABILITIES: readonly BrokerCapability[] = MEMORY_CAPABILITIES;
 
 export type ForgetPolicy = "never" | "confirm_each" | "session";
 
@@ -359,6 +356,9 @@ export class VaultBrokerAuthorization {
       throw new Error("Revoked MCP client public keys cannot be paired again");
     }
     const capabilities = normalizeCapabilities(input.requestedCapabilities);
+    if (capabilities.some((scope) => scope.startsWith("archive."))) {
+      throw new Error("Archive access requires separate Owner approval after pairing");
+    }
     assertForgetPolicy(input.forgetPolicy);
     if (input.forgetPolicy !== "never" && !capabilities.includes("memory.forget")) {
       throw new Error("A non-never Forget policy requires memory.forget");
@@ -1409,6 +1409,29 @@ export class VaultBrokerAuthorization {
     this.recordAudit(authorization, outcome, [], errorCode);
   }
 
+  /** A destructive owner action and its terminal audit must commit together. */
+  executeNativeOwnerAdminMutation<Result>(operation: string, dispatch: () => Result): Result {
+    const authorization = this.#beginNativeOwnerAdminAudit(operation);
+    try {
+      return this.#database.transaction(() => {
+        const result = dispatch();
+        try {
+          this.recordAudit(authorization, "success", []);
+        } catch (error) {
+          throw new NativeLibraryAuditCommitError({ cause: error });
+        }
+        return result;
+      })();
+    } catch (error) {
+      try {
+        this.recordAudit(authorization, "error", [], "operation_failed");
+      } catch {
+        // Preserve the original failure; the destructive mutation rolled back.
+      }
+      throw error;
+    }
+  }
+
   #beginNativeLibraryAudit(
     sessionId: string,
     operation: string,
@@ -1441,7 +1464,7 @@ export class VaultBrokerAuthorization {
 
   #beginNativeOwnerAdminAudit(operation: string): BrokerAuditAuthorization {
     this.#assertOpen();
-    if (!/^(admin\.(export|diagnostics|prepare_client_rotation|prepare_connector_reconnect)|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
+    if (!/^(admin\.(export|archive_delete|approve_archive_access|diagnostics|prepare_client_rotation|prepare_connector_reconnect)|lifecycle\.(lock|unlock)|recovery\.(migrate|restore))$/.test(operation)) {
       throw new Error("Native owner administration operation is invalid");
     }
     const authorization: BrokerAuditAuthorization = {
@@ -1842,6 +1865,34 @@ export class VaultBrokerAuthorization {
       displayLabel: brokerClientDisplayLabel(kind),
       clients,
     };
+  }
+
+  /** Called only after fresh Owner presence; exact pre-approval authority is rechecked. */
+  approveConnectorArchiveAccess(expected: OwnerConnectorRevocationTarget): void {
+    if (!isMcpClientKind(expected.kind)) throw new Error("Archive approval requires a Connector");
+    this.executeNativeOwnerAdminMutation("admin.approve_archive_access", () => {
+      const current = this.connectorRevocationTarget(expected.kind);
+      if (canonicalBrokerTranscript(current) !== canonicalBrokerTranscript(expected)) {
+        throw new Error("Connector authority changed after Archive approval");
+      }
+      for (const client of current.clients) {
+        const grants = this.#database.query<{ id: string; capabilities: string }, [string, string]>(`
+          select id, capabilities from broker_grants where client_id = ? and status = 'active'
+            and (expires_at is null or expires_at > ?)
+        `).all(client.clientId, new Date(this.#now()).toISOString());
+        if (grants.length === 0) throw new Error("Connector has no live grant");
+        for (const grant of grants) {
+          const scopes = normalizeCapabilities([...parseCapabilities(grant.capabilities), ...ARCHIVE_CAPABILITIES]);
+          this.#database.query("update broker_grants set capabilities = ? where id = ?")
+            .run(JSON.stringify(scopes), grant.id);
+        }
+        this.#database.query("update broker_clients set authority_revision = authority_revision + 1 where id = ?")
+          .run(client.clientId);
+        // Existing sessions do not gain scopes. Their next request must activate again.
+        this.#database.query("update broker_sessions set status = 'disconnected' where client_id = ? and status in ('active', 'pending')")
+          .run(client.clientId);
+      }
+    });
   }
 
   clientRotationTarget(
@@ -3007,6 +3058,8 @@ function operationCapability(operation: string): BrokerCapability {
     case "memory.recall": return "memory.recall";
     case "memory.get_note": return "memory.get_note";
     case "memory.forget": return "memory.forget";
+    case "archive.search": return "archive.search";
+    case "archive.read": return "archive.read";
     default: throw new Error("Operation is not authorized by a Memory grant");
   }
 }
@@ -3021,6 +3074,7 @@ function assertTrustedMcpCapabilities(row: ActivationRow): void {
     "memory.remember",
     "memory.recall",
     "memory.get_note",
+    ...ARCHIVE_CAPABILITIES,
   ];
   if (
     row.forget_policy !== "never" ||

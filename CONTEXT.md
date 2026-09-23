@@ -13,8 +13,17 @@ An immutable historical version of a Note. Exactly one Revision is current at a 
 _Avoid_: Edit, snapshot
 
 **Vault**:
-The encrypted collection containing Notes, Revisions, authorization records, and rebuildable indexes on one Mac.
+The encrypted collection containing Notes, Revisions, Archives, authorization records, and rebuildable indexes on one Mac.
 _Avoid_: Account, workspace, database
+
+**Archive**:
+One immutable transcript explicitly imported from a real UTF-8 file. A paused import is not searchable or readable by Connectors.
+
+**Passage**:
+A bounded, ordered part of an Archive. Concatenating all Passages preserves the transcript bytes; page indexes provide citations.
+
+**Archive access**:
+A separate Owner-approved grant allowing one Connector to search and read all completed Archives. Ordinary Note permission does not include it.
 
 **Owner**:
 The person whose macOS presence authorizes privileged Vault operations.
