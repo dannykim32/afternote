@@ -128,6 +128,15 @@ dedicated release-account/host requirement. All verification, signing and
 notarization gates remain enabled. Production Vault modification is not part of
 implementation tests.
 
+## Upgrade and downgrade
+
+Beta 6 migrates the encrypted Vault to schema 11 after verifying a pre-migration
+backup. Beta 5 rejects this newer schema; changing the installed app back does
+not downgrade data. Export a private JSON backup before upgrading. An export
+containing Archives uses schema 2 and requires an Archive-capable version to
+restore it. Retain original transcripts and do not remove Vault or Keychain data
+as a downgrade workaround. See the [acceptance walkthrough](CONVERSATION_ARCHIVES_ACCEPTANCE.md).
+
 ## Later
 
 Provider-specific structured exports, connector-driven capture, attachments,

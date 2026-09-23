@@ -6,6 +6,13 @@ checks, not results. Complete the install/upgrade/lifecycle checks in
 [VERIFY_RELEASE.md](VERIFY_RELEASE.md) as well. Keep the current Vault's JSON
 backup before upgrading; that backup is plaintext and must be stored privately.
 
+Beta 6 advances the Vault to schema 11. Beta 5 cannot open that newer schema or
+restore an Archive-inclusive schema-2 export. Replacing the app with Beta 5 is
+not a data downgrade. Keep the pre-upgrade export and original transcript files;
+test older-version recovery only on a disposable account with the corresponding
+older-format backup. Never delete the active Vault or its Keychain items to make
+a downgrade appear to work.
+
 ## Install and ordinary Notes
 
 1. Install/open the candidate. Confirm the app's `AfternotePackageVersion`,
