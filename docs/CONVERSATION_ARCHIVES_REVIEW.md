@@ -39,6 +39,18 @@ scope. Native layer-backed controls were not fully represented by the offscreen
 captures. Live keyboard/VoiceOver behavior and a complete visual pass are not
 established by those captures.
 
+## Restricted-build environment follow-up
+
+The clean-source release attempt exposed two pre-existing ambient-runtime
+assumptions: bare `tsc` required Node, and the fake Codex host's `env bun` launcher
+required Bun on PATH. Typecheck now uses the invoking pinned Bun executable; the
+test fixture uses a quoted absolute-runtime launcher. Release PATH and all
+readiness assertions remain unchanged. Both failures were reproduced before
+fixing them. The 18 focused checks pass under restricted PATH, including a fixture
+path containing spaces and an apostrophe. Independent review found no issue in
+either correction. The complete guarded build must still rerun from the clean
+corrected commit.
+
 ## Still required for distribution
 
 The clean-source guarded release build, final signature/notarization verification,

@@ -14,7 +14,7 @@ const TEST_STARTUP_TIMEOUT_MS = 5_000;
 
 describe("Codex-owned MCP readiness", () => {
   it("initializes an ephemeral Codex thread and discovers the exact Afternote tools", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "afternote-codex-readiness-"));
+    const directory = mkdtempSync(join(tmpdir(), "afternote's codex readiness-"));
     const command = join(directory, "codex");
     const logPath = join(directory, "requests.log");
     try {
@@ -23,6 +23,7 @@ describe("Codex-owned MCP readiness", () => {
         cwd: directory,
         env: {
           ...process.env,
+          PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
           AFTERNOTE_TEST_CODEX_LOG: logPath,
           AFTERNOTE_TEST_CODEX_MODE: "ready",
           AFTERNOTE_TEST_EXPECTED_CWD: directory,
@@ -305,7 +306,7 @@ describe("Codex-owned MCP readiness", () => {
     }
   });
 
-  it("fails closed when Codex discovers any tool set other than the expected three", async () => {
+  it("fails closed when Codex discovers a tool set other than the exact supported inventory", async () => {
     const directory = mkdtempSync(join(tmpdir(), "afternote-codex-readiness-"));
     const command = join(directory, "codex");
     try {
@@ -420,10 +421,14 @@ describe("Codex-owned MCP readiness", () => {
 });
 
 function writeFakeCodex(path: string): void {
+  const script = `${path}.ts`;
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  // The release PATH deliberately excludes ambient Bun/Node installations.
+  // A quoted launcher also supports a checkout or temporary path with spaces.
+  writeFileSync(path, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(script)} "$@"\n`, { mode: 0o755 });
   writeFileSync(
-    path,
-    `#!/usr/bin/env bun
-import { appendFileSync } from "node:fs";
+    script,
+    `import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const logPath = process.env.AFTERNOTE_TEST_CODEX_LOG;
