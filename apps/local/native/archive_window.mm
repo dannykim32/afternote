@@ -4,7 +4,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 // Operate/Read extension of the existing dark AppKit Notes surface: system type,
-// Capture Teal actions, aligned toolbars, a bounded transcript list and plain-text
+// neutral secondary actions, aligned toolbars, a bounded transcript list and plain-text
 // reader. Import is explicit; paused work is visible; lock clears every page.
 @interface ArchiveImportToken : NSObject
 @property(atomic) BOOL cancelled;
