@@ -64,8 +64,27 @@ review found no issue; the guarded build must rerun from this correction too.
 
 ## Still required for distribution
 
-The clean-source guarded release build, final signature/notarization verification,
-and the signed-artifact acceptance steps in [RELEASING.md](RELEASING.md) remain
-separate gates. Automated owner-presence fixtures are not physical Touch ID or
-real Codex/Claude host acceptance. Preserve the existing beta coverage caveats;
-do not report unperformed checks as passed.
+The guarded build of `b4d3d5cf71212704f04d1b99d611b4e310dafc33` passed:
+
+- Pinned native source/output hashes and bundled-model verification.
+- Typecheck and the default suite: 692 passed, 10 explicit opt-in skips, zero
+  failures (702 tests, 83 files, 8,147 assertions).
+- Native desktop gateway/restore (2 tests, 115 assertions) and bundled-model
+  desktop readiness (103 assertions).
+- Isolated 10,000-note performance, OSV audit of 97 locked packages, 19 package
+  lifecycle tests, and compiled offline semantic recall.
+- Release packaging with Developer ID hardened-runtime signatures, followed by
+  finalizer signature, entitlement, payload and provenance verification before
+  its notarization submission. GitHub CI passed on the same source commit.
+
+The release stopped at notarization: the configured credential profile was absent
+from this build host's Keychain. No credentials were changed. Existing release
+provisioning profiles passed preflight and the update-signing public key matched
+the source pin. The guarded command cleaned its temporary worktree; it did not
+produce a finalized DMG, upload a release, or update the appcast.
+
+An operator must restore notarization access, then rerun the guarded build and
+complete the signed-artifact acceptance steps in [RELEASING.md](RELEASING.md).
+Automated owner-presence fixtures are not physical Touch ID or real Codex/Claude
+host acceptance. The [manual walkthrough](CONVERSATION_ARCHIVES_ACCEPTANCE.md)
+is a checklist, not evidence that those checks have passed.
