@@ -3,7 +3,7 @@ import type { Database, SQLQueryBindings, Statement } from "bun:sqlite";
 import { MemoryError } from "@afternote/memory";
 import type { InterchangeArchive, StreamingInterchangeArchive } from "./archive-interchange";
 import { validateInterchangeArchives } from "./archive-interchange";
-import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH, validArchiveText } from "./conversation-archive-limits";
+import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH, MAX_VAULT_ARCHIVES, MAX_PENDING_ARCHIVES, MAX_VAULT_ARCHIVE_BYTES, validArchiveText } from "./conversation-archive-limits";
 export { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_ARCHIVE_BATCH } from "./conversation-archive-limits";
 
 export type ArchiveManifest = { title: string; bytes: number; sha256: string };
@@ -70,11 +70,11 @@ export class ConversationArchives {
     const pending = this.query<{ count: number }, []>(
       "select count(*) as count from conversation_archives where state = 'importing'",
     ).get()!.count;
-    if (pending >= 8) throw new MemoryError("rate_limited", "Finish or cancel pending Archive imports first");
+    if (pending >= MAX_PENDING_ARCHIVES) throw new MemoryError("rate_limited", "Finish or cancel pending Archive imports first");
     const used = this.query<{ bytes: number; count: number }, []>(
       "select coalesce(sum(expected_bytes), 0) as bytes, count(*) as count from conversation_archives",
     ).get()!;
-    if (used.bytes + manifest.bytes > 256 * 1024 * 1024 || used.count >= 4096) {
+    if (used.bytes + manifest.bytes > MAX_VAULT_ARCHIVE_BYTES || used.count >= MAX_VAULT_ARCHIVES) {
       throw new MemoryError("rate_limited", "Archive capacity for this Vault has been reached");
     }
     const id = randomUUID();

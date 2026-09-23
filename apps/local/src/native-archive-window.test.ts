@@ -18,7 +18,7 @@ import { describe, expect, it } from "bun:test";
       expect(run.exitCode, run.stderr.toString()).toBe(0);
       expect(JSON.parse(run.stdout.toString())).toEqual({
         staleListIgnored: true, boundedRead: true, readOnly: true, nextPage: true,
-        lockClears: true, boundedSearch: true, staleSearchIgnored: true, staleRowsCleared: true,
+        lockClears: true, boundedSearch: true, staleSearchIgnored: true, staleRowsCleared: true, narrowTextWraps: true,
       });
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30_000);

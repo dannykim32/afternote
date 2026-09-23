@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ConversationArchive } from "./conversation-archives";
-import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_VAULT_ARCHIVE_PASSAGES, validArchiveText } from "./conversation-archive-limits";
+import { MAX_ARCHIVE_BYTES, MAX_ARCHIVE_PASSAGES, MAX_PASSAGE_CHARACTERS, MAX_VAULT_ARCHIVE_PASSAGES, MAX_VAULT_ARCHIVES, MAX_PENDING_ARCHIVES, MAX_VAULT_ARCHIVE_BYTES, validArchiveText } from "./conversation-archive-limits";
 
 export type InterchangeArchive = ConversationArchive & { passages: string[] };
 export type StreamingInterchangeArchive = ConversationArchive & { passages: () => Iterable<string> };
@@ -21,7 +21,7 @@ export function* archiveJson(archive: StreamingInterchangeArchive): Iterable<str
 }
 
 export function validateInterchangeArchives(value: unknown): asserts value is InterchangeArchive[] {
-  if (!Array.isArray(value) || value.length > 4096) invalid();
+  if (!Array.isArray(value) || value.length > MAX_VAULT_ARCHIVES) invalid();
   const ids = new Set<string>();
   let reserved = 0;
   let totalPassages = 0;
@@ -43,7 +43,7 @@ export function validateInterchangeArchives(value: unknown): asserts value is In
     reserved += archive.expectedBytes;
     totalPassages += archive.passageCount;
     if (archive.state === "importing") pending++;
-    if (reserved > 256 * 1024 * 1024 || totalPassages > MAX_VAULT_ARCHIVE_PASSAGES || pending > 8) invalid();
+    if (reserved > MAX_VAULT_ARCHIVE_BYTES || totalPassages > MAX_VAULT_ARCHIVE_PASSAGES || pending > MAX_PENDING_ARCHIVES) invalid();
     let bytes = 0;
     const hash = createHash("sha256");
     for (const passage of archive.passages) {

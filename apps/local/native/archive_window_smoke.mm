@@ -48,6 +48,13 @@ int main(int argc, const char *argv[]) {
     Reply(read, page);
     NSTextView *reader = [window valueForKey:@"reader"];
     checks[@"readOnly"] = @(!reader.editable && !reader.richText && reader.string.length > 0);
+    [window.window setContentSize:NSMakeSize(820, 600)];
+    [window.window.contentView layoutSubtreeIfNeeded];
+    [reader.enclosingScrollView layoutSubtreeIfNeeded]; Drain();
+    [reader.layoutManager ensureLayoutForTextContainer:reader.textContainer];
+    CGFloat visibleWidth = reader.enclosingScrollView.contentSize.width;
+    checks[@"narrowTextWraps"] = @(visibleWidth > 300 &&
+      [reader.layoutManager usedRectForTextContainer:reader.textContainer].size.width <= visibleWidth - 20);
     if (argc == 2) {
       NSString *directory = [NSString stringWithUTF8String:argv[1]];
       for (NSNumber *width in @[ @820, @980, @1280 ]) {
