@@ -17,7 +17,7 @@
     "package:local": "\"$npm_execpath\" run scripts/build-local-alpha.ts",
     "finalize:release": "\"$npm_execpath\" run scripts/finalize-local-release.ts",
     "release:public": "\"$npm_execpath\" run scripts/build-public-release.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "\"$npm_execpath\" run node_modules/typescript/bin/tsc --noEmit",
     "test": "\"$npm_execpath\" run build:native && \"$npm_execpath\" test --timeout 15000 --max-concurrency 1 apps/local packages scripts",
     "test:desktop": "AFTERNOTE_TEST_HOST_LAUNCHD=1 \"$npm_execpath\" test apps/local/src/vault-broker-gateway.integration.test.ts --timeout 180000",
     "test:quality": "AFTERNOTE_RELEASE_QUALITY_GATE=1 \"$npm_execpath\" test apps/local/src/recall-eval.test.ts -t \"meets the isolated 10,000-note release performance gate\" --timeout 60000",

@@ -1,8 +1,20 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 import { PUBLIC_RELEASE_COMMANDS } from "./build-public-release";
+import { releaseCommandEnvironment } from "./release-environment";
 
 describe("public release command gates", () => {
+  it("type checks with the pinned Bun runtime without an ambient Node executable", () => {
+    const result = Bun.spawnSync([process.execPath, "run", "typecheck"], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      env: releaseCommandEnvironment({}),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+  }, 30_000);
+
   it("requires native XPC integration instead of accepting its default skip", () => {
     expect(PUBLIC_RELEASE_COMMANDS).toContainEqual({ args: ["run", "test:desktop"], phase: "quality" });
     expect(PUBLIC_RELEASE_COMMANDS).toContainEqual({ args: ["run", "test:desktop:semantic"], phase: "quality" });
