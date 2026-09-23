@@ -7,33 +7,22 @@ description: Implemented design of the native macOS Archive list and read-only p
 
 ## Overview
 
-This record applies only to `AfternoteArchiveWindow`, an Operate/Read extension of
-the existing dark AppKit Notes surface. It records the implementation; it does not
-establish or replace Afternote's global visual identity. The opening direction
-contract in [`archive_window.mm`](../../../apps/local/native/archive_window.mm)
-specifies system type, aligned toolbars, a bounded transcript list, and a
-plain-text reader. Import is explicit, paused work remains visible, and locking
-clears displayed Archive content.
-
-The implementation and
+This record covers only `AfternoteArchiveWindow`, an Operate/Read extension of the
+existing dark AppKit Notes surface. It does not replace the global visual identity.
+[`archive_window.mm`](../../../apps/local/native/archive_window.mm) and
 [`native_appearance.mm`](../../../apps/local/native/native_appearance.mm) are the
-visual sources of truth. [`CONVERSATION_ARCHIVES.md`](../../CONVERSATION_ARCHIVES.md)
-owns the product, storage, authorization, and release contracts. There is no
-project-wide `PRODUCT.md` or `DESIGN.md` to supersede.
+visual sources of truth; [`CONVERSATION_ARCHIVES.md`](../../CONVERSATION_ARCHIVES.md)
+owns function and release gates. Import is explicit, paused work stays visible,
+and locking clears displayed content.
 
-This is native extraction, not a web token conversion. AppKit font roles, sRGB
-components, and point measurements below retain their source semantics. No CSS
-font substitutes, synthesized color ramps, or browser component previews are
-specified; no `.impeccable/design.json` sidecar is generated.
+Native font roles, sRGB components, and point measurements retain their source
+semantics. No CSS substitutes or browser previews are invented; the web-oriented
+`.impeccable/design.json` sidecar is omitted.
 
 ## Colors
 
-The window explicitly uses `NSAppearanceNameDarkAqua`. Its canvas, list, and
-reader use `AfternoteCanvasColor`; ordinary text uses `AfternoteTextColor`, and
-description/status text uses `AfternoteMutedTextColor`.
-
-The following are native sRGB red/green/blue components with alpha 1, directly
-from the shared appearance implementation:
+The window forces `NSAppearanceNameDarkAqua`. Shared native sRGB red/green/blue
+components below all have alpha 1:
 
 | Native color | Components | Archive role |
 | --- | --- | --- |
@@ -50,8 +39,7 @@ deletion. This window does not assign Capture Teal to its actions.
 
 ## Typography
 
-All explicit font assignments use `NSFont` system fonts. Measurements are AppKit
-points, not CSS pixels; no fixed font-family name or scale ratio is prescribed.
+Explicit fonts use `NSFont` system fonts, measured in AppKit points.
 
 | Element | Size | Weight |
 | --- | --- | --- |
@@ -63,17 +51,15 @@ points, not CSS pixels; no fixed font-family name or scale ratio is prescribed.
 | Ordinary action buttons | 13 | Medium |
 | Delete/discard button | 13 | Semibold |
 
-Shared labels wrap by words. Archive rows override this with tail truncation and
-a maximum of three lines; the full summary is also their tooltip and
-accessibility label. The reader preserves transcript text without rich text,
-graphics import, or automatic link detection.
+Labels wrap by words; rows use three-line tail truncation with the full summary
+in their tooltip and accessibility label. Reader text is plain, with graphics
+import and automatic link detection disabled.
 
 ## Layout
 
-The resizable, titled window starts with a content rectangle of 980 by 720 points
-and sets `NSWindow.minSize` to 820 by 600. These are distinct AppKit properties;
-the minimum window size is not a guarantee of an identical content size. The
-window is centered and is not restorable.
+The centered, resizable window starts at 980 by 720 content points and sets
+`NSWindow.minSize` to 820 by 600 (a window size, not a content-size guarantee).
+Window restoration is disabled.
 
 A vertical stack places the heading, description, action row, status, filter row,
 list/reader body, and footer in that order. Insets are 28 points horizontally and
@@ -91,9 +77,8 @@ There is no compact single-column variant or mobile breakpoint in this surface.
 
 ## Elevation & Depth
 
-The archive surface uses a continuous dark canvas and brighter button fills with
-borders. The archive implementation adds no custom shadows, gradients, cards, or
-blur. Window chrome and native control rendering remain AppKit-owned.
+The continuous dark canvas uses brighter, bordered button fills. No custom
+shadows, gradients, cards, or blur are added. Chrome remains AppKit-owned.
 
 ## Shapes
 
@@ -105,12 +90,11 @@ selection, and scrollbars retain their native control shapes.
 
 ## Components
 
-The action row contains Import transcript, conditional Pause import, conditional
-Authenticate, and Refresh. The filter row combines Saved/Paused imports with an
-exact-word search field. The footer contains Next Archives, Resume with same
-file, and Delete Archive; selecting a paused import changes deletion to Discard
-paused import. Import and deletion use native sheets. Deletion's sheet explains
-that the original transcript file remains unchanged.
+Actions are Import transcript, conditional Pause import/Authenticate, and
+Refresh. Filters are Saved/Paused imports and exact-word search. The footer offers
+Next Archives, Resume with same file, and Delete Archive (Discard paused import
+for incomplete work). Import and deletion use native sheets; deletion explains
+that the source transcript stays unchanged.
 
 Ordinary buttons use the shared secondary style. Hover blends their raised fill
 8% toward white; pressing uses the surface fill. Disabled rendering reduces fill
@@ -129,16 +113,13 @@ Page labels show the one-based passage range and “Read only.” Loading replac
 the old label with “Loading passages…”; search resets it to “Select a matching
 passage,” and list/lock resets use “Select an Archive.”
 
-Loading disables row selection and actions that depend on a completed result.
-Refresh/search clear previous rows and reading state before requesting new data.
-Selection handlers also reject input while loading. Generation checks ignore
-late completions after newer operations or lock/close. Lock and close clear rows,
-selection, reader text and undo state, and the search query; an active import is
-paused. Errors clear plaintext and require authentication again.
+Loading disables row selection and dependent actions; selection handlers also
+reject input. Refresh/search clear old rows and reading state. Generation checks
+ignore stale completions. Lock/close clear rows, selection, reader/undo state, and
+query, and pause import. Errors clear plaintext and require authentication again.
 
-The implementation supplies accessibility labels for status, search, table,
-reader, and row summaries. These source assignments do not establish that actual
-VoiceOver navigation or announcements have been verified.
+Status, search, table, reader, and row summaries have accessibility labels.
+VoiceOver navigation and announcements have not been verified by source review.
 
 ## Do's and Don'ts
 
