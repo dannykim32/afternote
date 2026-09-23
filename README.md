@@ -66,6 +66,8 @@ See [installation and connector setup](docs/GETTING_STARTED.md) for the full ste
 
 ## Large conversations: explicit Archives
 
+Available in the Beta 6 candidate; not included in the current Beta 5 download.
+
 For a transcript too large for a Note, open **Notes > Conversation Archives…** and
 import its UTF-8 text or Markdown file (up to 64 MiB). Afternote preserves the text
 in the encrypted Vault, with resumable imports and a paged, read-only viewer.
