@@ -1366,7 +1366,7 @@ function requiredReleaseEnvironment(name: string): string {
   return value;
 }
 
-function readProvisioningProfile(
+export function readProvisioningProfile(
   profilePath: string,
   outputDirectory: string,
 ): unknown {
@@ -1401,7 +1401,7 @@ function readProvisioningProfile(
       throw new Error("Release provisioning profile could not be decoded");
     }
     const teamId = readPlistBuddyValue(decodedPath, ":TeamIdentifier:0");
-    const expirationDate = readPlistBuddyValue(decodedPath, ":ExpirationDate");
+    const expirationDate = readProvisioningExpirationDate(decodedPath);
     const applicationIdentifier = readPlistBuddyValue(
       decodedPath,
       ":Entitlements:com.apple.application-identifier",
@@ -1426,9 +1426,10 @@ function readProvisioningProfile(
       false,
     );
     const platforms = readPlistBuddyArray(decodedPath, ":Platform");
-    const certificateBase64 = readPlutilData(
+    const certificateBase64 = readPlutilValue(
       decodedPath,
       "DeveloperCertificates.0",
+      "data",
     );
     const certificatePath = join(
       outputDirectory,
@@ -1523,12 +1524,20 @@ function readPlistBuddyArray(path: string, key: string): string[] {
   return lines.slice(1, -1).filter(Boolean);
 }
 
-function readPlutilData(path: string, keyPath: string): string {
+export function readProvisioningExpirationDate(path: string): string {
+  // PlistBuddy renders local timezone abbreviations (for example WITA) that
+  // JavaScript Date cannot reliably parse. plutil emits dates as RFC3339 UTC.
+  return readPlutilValue(path, "ExpirationDate", "date");
+}
+
+function readPlutilValue(path: string, keyPath: string, type: "date" | "data"): string {
   const result = Bun.spawnSync([
     "/usr/bin/plutil",
     "-extract",
     keyPath,
     "raw",
+    "-expect",
+    type,
     "-o",
     "-",
     path,

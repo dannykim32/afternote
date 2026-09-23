@@ -51,6 +51,17 @@ path containing spaces and an apostrophe. Independent review found no issue in
 either correction. The complete guarded build must still rerun from the clean
 corrected commit.
 
+That corrected build passed 691 default tests, both desktop gateway/restore
+checks, bundled-model desktop readiness, the 10,000-note gate, the 97-package
+OSV audit, 19 package lifecycle tests and compiled offline semantic recall.
+Packaging then exposed a locale-dependent provisioning-date parser: PlistBuddy
+rendered a valid 2044 date with the `WITA` timezone, which JavaScript rejected.
+Typed `plutil` extraction now returns UTC RFC3339 instead. A regression reproduces
+the old failure and verifies future dates, expired dates, wrong plist types and
+malformed data. Both existing release profiles pass read-only preflight with the
+unchanged role and entitlement checks. No credentials were changed. Independent
+review found no issue; the guarded build must rerun from this correction too.
+
 ## Still required for distribution
 
 The clean-source guarded release build, final signature/notarization verification,
