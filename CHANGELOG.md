@@ -6,6 +6,33 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.6 - 2026-09-23
+
+### Added
+
+- Conversation Archives for explicitly imported UTF-8 text/Markdown transcripts,
+  up to 64 MiB per file. Imports stream in bounded, retry-safe batches and verify
+  the full content hash before becoming readable. Paused imports can be resumed
+  or discarded; the original file is never changed.
+- A native Archive list, exact passage search and paged read-only viewer, plus
+  `afternote archive import <file> [title] [resume-archive-id]` through the signed
+  Owner boundary. Lock, expiry and disconnection clear displayed transcript text.
+- Separately approved `search_archives` and `read_archive` connector tools.
+  Ordinary Note grants do not expand automatically. Approval covers all completed
+  Archives for that Connector; revocation removes both Note and Archive access.
+- Archive-inclusive JSON Vault backups and validated encrypted restore, including
+  paused imports. Markdown exports remain current-Notes-only. Completed Archive
+  deletion requires fresh Owner approval.
+
+### Limits
+
+- Archive retrieval is exact-word search, not semantic search. Notes retain the
+  existing local semantic engine and revision workflow.
+- Import requires an actual transcript file; this does not automatically capture
+  conversations or reconstruct chat history outside a model's current context.
+- Source files and exported JSON backups remain plaintext outside the Vault.
+  Passages read through a Connector may reach that AI provider.
+
 ## 2.0.0-beta.5 - 2026-09-17
 
 ### Fixed
