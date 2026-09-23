@@ -162,6 +162,7 @@ const SAFE_UNTYPED_PEER_ERRORS = new Set([
 
 const SAFE_UNTYPED_PEER_ERROR_PATTERNS = [
   /^Session does not grant memory\.(?:remember|recall|get_note|forget)$/,
+  /^Session does not grant archive\.(?:search|read)$/,
 ] as const;
 
 export function peerSafeErrorMessage(error: unknown): string {

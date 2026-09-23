@@ -224,6 +224,14 @@ constexpr CGFloat kConnectionColumnGap = 32;
     if (setup != nil) [connectionViews addObject:setup];
   }
   if (connected) {
+    if (row.canApproveArchives) {
+      NSButton *archives = [AfternoteButton buttonWithTitle:@"Allow Archive access"
+          target:self.actionTarget action:@selector(approveArchiveAccess:)];
+      AfternoteStyleSecondaryButton(archives);
+      archives.identifier = brokerKind;
+      archives.accessibilityLabel = [NSString stringWithFormat:@"Allow %@ to search and read Archives", displayName];
+      [connectionViews addObject:archives];
+    }
     NSButton *revoke = [AfternoteButton buttonWithTitle:@"Revoke access"
                                                    target:self.actionTarget
                                                    action:@selector(confirmRevocation:)];

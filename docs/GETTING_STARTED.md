@@ -96,13 +96,20 @@ Afternote; a disabled Install button is not a reason to bypass workplace policy.
 - Use **Notes** to browse, search, edit, and inspect revision history. An unchanged save
   does not create a revision.
 - Use **Settings** to change routine authentication, lock or unlock the vault, and export
-  notes. JSON exports preserve revisions; Markdown exports are for reading, not lossless
+  the Vault. JSON exports preserve revisions, Archives and paused imports; Markdown exports contain only current Notes and are for reading, not lossless
   restore. Exports are plaintext: store them somewhere private.
 - Use **Connections** to inspect connector activity and revoke access. Locking the vault
   blocks connector reads and writes; unlocking or starting a new work session can require
   fresh approval. Quitting the app alone is not the same as locking the vault.
 
-### If something goes wrong
+### Conversation Archives
+
+For larger transcripts, use **Notes > Conversation Archives… > Import transcript…**.
+Imports accept UTF-8 text/Markdown up to 64 MiB. The viewer supports pause/resume,
+exact passage search and bounded pages. Connectors require separate **Allow Archive
+access** approval in Connections. See the [full Archive walkthrough](CONVERSATION_ARCHIVES.md#use).
+
+### Troubleshooting
 
 Open **Settings > Save diagnostics** for a redacted diagnostic file, or run:
 
@@ -119,4 +126,3 @@ Report suspected vulnerabilities privately using [SECURITY.md](../SECURITY.md).
 If an upgrade reports a missing vault key or recovery error, stop and ask for help before
 changing the vault or any Keychain item. Reinstalling is not a substitute for recovering
 the installation-bound key.
-

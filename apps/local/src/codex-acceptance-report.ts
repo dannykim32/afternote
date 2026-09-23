@@ -339,7 +339,7 @@ function isBrokerTraceEvent(value: Record<string, unknown>): value is McpBrokerA
   return Object.keys(value).every((key) => allowedKeys.includes(key)) &&
     Object.keys(value).length === allowedKeys.length &&
     (value.kind === "mcp-broker-activation" || value.kind === "mcp-broker-operation") &&
-    (value.operation === "remember" || value.operation === "recall" || value.operation === "get_note") &&
+    (["remember", "recall", "get_note", "archive_search", "archive_read"].includes(value.operation as string)) &&
     (value.attempt === 1 || value.attempt === 2) &&
     typeof value.reactivation === "boolean" &&
     (value.outcome === "succeeded" ||

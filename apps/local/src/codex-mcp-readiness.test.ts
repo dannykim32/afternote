@@ -33,7 +33,7 @@ describe("Codex-owned MCP readiness", () => {
       expect(result).toEqual({
         healthy: true,
         state: "ready",
-        tools: ["get_note", "recall", "remember"],
+        tools: ["get_note", "read_archive", "recall", "remember", "search_archives"],
         startupMs: expect.any(Number),
         error: null,
       });
@@ -69,7 +69,7 @@ describe("Codex-owned MCP readiness", () => {
       expect(result).toMatchObject({
         healthy: true,
         state: "ready",
-        tools: ["get_note", "recall", "remember"],
+        tools: ["get_note", "read_archive", "recall", "remember", "search_archives"],
         error: null,
       });
       expect(result.startupMs).toBeGreaterThanOrEqual(200);
@@ -241,7 +241,7 @@ describe("Codex-owned MCP readiness", () => {
       expect(result).toMatchObject({
         healthy: true,
         state: "ready",
-        tools: ["get_note", "recall", "remember"],
+        tools: ["get_note", "read_archive", "recall", "remember", "search_archives"],
         error: null,
       });
       expect(result.startupMs).toBeGreaterThanOrEqual(200);
@@ -324,7 +324,7 @@ describe("Codex-owned MCP readiness", () => {
       expect(result).toMatchObject({
         healthy: false,
         state: "failed",
-        tools: ["forget", "recall", "remember"],
+        tools: ["forget", "read_archive", "recall", "remember", "search_archives"],
         error: { code: "unexpected_tools" },
       });
     } finally {
@@ -534,6 +534,8 @@ input.on("line", (line) => {
           runtimeStatus: "connected",
           tools: {
             remember: { name: "remember", inputSchema: {} },
+            search_archives: { name: "search_archives", inputSchema: {} },
+            read_archive: { name: "read_archive", inputSchema: {} },
             recall: { name: "recall", inputSchema: {} },
             [wrongTools ? "forget" : "get_note"]: {
               name: wrongTools ? "forget" : "get_note",

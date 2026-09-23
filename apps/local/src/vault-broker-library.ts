@@ -10,6 +10,9 @@ export const LIBRARY_SCOPES = [
   "library.inspect_source",
   "library.remember",
   "library.update_note",
+  "library.archive_begin", "library.archive_append", "library.archive_complete",
+  "library.archive_cancel", "library.archive_status", "library.archive_list",
+  "library.archive_search", "library.archive_read",
 ] as const;
 
 export type LibraryScope = (typeof LIBRARY_SCOPES)[number];
@@ -44,7 +47,7 @@ type CursorPayload = {
   protocolVersion: 1;
   brokerBootId: string;
   vaultId: string;
-  operation: "browse" | "search" | "revisions";
+  operation: "browse" | "search" | "revisions" | "archives";
   filterSha256: string;
   memoryCursor: string;
   expiresAt: string;

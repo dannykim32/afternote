@@ -14,6 +14,8 @@
 #import "note_editor_view.h"
 #import "notes_retrieval.h"
 #import "semantic_settings.h"
+#import "archive_window.h"
+#import "archive_import.h"
 #import "owner_broker.h"
 #import "owner_broker_contract.h"
 #import "product_surface_router.h"
@@ -249,6 +251,8 @@ NSString *ScopeLabel(NSString *scope) {
   if ([scope isEqualToString:@"memory.recall"]) return @"Recall";
   if ([scope isEqualToString:@"memory.get_note"]) return @"Read cited note";
   if ([scope isEqualToString:@"memory.forget"]) return @"Forget";
+  if ([scope isEqualToString:@"archive.search"]) return @"Search Archives";
+  if ([scope isEqualToString:@"archive.read"]) return @"Read Archive passages";
   return @"Unknown scope";
 }
 
@@ -392,6 +396,34 @@ BOOL ParseRecoveryPolicy(NSString *value, NSString **action, id *destination) {
 }
 
 int RunAdminCommand(int argc, const char *argv[]) {
+  if (argc == 5 && strcmp(argv[1], "--admin-archive-import") == 0) {
+    NSString *path = [NSString stringWithUTF8String:argv[2]];
+    NSString *title = [NSString stringWithUTF8String:argv[3]];
+    NSString *resume = [NSString stringWithUTF8String:argv[4]];
+    if (!path.isAbsolutePath || path.length > 4096 || title.length == 0 || title.length > 400 ||
+        (resume.length && [[NSUUID alloc] initWithUUIDString:resume] == nil)) return 64;
+    OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+    if (!broker) return 1;
+    AfternoteArchiveRequest request = ^NSDictionary *(NSString *method, NSDictionary *params, NSDictionary **error) {
+      NSDictionary *result = nil;
+      if (![broker requestSynchronouslyMethod:method params:params result:&result error:error]) {
+        *error = @{ @"code": @"timed_out", @"message": @"Archive import timed out. Resume the paused import with the same file." };
+        return nil;
+      }
+      return *error == nil ? result : nil;
+    };
+    NSDictionary *error = nil;
+    NSDictionary *opened = request(@"library.session.begin", @{ @"requestedScopes": @[
+      @"library.archive_begin", @"library.archive_append", @"library.archive_complete", @"library.archive_status"
+    ], @"ttlMs": @900000 }, &error);
+    NSDictionary *archive = opened ? AfternoteImportArchive(path, title, resume, request,
+        ^BOOL { return NO; }, nil, &error) : nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:archive ? @{ @"archive": archive } :
+        (error ?: @{ @"message": @"Archive import failed." }) options:0 error:nil];
+    if (data) fwrite(data.bytes, 1, data.length, archive ? stdout : stderr);
+    fputc('\n', archive ? stdout : stderr);
+    return archive ? 0 : 1;
+  }
   NSString *method = nil;
   NSDictionary *params = nil;
   if (argc == 4 && strcmp(argv[1], "--admin-export") == 0) {
@@ -716,6 +748,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 @property(nonatomic, strong) NSButton *memoryNavigationButton;
 @property(nonatomic, strong) NSButton *connectionsNavigationButton;
 @property(nonatomic, strong) AfternoteConnectionsView *connectionsView;
+@property(nonatomic, strong) AfternoteArchiveWindow *archiveWindow;
 @property(nonatomic, strong) AfternoteNoteEditorView *noteEditorView;
 @property(nonatomic, strong) AfternoteNotesRetrieval *notesRetrieval;
 @property(nonatomic, strong) NSStackView *setupContent;
@@ -1354,7 +1387,7 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   };
   NSTextField *vaultLocationState = [self label:@"Afternote-managed" size:12 weight:NSFontWeightMedium];
   vaultLocationState.textColor = AfternoteMutedTextColor();
-  NSButton *exportNotes = [AfternoteButton buttonWithTitle:@"Export notes"
+  NSButton *exportNotes = [AfternoteButton buttonWithTitle:@"Export Vault"
                                                     target:self
                                                     action:@selector(exportNotes:)];
   [self styleSecondaryButton:exportNotes];
@@ -1583,7 +1616,8 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
 - (void)exportNotes:(id)sender {
   (void)sender;
   NSSavePanel *panel = [NSSavePanel savePanel];
-  panel.title = @"Export Afternote notes";
+  panel.title = @"Export Afternote Vault";
+  panel.message = @"JSON includes Notes, revisions, Archives and paused imports. This backup is plaintext; choose a private destination.";
   panel.nameFieldStringValue = @"Afternote Export.json";
   panel.allowedContentTypes = @[ UTTypeJSON ];
   panel.canCreateDirectories = YES;
@@ -1597,10 +1631,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
       dispatch_async(dispatch_get_main_queue(), ^{
         if (error != nil) {
           [self showSettingsResultWithTitle:@"Export failed"
-                                    message:StringValue(error[@"message"], @"Afternote could not export your notes.")];
+                                    message:StringValue(error[@"message"], @"Afternote could not export your Vault.")];
           return;
         }
-        [self showSettingsResultWithTitle:@"Notes exported"
+        [self showSettingsResultWithTitle:@"Vault exported"
                                   message:[NSString stringWithFormat:@"Saved to %@.",
                                            StringValue(result[@"destination"], destination)]];
       });
@@ -1947,8 +1981,11 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
                                                         action:@selector(refreshVisibleLibraryNotes:)];
   [self styleSecondaryButton:self.libraryRefreshButton];
   self.libraryRefreshButton.accessibilityLabel = @"Refresh notes";
+  NSButton *archives = [AfternoteButton buttonWithTitle:@"Conversation Archives…" target:self action:@selector(openArchives:)];
+  [self styleSecondaryButton:archives];
   NSStackView *statusRow = [NSStackView stackViewWithViews:@[
-    self.libraryProgress, self.libraryStatusLabel, self.libraryAuthenticateButton
+    self.libraryProgress, self.libraryStatusLabel, self.libraryAuthenticateButton,
+    archives
   ]];
   statusRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   statusRow.alignment = NSLayoutAttributeCenterY;
@@ -2948,6 +2985,18 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   [self showLibraryMode:mode loadBrowse:YES];
 }
 
+- (void)openArchives:(id)sender {
+  if (self.archiveWindow == nil) {
+    self.archiveWindow = [AfternoteArchiveWindow new];
+    __weak OwnerControlDelegate *weakSelf = self;
+    self.archiveWindow.authenticate = ^{ [weakSelf authenticateLibrary:nil]; };
+  }
+  self.archiveWindow.broker = self.broker;
+  BOOL authenticated = self.libraryExpiresAt.length > 0 && !self.vaultLocked;
+  [self.archiveWindow openAuthenticated:authenticated];
+  if (!authenticated) [self authenticateLibrary:nil];
+}
+
 - (void)authenticateLibrary:(id)sender {
   (void)sender;
   if (self.vaultLocked) {
@@ -2960,7 +3009,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
   NSArray *scopes = @[
     @"library.browse", @"library.search", @"library.get_note",
     @"library.list_revisions", @"library.inspect_source",
-    @"library.remember", @"library.update_note"
+    @"library.remember", @"library.update_note",
+    @"library.archive_begin", @"library.archive_append", @"library.archive_complete",
+    @"library.archive_cancel", @"library.archive_status", @"library.archive_list",
+    @"library.archive_search", @"library.archive_read"
   ];
   [self.broker requestMethod:@"library.session.begin"
                       params:@{ @"requestedScopes" : scopes,
@@ -2989,6 +3041,10 @@ NSArray<AfternoteIntegrationDescriptor *> *IntegrationDescriptors() {
         }
       });
       [self loadLibraryViewsAndNotes];
+      if (self.archiveWindow.window.visible) {
+        self.archiveWindow.broker = self.broker;
+        [self.archiveWindow openAuthenticated:YES];
+      }
       [self.semanticSettings refresh];
     });
   }];
@@ -3708,6 +3764,7 @@ doCommandBySelector:(SEL)commandSelector {
     return;
   }
   self.librarySessionGeneration += 1;
+  [self.archiveWindow clearPlaintext:status];
   self.semanticActivationInFlight = NO;
   self.semanticReloadPending = NO;
   self.librarySensitiveTextView.string = @"";
@@ -4486,6 +4543,8 @@ doCommandBySelector:(SEL)commandSelector {
   row.displayName = displayName;
   row.presentation = presentation;
   row.connected = connected;
+  row.canApproveArchives = connected && overview != nil &&
+      ![overview.activeScopes containsObject:@"archive.read"] && commandKind.length > 0;
   row.permissions = ScopesLabel(visibleScopes);
   row.activity = activityValue;
   row.historyLines = historyLines;
@@ -4545,6 +4604,22 @@ doCommandBySelector:(SEL)commandSelector {
   [(NSButton *)sender setEnabled:NO];
   [self setBusy:YES status:@"Loading more audit events…"];
   [self loadAuditPage:YES];
+}
+
+- (void)approveArchiveAccess:(NSButton *)sender {
+  NSString *kind = sender.identifier;
+  if (self.revocationTargets[kind] == nil) return;
+  NSUInteger generation = self.ownerSessionGeneration;
+  sender.enabled = NO;
+  [self setBusy:YES status:OwnerApprovalWaitMessage()];
+  [self.broker requestMethod:@"admin.approve_archive_access" params:@{ @"kind": kind }
+      reply:^(NSDictionary *result, NSDictionary *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (generation != self.ownerSessionGeneration) return;
+      if (error != nil) { sender.enabled = YES; [self showError:error]; return; }
+      [self refreshConnections:nil];
+    });
+  }];
 }
 
 - (void)confirmRevocation:(NSButton *)sender {
@@ -5729,6 +5804,17 @@ int RunOwnerControlPollingSmoke(BOOL locked) {
   return 0;
 }
 
+int RunArchiveGrantSmoke() {
+  OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
+  NSDictionary *result = nil, *error = nil;
+  if (![broker requestSynchronouslyMethod:@"admin.approve_archive_access" params:@{ @"kind": @"codex" }
+      result:&result error:&error] || error != nil) {
+    fprintf(stderr, "%s\n", error.description.UTF8String); return 2;
+  }
+  NSData *json = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+  fwrite(json.bytes, 1, json.length, stdout); return 0;
+}
+
 // Wait through real gateway idle periods; direct worker fixtures cannot cover this.
 int RunOwnerControlSemanticStartupSmoke() {
   OwnerBrokerConnection *broker = NewOwnerBrokerConnection(ServiceName());
@@ -5958,6 +6044,9 @@ int main(int argc, const char *argv[]) {
     if (argc >= 2 && strncmp(argv[1], "--admin-", strlen("--admin-")) == 0) {
       return RunAdminCommand(argc, argv);
     }
+#if defined(AFTERNOTE_OWNER_CONTROL_PROTOCOL_TESTING)
+    if (argc == 2 && strcmp(argv[1], "--archive-grant-smoke") == 0) return RunArchiveGrantSmoke();
+#endif
     if (argc == 2 && strcmp(argv[1], "--accessibility-contract") == 0) {
       NSDictionary *contract = @{
         @"applicationIdentifier" : @"dev.afternote.owner-control",

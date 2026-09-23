@@ -30,6 +30,42 @@ afterEach(() => {
 });
 
 describe("vault broker worker protocol", () => {
+  it("serves bounded Archive passages only after separate approval and stops on lock or revoke", async () => {
+    const fixture = workerFixture(), { worker } = fixture;
+    const owner = { connectionId: randomUUID(), peerPid: 40901 };
+    const client = { connectionId: randomUUID(), peerPid: 40902 };
+    const durable = p256(), key = p256();
+    const active = await pairAndActivate(fixture, client, durable, key, ["memory.recall"]);
+    await ownerRequest(worker, owner, "library.session.begin", {
+      requestedScopes: ["library.archive_begin", "library.archive_append", "library.archive_complete"], ttlMs: 900000,
+    }, true);
+    const text = "Archive canary: cedar telescope 🧭";
+    const { archive } = await ownerRequest(worker, owner, "library.archive_begin", {
+      title: "Telescope", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex"),
+    });
+    await ownerRequest(worker, owner, "library.archive_append", { id: archive.id, startIndex: 0, passages: [text] });
+    await ownerRequest(worker, owner, "library.archive_complete", { id: archive.id });
+    const query = { query: "telescope", limit: 1 };
+    await expect(memoryRequest(fixture, client, active, "archive.search", query, key.privateKey)).rejects.toThrow();
+    await ownerRequest(worker, owner, "admin.approve_archive_access", { kind: "codex" }, true);
+    const scopes = { ...active, capabilities: ["memory.recall", "archive.search", "archive.read"] };
+    const approved = await activateExisting(fixture, client, durable, key, scopes);
+    expect(await memoryRequest(fixture, client, approved, "archive.search", query, key.privateKey))
+      .toMatchObject({ searchMode: "exact", results: [{ archiveId: archive.id, index: 0 }] });
+    const page = { id: archive.id, startIndex: 0, limit: 1 };
+    expect(await memoryRequest(fixture, client, approved, "archive.read", page, key.privateKey))
+      .toMatchObject({ passages: [{ text }], nextIndex: null });
+    await expect(memoryRequest(fixture, client, approved, "archive.read", { ...page, limit: 9 }, key.privateKey)).rejects.toThrow();
+    await ownerRequest(worker, owner, "lifecycle.lock", {}, true);
+    await expect(memoryRequest(fixture, client, approved, "archive.read", page, key.privateKey)).rejects.toThrow();
+    await ownerRequest(worker, owner, "lifecycle.unlock", {}, true);
+    await expect(memoryRequest(fixture, client, approved, "archive.read", page, key.privateKey)).rejects.toThrow();
+    const renewed = await activateExisting(fixture, client, durable, key, scopes);
+    expect((await memoryRequest(fixture, client, renewed, "archive.read", page, key.privateKey)).passages[0].text).toBe(text);
+    await ownerRequest(worker, owner, "owner.revoke_connector", { kind: "codex" }, true);
+    await expect(memoryRequest(fixture, client, renewed, "archive.read", page, key.privateKey)).rejects.toThrow();
+  });
+
   it("keeps Notes and owner controls available after an hour of semantic status polling", async () => {
     let now = Date.parse("2026-09-16T12:00:00Z");
     const fixture = workerFixture({ now: () => now, trustPath: "production-signed" });
@@ -1058,7 +1094,7 @@ describe("vault broker worker protocol", () => {
       "Start a shared Afternote work session for 24 hours with an inactivity limit of 24 hours? " +
       "During this work session, previously paired Codex, Claude Code, and Claude Desktop apps may " +
       "silently establish their own connection-bound, least-privilege sessions for " +
-      "up to 15 minutes, limited to Remember, Recall, and Get. This triggering " +
+      "up to 15 minutes, limited to Remember, Recall, Get, and Archive search/read only where you separately approved Archive access. This triggering " +
       "connection lasts 15 minutes. " +
       `Verification: ${verificationPhrase}.`,
     );

@@ -44,6 +44,7 @@ type RestoreSourceIdentity = {
 };
 
 export type CleanVaultRestoreApprovalSnapshot = RestoreSourceIdentity & {
+  sourceSchemaVersion: 1 | 2;
   readiness: "clean" | "resumable";
   sourcePath: string;
   markerDigest: string | null;
@@ -134,6 +135,7 @@ export function cleanVaultRestoreApprovalSnapshot(
   }
   return {
     readiness: marker ? "resumable" : "clean",
+    sourceSchemaVersion: document.schemaVersion,
     sourcePath: resolvedSource,
     ...sourceIdentity,
     markerDigest: marker ? hashFile(markerPath) : null,

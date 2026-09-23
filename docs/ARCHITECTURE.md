@@ -155,6 +155,31 @@ lock-time clearing, and stale errors arriving in a newly authenticated session.
 
 ## Remaining organization work
 
+### Conversation Archives
+
+`conversation-archives.ts` borrows the worker's encrypted database and owns its
+prepared statements. Schema 11 stores immutable Archives, ordered Passages and a
+transactional, rebuildable exact index separately from Notes. Completion verifies
+the declared byte count and SHA-256; incomplete imports remain hidden from reads.
+Archive mutations and their success audit commit together through explicit
+transaction-borrowing methods in `broker-archive-operations.ts`.
+
+The Owner-side `archive_import.mm` streams a selected file through UTF-8/hash
+validation, then sends bounded retry-safe batches through the existing native
+broker. Both the CLI and `archive_window.mm` use this engine. The view keeps one
+list/search page and one passage page, and its parent owns lifecycle invalidation.
+`conversation-import.ts` exercises the same manifest/batch contract independently
+at the storage seam, including million-word transcripts and interrupted retries.
+
+`broker-capabilities.ts` distinguishes Archive search/read from Memory scopes.
+Fresh Owner approval binds a grant expansion to the exact current Connector
+identity/revision; existing sessions are invalidated. MCP has no import or path
+interface. `packages/mcp/src/archive-tools.ts` exposes only bounded retrieval.
+JSON interchange schema 2 carries canonical Archive text and paused progress;
+restore validates everything before publishing an encrypted candidate.
+
+### Follow-up organization
+
 The current source separates Note migrations, native broker contracts, Connections
 rendering, editor ownership, retrieval state, audit-history reading, and native
 appearance from their former large callers. Broker wire contracts and the two-phase

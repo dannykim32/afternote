@@ -458,6 +458,8 @@ ${updatePolicy.enabled ? `<key>SUFeedURL</key><string>${updatePolicy.feedUrl}</s
     join(repositoryRoot, "apps/local/native/owner_broker_contract.mm"),
     join(repositoryRoot, "apps/local/native/product_surface_router.mm"),
     join(repositoryRoot, "apps/local/native/owner_control_app.mm"),
+    join(repositoryRoot, "apps/local/native/archive_import.mm"),
+    join(repositoryRoot, "apps/local/native/archive_window.mm"),
     join(repositoryRoot, "apps/local/native/native_appearance.mm"),
     join(repositoryRoot, "apps/local/native/connections_view.mm"),
     join(repositoryRoot, "apps/local/native/note_editor_view.mm"),

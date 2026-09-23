@@ -2258,10 +2258,10 @@ export class SqliteMemory implements Memory {
     destinationPath: string,
     applicationVersion: string,
     assertCanContinue: () => void = () => {},
-  ): void {
+  ): "afternote-vault-v1" | "afternote-vault-v2" {
     this.#assertVault(vault);
     assertCanContinue();
-    this.#database.transaction(() => {
+    return this.#database.transaction(() => {
       const noteCount = this.#database
         .query<{ count: number }, []>("select count(*) as count from notes")
         .get()?.count ?? 0;
@@ -2337,6 +2337,7 @@ export class SqliteMemory implements Memory {
         assertCanContinue,
         streamArchives,
       );
+        return hasArchives ? "afternote-vault-v2" as const : "afternote-vault-v1" as const;
       } finally {
         archives.close();
         closePreparedStatement(noteStatement);
