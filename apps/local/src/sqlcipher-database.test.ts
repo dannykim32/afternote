@@ -201,11 +201,13 @@ describe("SqlcipherDatabase", () => {
     ]) {
       expect(bytes.includes(Buffer.from(canary))).toBe(false);
     }
-    const raw = Bun.spawnSync(["/usr/bin/sqlite3", "-readonly", path, ".tables"], {
+    // Query the schema: .tables can silently succeed on an unreadable file.
+    const raw = Bun.spawnSync(["/usr/bin/sqlite3", "-init", "/dev/null", "-readonly", path, "select name from sqlite_schema"], {
       stdout: "pipe",
       stderr: "pipe",
     });
     expect(raw.exitCode).not.toBe(0);
+    expect(raw.stderr.toString()).toContain("file is not a database");
     database.exec("rollback");
     database.close();
   });

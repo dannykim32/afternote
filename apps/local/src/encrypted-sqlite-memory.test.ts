@@ -54,10 +54,12 @@ describe("encrypted SqliteMemory", () => {
     expect(readFileSync(databasePath).includes(Buffer.from(canary))).toBe(false);
     expect(readFileSync(databasePath).includes(Buffer.from(sourceCanary))).toBe(false);
     const rawSqlite = Bun.spawnSync(
-      ["/usr/bin/sqlite3", "-readonly", databasePath, ".tables"],
+      // Some system SQLite versions silently accept .tables on encrypted files.
+      ["/usr/bin/sqlite3", "-init", "/dev/null", "-readonly", databasePath, "select name from sqlite_schema"],
       { stdout: "pipe", stderr: "pipe" },
     );
     expect(rawSqlite.exitCode).not.toBe(0);
+    expect(rawSqlite.stderr.toString()).toContain("file is not a database");
     expect(`${rawSqlite.stdout}${rawSqlite.stderr}`).not.toContain("notes_fts");
     expect(`${rawSqlite.stdout}${rawSqlite.stderr}`).not.toContain(sourceCanary);
     const raw = new Database(databasePath, { readonly: true });
