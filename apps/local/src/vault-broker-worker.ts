@@ -1295,7 +1295,14 @@ export class VaultBrokerWorker {
             const recall = body as { query: string; limit: number };
             await memory.prepareSemanticQuery(vault, recall.query);
             this.#authority().assertReadAuthorizationCurrent(authorization);
-            const results = await memory.recall(vault, recall.query, recall.limit);
+            const execution = await memory.recallWithStatus(vault, recall.query, recall.limit);
+            // Connectors receive citations without the Library's search-mode field.
+            // Incomplete semantics must not masquerade as a completed no-match search.
+            if (execution.results.length === 0 &&
+                (execution.searchMode === "indexing" || execution.searchMode === "degraded")) {
+              throw new BrokerProtocolError("unavailable", "Local search could not finish. Please try again.");
+            }
+            const results = execution.results;
             return {
               result: { results },
               noteRefs: results.map(({ citation }) => ({

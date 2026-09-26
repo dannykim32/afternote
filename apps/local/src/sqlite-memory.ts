@@ -158,6 +158,7 @@ export type EffectiveSearchMode = "exact" | "indexing" | "hybrid" | "degraded";
 // threshold so automatic citations do not become noisier.
 const MINIMUM_EXPLORATORY_SEARCH_SIMILARITY = 0.7;
 export type SearchNotesExecution = SearchNotesPage & { searchMode: EffectiveSearchMode };
+export type RecallExecution = { results: RecallResult[]; searchMode: EffectiveSearchMode };
 
 type HybridRecallExecution = {
   results: RecallResult[];
@@ -429,6 +430,14 @@ export class SqliteMemory implements Memory {
     query: string,
     limit = DEFAULT_RECALL_RESULTS,
   ): Promise<RecallResult[]> {
+    return (await this.recallWithStatus(vault, query, limit)).results;
+  }
+
+  async recallWithStatus(
+    vault: VaultContext,
+    query: string,
+    limit = DEFAULT_RECALL_RESULTS,
+  ): Promise<RecallExecution> {
     this.#assertVault(vault);
     if (query.length > MAX_RECALL_QUERY_CHARACTERS) {
       throw new MemoryError(
@@ -436,7 +445,7 @@ export class SqliteMemory implements Memory {
         `Recall query cannot exceed ${MAX_RECALL_QUERY_CHARACTERS} characters`,
       );
     }
-    if (isUnderspecifiedDeicticQuery(query)) return [];
+    if (isUnderspecifiedDeicticQuery(query)) return { results: [], searchMode: "exact" };
     if (this.#retrievalMode === "hybrid" && this.#embeddingModel) {
       const operation = () => this.#hybridRecall(
           vault,
@@ -444,23 +453,12 @@ export class SqliteMemory implements Memory {
           limit,
           DEFAULT_SEMANTIC_QUERY_TIMEOUT_MS,
         );
-      const execution = this.#encryptionKey
+      return this.#encryptionKey
         ? await (this.#database as unknown as SqlcipherDatabase)
           .withProgressDeadline(CONNECTOR_RECALL_DEADLINE_MS, operation)
         : await operation();
-      // The Connector contract returns citations, not the Library's search mode.
-      // Do not turn an incomplete semantic search into a definitive no-match reply.
-      if (execution.results.length === 0 && execution.searchMode !== "hybrid") {
-        throw new MemoryError("unavailable", "Local search could not finish. Please try again.");
-      }
-      return execution.results;
     }
-    return (
-      await this.searchNotesWithDeadline(vault, {
-        query,
-        limit,
-      }, CONNECTOR_RECALL_DEADLINE_MS)
-    ).results;
+    return this.searchNotesWithDeadline(vault, { query, limit }, CONNECTOR_RECALL_DEADLINE_MS);
   }
 
   async getNote(vault: VaultContext, id: string): Promise<Note | null> {

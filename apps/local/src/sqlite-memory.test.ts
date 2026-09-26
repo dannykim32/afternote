@@ -1534,10 +1534,9 @@ describe("SqliteMemory hybrid retrieval", () => {
       const pending = memory.recall(localVault, query, 5); await running;
       const pendingUi = memory.searchNotes(localVault, {query, limit: 5});
       await Bun.sleep(0);
-      const invalidated = expect(pending).rejects.toMatchObject({ code: "unavailable" });
       memory.disableSemanticSearch(localVault); release();
       expect(await pendingUi).toMatchObject({results: [], nextCursor: null});
-      await invalidated;
+      expect(await pending).toEqual([]);
       expect(memory.derivedIndexStatus(localVault).state).toBe("disabled");
       expect(await memory.recall(localVault, query, 5)).toEqual([]);
       expect(await memory.recall(localVault, "brass token", 5)).toMatchObject([{note: {id: note.id, revision: 1}}]);
@@ -1589,7 +1588,7 @@ describe("SqliteMemory hybrid retrieval", () => {
       };
       memory.enableSemanticSearch(localVault, thirdModel);
       releaseQuery();
-      await expect(oldQuery).rejects.toMatchObject({ code: "unavailable" });
+      expect(await oldQuery).toEqual([]);
       await memory.waitForDerivedIndex();
       expect(await memory.recall(localVault, query, 5)).toMatchObject([{note: {id: note.id, content, revision: 1}}]);
       expect(memory.derivedIndexStatus(localVault)).toMatchObject({state: "ready", model: thirdModel.descriptor});
