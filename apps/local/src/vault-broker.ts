@@ -1284,11 +1284,35 @@ export class VaultBrokerAuthorization {
     const authorization = this.authorize(envelope, body, transportBinding);
     try {
       const completed = await dispatch(authorization);
+      this.assertReadAuthorizationCurrent(authorization);
       this.recordAudit(authorization, "success", completed.noteRefs);
       return completed.result;
     } catch (error) {
       this.recordAudit(authorization, "error", [], "operation_failed");
       throw error;
+    }
+  }
+
+  /** Recheck live authority after asynchronous work without consuming the request again. */
+  assertReadAuthorizationCurrent(authorization: BrokerAuthorization): void {
+    this.#assertOpen();
+    const session = this.#session(authorization.sessionId);
+    const client = this.#client(authorization.clientId);
+    const grant = this.#grant(authorization.grantId);
+    assertLiveClientGrant(client, grant, this.#vaultId, this.#now());
+    if (session.status !== "active") throw new Error(`Session is ${session.status}`);
+    if (Date.parse(session.expires_at) <= this.#now()) {
+      this.#expireSession(session, "session_expired");
+      throw new Error("Session is expired");
+    }
+    if (!parseCapabilities(session.capabilities).includes(operationCapability(authorization.operation))) {
+      throw new Error("Session no longer grants this operation");
+    }
+    if (isTrustedMcpClient(client)) {
+      const workSession = this.#liveTrustedMcpWorkSession();
+      if (!workSession || session.work_session_id !== workSession.id) {
+        throw new Error("Trusted work session is expired");
+      }
     }
   }
 

@@ -18,6 +18,7 @@ import {
 } from "./vault-broker";
 import { ExclusiveFileLock, SqlcipherDatabase } from "./sqlcipher-database";
 import { VaultBrokerWorker } from "./vault-broker-worker";
+import type { TextEmbeddingModel } from "./retrieval";
 
 const directories: string[] = [];
 const workers: VaultBrokerWorker[] = [];
@@ -30,6 +31,73 @@ afterEach(() => {
 });
 
 describe("vault broker worker protocol", () => {
+  it("does not report no matches when connector inference exceeds its query budget", async () => {
+    let release!: () => void;
+    const inference = new Promise<void>((resolve) => { release = resolve; });
+    const fixture = workerFixture({ embeddingModel: {
+      descriptor: { id: "slow-inference", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+      embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+      embedQuery: async () => { await inference; return Float32Array.from([1, 0]); },
+    } });
+    const client = { connectionId: randomUUID(), peerPid: 40913 };
+    const key = p256();
+    const active = await pairAndActivate(fixture, client, p256(), key, ["memory.remember", "memory.recall"]);
+    await memoryRequest(fixture, client, active, "memory.remember", { content: "Elevator reservation" }, key.privateKey);
+    try {
+      await expect(memoryRequest(fixture, client, active, "memory.recall", { query: "Move upstairs", limit: 5 }, key.privateKey))
+        .rejects.toThrow("Local search could not finish");
+    } finally { release(); }
+  });
+
+  for (const expire of [false, true]) {
+    it(`handles delayed connector startup with ${expire ? "expired" : "current"} authorization`, async () => {
+      let now = Date.parse("2026-09-26T12:00:00Z");
+      let release!: () => void;
+      const prepared = new Promise<void>((resolve) => { release = resolve; });
+      const fixture = workerFixture({ now: () => now, embeddingModel: {
+        descriptor: { id: "connector-startup", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+        prepare: () => prepared, embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+      } });
+      const client = { connectionId: randomUUID(), peerPid: 40912 };
+      const key = p256();
+      const active = await pairAndActivate(fixture, client, p256(), key, ["memory.remember", "memory.recall"]);
+      const saved = await memoryRequest(fixture, client, active, "memory.remember", { content: "Elevator reservation" }, key.privateKey);
+      const pending = memoryRequest(fixture, client, active, "memory.recall", { query: "Move upstairs", limit: 5 }, key.privateKey)
+        .then((result) => ({ ok: true, result }), (error) => ({ ok: false, message: error.message }));
+      try {
+        await Bun.sleep(expire ? 20 : 2200);
+        if (expire) now += 16 * 60 * 1000;
+        release();
+        expect(await pending).toMatchObject(expire ? { ok: false } : {
+          ok: true, result: { results: [{ citation: { noteId: saved.note.id } }] },
+        });
+      } finally { release(); await pending; }
+    });
+  }
+
+  it("does not return connector recall if access is revoked during semantic startup", async () => {
+    let release!: () => void;
+    const prepared = new Promise<void>((resolve) => { release = resolve; });
+    const fixture = workerFixture({ embeddingModel: {
+      descriptor: { id: "slow-start", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+      prepare: () => prepared,
+      embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+    } });
+    const client = { connectionId: randomUUID(), peerPid: 40910 };
+    const owner = { connectionId: randomUUID(), peerPid: 40911 };
+    const key = p256();
+    const active = await pairAndActivate(fixture, client, p256(), key, ["memory.remember", "memory.recall"]);
+    await memoryRequest(fixture, client, active, "memory.remember", { content: "Elevator reservation" }, key.privateKey);
+    const pending = memoryRequest(fixture, client, active, "memory.recall", { query: "Move upstairs", limit: 5 }, key.privateKey)
+      .then((result) => ({ ok: true, result }), (error) => ({ ok: false, message: error.message }));
+    try {
+      await Bun.sleep(20);
+      await ownerRequest(fixture.worker, owner, "owner.revoke_connector", { kind: "codex" }, true);
+      release();
+      expect(await pending).toMatchObject({ ok: false });
+    } finally { release(); await pending; }
+  });
+
   it("serves bounded Archive passages only after separate approval and stops on lock or revoke", async () => {
     const fixture = workerFixture(), { worker } = fixture;
     const owner = { connectionId: randomUUID(), peerPid: 40901 };
@@ -2496,6 +2564,7 @@ describe("vault broker worker protocol", () => {
 });
 
 function workerFixture(options: {
+  embeddingModel?: TextEmbeddingModel;
   now?: () => number;
   trustPath?: "development-only" | "production-signed";
   applicationVersion?: string;
@@ -2513,6 +2582,7 @@ function workerFixture(options: {
     bootId: "f1ef9dc8-8c4d-4c83-b794-4ccb45adaef1",
     now: options.now,
     trustPath: options.trustPath,
+    embeddingModelProvider: options.embeddingModel ? () => options.embeddingModel! : undefined,
   });
   workers.push(worker);
   return { worker, path, key, vault, now: options.now ?? Date.now };

@@ -47,6 +47,7 @@ declare const AFTERNOTE_BROKER_CODE_REQUIREMENT: string | undefined;
 declare const AFTERNOTE_BROKER_MACH_SERVICE: string | undefined;
 
 const OWNER_PRESENCE_XPC_TIMEOUT_MS = 125_000;
+const SEMANTIC_RECALL_XPC_TIMEOUT_MS = 15_000;
 
 export type VaultBrokerHealth = {
   bootId: string;
@@ -116,7 +117,11 @@ export function requestVaultBroker(
         method,
         params,
       }),
-      options?.timeoutMs,
+      // Recall may first wait up to ten seconds for local inference startup.
+      // Mutations and other reads retain the native transport's normal budget.
+      options?.timeoutMs ?? (method === "memory.execute" &&
+        (params.envelope as { operation?: unknown } | undefined)?.operation === "memory.recall"
+        ? SEMANTIC_RECALL_XPC_TIMEOUT_MS : undefined),
     );
   } catch (error) {
     throw typedBrokerTransportError(error) ?? error;

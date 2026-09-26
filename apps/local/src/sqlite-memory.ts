@@ -143,6 +143,7 @@ const EMBEDDING_ATTEMPTS = 3;
 const EMBEDDING_DELAYED_ATTEMPTS = 5;
 const EMBEDDING_RETRY_BASE_DELAY_MS = 250;
 const DEFAULT_SEMANTIC_QUERY_TIMEOUT_MS = 1_500;
+const SEMANTIC_STARTUP_TIMEOUT_MS = 10_000;
 const CONNECTOR_RECALL_DEADLINE_MS = 2_000;
 const MAX_RECALL_CANDIDATES = 10_000;
 const MAX_TEMPORAL_ANNOTATIONS_PER_TEXT = 32;
@@ -447,6 +448,11 @@ export class SqliteMemory implements Memory {
         ? await (this.#database as unknown as SqlcipherDatabase)
           .withProgressDeadline(CONNECTOR_RECALL_DEADLINE_MS, operation)
         : await operation();
+      // The Connector contract returns citations, not the Library's search mode.
+      // Do not turn an incomplete semantic search into a definitive no-match reply.
+      if (execution.results.length === 0 && execution.searchMode !== "hybrid") {
+        throw new MemoryError("unavailable", "Local search could not finish. Please try again.");
+      }
       return execution.results;
     }
     return (
@@ -1190,6 +1196,30 @@ export class SqliteMemory implements Memory {
 
   async waitForDerivedIndex(): Promise<void> {
     await this.#derivedIndexes.wait();
+  }
+
+  /** Loading local inference is separate from the bounded per-query work budget. */
+  async prepareSemanticQuery(vault: VaultContext, query: string): Promise<void> {
+    this.#assertVault(vault);
+    if (this.#closed) throw new MemoryError("unavailable", "The vault is closed");
+    const model = this.#embeddingModel;
+    if (!model || !this.#derivedIndexes.isPreparing) return;
+    // Keep the existing exact fallback responsive even on first launch.
+    const findExact = () => this.#allLexicalResults(vault, query);
+    const lexical = this.#encryptionKey
+      ? await (this.#database as unknown as SqlcipherDatabase)
+        .withProgressDeadline(CONNECTOR_RECALL_DEADLINE_MS, findExact)
+      : findExact();
+    if ((model.reranker ? literalRecallResults(query, lexical) : lexical).length > 0) return;
+    let current: boolean;
+    try {
+      current = await withTimeout(this.#derivedIndexes.waitForPreparation(), SEMANTIC_STARTUP_TIMEOUT_MS);
+    } catch {
+      throw new MemoryError("unavailable", "Local search is still starting. Please try again.");
+    }
+    if (!current || this.#closed || this.#embeddingModel !== model) {
+      throw new MemoryError("unavailable", "Local search changed during startup. Please try again.");
+    }
   }
 
   derivedIndexStatus(vault: VaultContext): DerivedIndexStatus {

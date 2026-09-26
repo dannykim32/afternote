@@ -1289,10 +1289,12 @@ export class VaultBrokerWorker {
     const result = await this.#authority().executeAuthorizedRead<unknown>(
       envelope,
       bodyBytes,
-      async () => {
+      async (authorization) => {
         switch (envelope.operation) {
           case "memory.recall": {
             const recall = body as { query: string; limit: number };
+            await memory.prepareSemanticQuery(vault, recall.query);
+            this.#authority().assertReadAuthorizationCurrent(authorization);
             const results = await memory.recall(vault, recall.query, recall.limit);
             return {
               result: { results },
@@ -1521,11 +1523,13 @@ export class VaultBrokerWorker {
           "search",
           filter,
         );
-        const startedAt = performance.now();
         const page = await authority.executeNativeLibraryRead(
           session.sessionId,
           request.method,
           async () => {
+            await memory.prepareSemanticQuery(vault, query);
+            this.#librarySession(transportBinding, ["library.search"], session.sessionId);
+            const startedAt = performance.now();
             let loaded: Awaited<ReturnType<SqliteMemory["searchNotesWithDeadline"]>>;
             try {
               loaded = await memory.searchNotesWithDeadline(
@@ -1552,6 +1556,7 @@ export class VaultBrokerWorker {
             if (performance.now() - startedAt > MAX_LIBRARY_SEARCH_MS) {
               throw new BrokerProtocolError("rate_limited", "Library search exceeded its work limit");
             }
+            this.#librarySession(transportBinding, ["library.search"], session.sessionId);
             return {
               result: {
                 results: loaded.results.map((result) => librarySearchResult(result)),
@@ -1793,6 +1798,7 @@ export class VaultBrokerWorker {
   #librarySession(
     transportBinding: BrokerTransportBinding,
     scopes: LibraryScope[],
+    expectedSessionId?: string,
   ): LibrarySession {
     const key = ownerSessionKey(transportBinding);
     const session = this.#librarySessions.get(key);
@@ -1801,6 +1807,9 @@ export class VaultBrokerWorker {
         "library_session_required",
         "Library access requires native owner authentication",
       );
+    }
+    if (expectedSessionId && session.sessionId !== expectedSessionId) {
+      throw new BrokerProtocolError("library_session_expired", "Library session changed during search");
     }
     if (
       session.expiresAt <= this.#currentTime() ||

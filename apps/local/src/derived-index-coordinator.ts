@@ -26,6 +26,8 @@ export type DerivedIndexAdapter<Note> = {
 export class DerivedIndexCoordinator<Note> {
   readonly #adapter: DerivedIndexAdapter<Note>;
   #queue: Promise<void> = Promise.resolve();
+  #preparation: Promise<void> = Promise.resolve();
+  #cancelPreparationWait: (() => void) | null = null;
   #indexing = 0;
   #preparing = false;
   #preparationError: string | null = null;
@@ -45,6 +47,7 @@ export class DerivedIndexCoordinator<Note> {
 
   enableSemanticModel(model: EmbeddingModelDescriptor): void {
     if (this.#closed) return;
+    this.#cancelPreparationWait?.();
     this.#generation += 1;
     this.#indexing = 0;
     this.#lastError = null;
@@ -65,6 +68,7 @@ export class DerivedIndexCoordinator<Note> {
   }
 
   disableSemanticModel(): void {
+    this.#cancelPreparationWait?.();
     this.#generation += 1;
     this.#indexing = 0;
     this.#lastError = null;
@@ -76,6 +80,16 @@ export class DerivedIndexCoordinator<Note> {
 
   async wait(): Promise<void> {
     await this.#queue;
+  }
+
+  get isPreparing(): boolean {
+    return this.#preparing;
+  }
+
+  async waitForPreparation(): Promise<boolean> {
+    const generation = this.#generation;
+    await this.#preparation;
+    return !this.#closed && generation === this.#generation;
   }
 
   status(): DerivedIndexStatus {
@@ -108,6 +122,7 @@ export class DerivedIndexCoordinator<Note> {
 
   close(): void {
     this.#closed = true;
+    this.#cancelPreparationWait?.();
   }
 
   #prepare(): void {
@@ -122,6 +137,8 @@ export class DerivedIndexCoordinator<Note> {
     }).finally(() => {
       if (generation === this.#generation) this.#preparing = false;
     });
+    const invalidated = new Promise<void>((resolve) => { this.#cancelPreparationWait = resolve; });
+    this.#preparation = Promise.race([this.#queue, invalidated]);
   }
 
   #schedule(notes: readonly Note[]): void {

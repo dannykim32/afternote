@@ -10,6 +10,20 @@ import {
 } from "./vault-broker-client";
 
 describe("vault broker MCP client", () => {
+  it("allows bounded cold startup for recall without widening mutation timeouts", () => {
+    const observed: Array<number | undefined> = [];
+    for (const operation of ["memory.recall", "memory.remember", "archive.read"]) {
+      requestVaultBroker("memory.execute", { envelope: { operation }, body: {} }, {
+        service: "dev.afternote.test-broker", codeRequirement: "identifier dev.afternote.test-broker",
+        transport(_service, _requirement, request, timeout) {
+          observed.push(timeout);
+          return JSON.stringify({ protocolVersion: 1, requestId: JSON.parse(request).requestId, ok: true, result: {} });
+        },
+      });
+    }
+    expect(observed).toEqual([15_000, undefined, undefined]);
+  });
+
   it("types restart-related native XPC failures for bounded recovery", () => {
     for (const [message, code] of [
       ["Broker XPC service is unavailable", "unavailable"],

@@ -25,6 +25,133 @@ afterEach(() => {
 });
 
 describe("native Library broker protocol", () => {
+  it("reports temporary unavailability instead of an empty result when startup stalls", async () => {
+    let release!: () => void;
+    const preparation = new Promise<void>((resolve) => { release = resolve; });
+    const { worker } = workerFixture({ embeddingModel: {
+      descriptor: { id: "stalled-startup", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+      prepare: () => preparation, embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+    } });
+    const owner = { connectionId: randomUUID(), peerPid: 51914 };
+    await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+    await ownerRequest(worker, owner, "library.remember", { content: "Private elevator instructions", source: null });
+    try {
+      expect(await rawOwnerRequest(worker, owner, "library.search", { query: "Move upstairs", cursor: null, limit: 5 }))
+        .toMatchObject({ ok: false, error: { code: "unavailable", message: "Local search is still starting. Please try again." } });
+      release();
+      expect(await ownerRequest(worker, owner, "library.search", { query: "Move upstairs", cursor: null, limit: 5 }))
+        .toMatchObject({ searchMode: "hybrid", results: [expect.anything()] });
+    } finally { release(); }
+  }, 15000);
+
+  for (const phase of ["startup", "inference"] as const) {
+    it(`denies search when its Library session expires during ${phase}`, async () => {
+      let now = Date.parse("2026-09-26T12:00:00Z");
+      let release!: () => void;
+      let entered!: () => void;
+      const pendingPhase = new Promise<void>((resolve) => { release = resolve; });
+      const phaseEntered = new Promise<void>((resolve) => { entered = resolve; });
+      const query = "Move upstairs";
+      const { worker } = workerFixture({ now: () => now, embeddingModel: {
+        descriptor: { id: `expiry-${phase}`, revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+        prepare: async () => { if (phase === "startup") { entered(); await pendingPhase; } },
+        embed: async (texts) => {
+          if (phase === "inference" && texts.includes(query)) { entered(); await pendingPhase; }
+          return texts.map(() => Float32Array.from([1, 0]));
+        },
+      } });
+      const owner = { connectionId: randomUUID(), peerPid: 51915 };
+      const session = await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+      await ownerRequest(worker, owner, "library.remember", { content: "Private elevator instructions", source: null });
+      const pending = rawOwnerRequest(worker, owner, "library.search", { query, cursor: null, limit: 5 });
+      try {
+        await phaseEntered;
+        now = Date.parse(session.expiresAt) + 1;
+        release();
+        expect(await pending).toMatchObject({ ok: false, error: { code: "library_session_expired" } });
+      } finally { release(); await pending; }
+    });
+  }
+
+  it("does not disclose a pending search through a replacement Library session", async () => {
+    let release!: () => void;
+    const preparation = new Promise<void>((resolve) => { release = resolve; });
+    const { worker } = workerFixture({ embeddingModel: {
+      descriptor: { id: "replace-startup", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+      prepare: () => preparation, embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+    } });
+    const owner = { connectionId: randomUUID(), peerPid: 51913 };
+    await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+    await ownerRequest(worker, owner, "library.remember", { content: "Private elevator instructions", source: null });
+    const pending = rawOwnerRequest(worker, owner, "library.search", { query: "Move upstairs", cursor: null, limit: 5 });
+    try {
+      await Bun.sleep(20);
+      await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+      release();
+      expect(await pending).toMatchObject({ ok: false });
+    } finally { release(); await pending; }
+  });
+
+  it("cancels a search waiting for startup when the Vault locks", async () => {
+    let release!: () => void;
+    const preparation = new Promise<void>((resolve) => { release = resolve; });
+    const { worker } = workerFixture({ embeddingModel: {
+      descriptor: { id: "lock-startup", revision: "1", dimensions: 2 }, minimumSimilarity: 0.5,
+      prepare: () => preparation, embed: async (texts) => texts.map(() => Float32Array.from([1, 0])),
+    } });
+    const owner = { connectionId: randomUUID(), peerPid: 51912 };
+    await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+    await ownerRequest(worker, owner, "library.remember", { content: "Private elevator instructions", source: null });
+    const pending = rawOwnerRequest(worker, owner, "library.search", { query: "Move upstairs", cursor: null, limit: 5 });
+    try {
+      await Bun.sleep(20);
+      await ownerRequest(worker, owner, "lifecycle.lock", {}, true);
+      expect(await Promise.race([pending, Bun.sleep(500).then(() => "still waiting")]))
+        .toMatchObject({ ok: false });
+    } finally { release(); await pending; }
+  });
+
+  it("keeps exact search responsive while the semantic engine is still starting", async () => {
+    let release!: () => void;
+    const preparation = new Promise<void>((resolve) => { release = resolve; });
+    const vectors = new FixtureEmbeddingModel(new Map([["Juniper canary", [1, 0]]]));
+    const { worker } = workerFixture({ embeddingModel: {
+      descriptor: vectors.descriptor, minimumSimilarity: vectors.minimumSimilarity,
+      prepare: () => preparation, embed: (texts) => vectors.embed(texts),
+    } });
+    const owner = { connectionId: randomUUID(), peerPid: 51911 };
+    await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+    const saved = (await ownerRequest(worker, owner, "library.remember", { content: "Juniper canary", source: null })).note;
+    const pending = ownerRequest(worker, owner, "library.search", { query: "Juniper", cursor: null, limit: 5 });
+    try {
+      expect(await Promise.race([pending, Bun.sleep(500).then(() => "blocked by startup")]))
+        .toMatchObject({ results: [{ citation: { noteId: saved.id } }] });
+    } finally { release(); await pending; }
+  });
+
+  it("finds a newly saved paraphrase after cold model preparation exceeds the query budget", async () => {
+    const note = "Reserve the freight elevator before moving furniture upstairs.";
+    const query = "How can belongings reach the upper floor?";
+    const vectors = new FixtureEmbeddingModel(new Map([[note, [1, 0]], [query, [1, 0]]]));
+    let releasePreparation!: () => void;
+    const preparation = new Promise<void>((resolve) => { releasePreparation = resolve; });
+    const model: TextEmbeddingModel = {
+      descriptor: vectors.descriptor, minimumSimilarity: vectors.minimumSimilarity,
+      prepare: () => preparation, embed: (texts) => vectors.embed(texts),
+    };
+    const { worker } = workerFixture({ embeddingModel: model });
+    const owner = { connectionId: randomUUID(), peerPid: 51910 };
+    await beginLibrarySession(worker, owner, [...LIBRARY_SCOPES]);
+    const saved = (await ownerRequest(worker, owner, "library.remember", { content: note, source: null })).note;
+    expect(await ownerRequest(worker, owner, "library.refresh_search", { reloadModel: false }))
+      .toMatchObject({ searchMode: "indexing", indexedNotes: 0, totalNotes: 1 });
+    const timer = setTimeout(releasePreparation, 2200);
+    try {
+      const result = await ownerRequest(worker, owner, "library.search", { query, cursor: null, limit: 5 });
+      expect(result).toMatchObject({ searchMode: "hybrid", results: [{ citation: { noteId: saved.id } }] });
+    } finally { clearTimeout(timer); releasePreparation(); }
+  });
+
   it("rolls back Archive mutations and deletion when terminal audit cannot commit", async () => {
     const fixture = workerFixture();
     const connection = { connectionId: randomUUID(), peerPid: 51905 };
