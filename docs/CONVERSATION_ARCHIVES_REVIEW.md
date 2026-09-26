@@ -4,6 +4,23 @@ Review baseline: public main `a238c106eff79e9b2994c6c873a4877f250f01b9`.
 Implementation reviewed through `b44548b`; the small quota/layout follow-up is
 `09dbe9d`. This is candidate evidence, not public-release acceptance.
 
+## Cold-start follow-up
+
+A later guarded rebuild stopped at immediate compiled semantic Recall. The
+first query could spend its query budget on cold model preparation and return an
+empty indexing result. The scoped fix is reviewed separately against `f570a2e`,
+through `03faff1`; see [the behavior and acceptance contract](COLD_START_RECALL_FIX.md).
+Separate standards and specification reviews report no remaining findings. The
+standards review's duplicated live-authority checks were consolidated without
+moving signature, replay, or audit boundaries.
+
+Startup now has a separate bounded wait. Connector responses distinguish
+incomplete semantic work from a completed no-match search; the underlying
+Memory array contract remains compatible. Async authorization checks prevent
+late results from outliving their original authority. No model pin, query work
+deadline, or compiled first-query assertion was relaxed. Final automated and
+signed-candidate acceptance still need to be recorded before distribution.
+
 ## Standards review
 
 The independent review reported no hard violations. Its one nonblocking finding,

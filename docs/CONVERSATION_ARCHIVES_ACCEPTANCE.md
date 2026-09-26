@@ -23,6 +23,10 @@ a downgrade appear to work.
    Notes behavior have not changed. Record hosts not tested rather than assuming
    another host's pass covers them.
 
+Also complete the [cold-start Recall checks](COLD_START_RECALL_FIX.md#regression-evidence-and-acceptance)
+after fully reopening the candidate. Include immediate paraphrase retrieval,
+exact fallback, and lock/revocation checks; a retry does not replace the first-query check.
+
 ## Explicit import and reading
 
 3. Save a plain UTF-8 `.txt` or `.md` file containing:
