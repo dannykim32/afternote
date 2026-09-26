@@ -1153,16 +1153,8 @@ export class VaultBrokerAuthorization {
       }
       const client = this.#client(envelope.clientId);
       const grant = this.#grant(envelope.grantId);
-      assertLiveClientGrant(client, grant, this.#vaultId, this.#now());
-      if (session.status !== "active") throw new Error(`Session is ${session.status}`);
-      if (Date.parse(session.expires_at) <= this.#now()) {
-        this.#expireSession(session, "session_expired");
-        throw new Error("Session is expired");
-      }
       const required = operationCapability(envelope.operation);
-      if (!parseCapabilities(session.capabilities).includes(required)) {
-        throw new Error(`Session does not grant ${required}`);
-      }
+      this.#assertLiveSessionAccess(session, client, grant, required);
       if (
         required === "memory.forget" &&
         session.forget_policy === "confirm_each" &&
@@ -1187,15 +1179,7 @@ export class VaultBrokerAuthorization {
       } catch (error) {
         throw new Error("Request was replayed", { cause: error });
       }
-      const trustedWorkSession = isTrustedMcpClient(client)
-        ? this.#liveTrustedMcpWorkSession()
-        : undefined;
-      if (
-        isTrustedMcpClient(client) &&
-        (!trustedWorkSession || session.work_session_id !== trustedWorkSession.id)
-      ) {
-        throw new Error("Trusted work session is expired");
-      }
+      this.#assertCurrentWorkSession(session, client);
       this.#database.query(
         "update broker_sessions set last_seen_at = ? where id = ?",
       ).run(new Date(this.#now()).toISOString(), session.id);
@@ -1299,15 +1283,28 @@ export class VaultBrokerAuthorization {
     const session = this.#session(authorization.sessionId);
     const client = this.#client(authorization.clientId);
     const grant = this.#grant(authorization.grantId);
+    this.#assertLiveSessionAccess(session, client, grant, operationCapability(authorization.operation));
+    this.#assertCurrentWorkSession(session, client);
+  }
+
+  #assertLiveSessionAccess(
+    session: SessionRow,
+    client: ClientRow,
+    grant: GrantRow,
+    required: BrokerCapability,
+  ): void {
     assertLiveClientGrant(client, grant, this.#vaultId, this.#now());
     if (session.status !== "active") throw new Error(`Session is ${session.status}`);
     if (Date.parse(session.expires_at) <= this.#now()) {
       this.#expireSession(session, "session_expired");
       throw new Error("Session is expired");
     }
-    if (!parseCapabilities(session.capabilities).includes(operationCapability(authorization.operation))) {
-      throw new Error("Session no longer grants this operation");
+    if (!parseCapabilities(session.capabilities).includes(required)) {
+      throw new Error(`Session does not grant ${required}`);
     }
+  }
+
+  #assertCurrentWorkSession(session: SessionRow, client: ClientRow): void {
     if (isTrustedMcpClient(client)) {
       const workSession = this.#liveTrustedMcpWorkSession();
       if (!workSession || session.work_session_id !== workSession.id) {
