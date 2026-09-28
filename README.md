@@ -64,37 +64,17 @@ See [installation and connector setup](docs/GETTING_STARTED.md) for the full ste
 [release verification](docs/VERIFY_RELEASE.md) for checksums, and
 [beta readiness and limits](docs/BETA_READINESS.md) for what has been tested.
 
-## Pick up useful work in another conversation
+## Carry a session into a new conversation
 
-Ask an agent to save a **session handoff** to Afternote, then have a fresh
-conversation read it to continue, challenge, or act on the work. Preserve the
-decisions and open questions from a design review, a writing session, or a trip
-plan without carrying over every message.
+Ask your agent to save a focused handoff to Afternote: the goal, current work,
+decisions, open questions and next step. In a fresh conversation, read that Note
+to continue the work or challenge the proposal. Nothing saves in the background.
 
-This uses ordinary Notes and your existing connector permissions on the same Mac.
-The agent writes the summary; Afternote does not capture chats automatically or
-restore an agent's hidden context. Use the returned Note ID for an exact handoff.
+The [session handoff guide](docs/SESSION_HANDOFFS.md) includes an optional skill
+and copyable prompts for supported hosts. Your agent writes the summary; Afternote
+stores an ordinary Note. This is not full-transcript storage or chat-state restore.
 
-See [copyable save/read prompts and examples](docs/SESSION_HANDOFFS.md).
-
-## Large conversations: explicit Archives
-
-Available in the Beta 6 candidate; not included in the current Beta 5 download.
-
-For a transcript too large for a Note, open **Notes > Conversation Archives…** and
-import its UTF-8 text or Markdown file (up to 64 MiB). Afternote preserves the text
-in the encrypted Vault, with resumable imports and a paged, read-only viewer.
-Archive search matches exact words; semantic search still applies to Notes only.
-
-Each Connector needs separate **Allow Archive access** approval in Connections.
-Then `search_archives` finds excerpts and `read_archive` retrieves bounded pages.
-Afternote does not capture chats automatically or reconstruct missing history.
-The original file remains outside the Vault, and passages returned to an AI host
-may reach its provider. JSON Vault backups include Archives; Markdown exports do not.
-
-See the [Archive walkthrough and limits](docs/CONVERSATION_ARCHIVES.md#use).
-
-## Architecture
+## How it is put together
 
 ```text
 Codex / Claude Code / Claude Desktop

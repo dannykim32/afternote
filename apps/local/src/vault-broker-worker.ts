@@ -1,7 +1,4 @@
 import { brokerDispatchTarget, brokerRequestAdmission } from "./broker-request-policy";
-import { archiveLibraryOperation, archiveConnectorOperation } from "./broker-archive-operations";
-import { BROKER_CAPABILITIES } from "./broker-capabilities";
-import { ConversationArchives } from "./conversation-archives";
 import {
   MAXIMUM_MESSAGE_BYTES,
   BrokerProtocolError,
@@ -42,6 +39,7 @@ import {
   MAX_SOURCE_LABEL_CHARACTERS,
   MAX_SOURCE_TIMESTAMP_CHARACTERS,
   MAX_SOURCE_URL_CHARACTERS,
+  MEMORY_CAPABILITIES,
   countCharacters,
   MemoryError,
   type SourceContext,
@@ -259,8 +257,6 @@ type PendingPresence =
       operation:
         | { kind: "export"; destination: string; format: "json" | "markdown" }
         | { kind: "diagnostics" }
-        | { kind: "archive-delete"; id: string; sha256: string }
-        | { kind: "archive-access"; target: OwnerConnectorRevocationTarget }
         | {
             kind: "client-rotation";
             target: OwnerClientRotationTarget;
@@ -961,10 +957,10 @@ export class VaultBrokerWorker {
     );
     const requestedCapabilities = capabilities(request.params.requestedCapabilities);
     const forgetPolicy = forgetPolicyValue(request.params.forgetPolicy);
-    if (forgetPolicy !== "never" || requestedCapabilities.some((scope) => scope === "memory.forget" || scope.startsWith("archive."))) {
+    if (forgetPolicy !== "never" || requestedCapabilities.includes("memory.forget")) {
       throw new BrokerProtocolError(
         "scope_denied",
-        "Default pairing grants only Note Remember, Recall, and Get",
+        "Default pairing cannot grant Forget",
       );
     }
     const existing = this.#authority().findPairedClient({
@@ -1231,7 +1227,7 @@ export class VaultBrokerWorker {
     });
     return ownerPresenceChallenge(
       challengeId,
-      `Start a shared Afternote work session for ${formatSessionDuration(workSessionTtlMs)} with an inactivity limit of ${formatSessionDuration(workSessionTtlMs)}? During this work session, previously paired Codex, Claude Code, and Claude Desktop apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, Get, and Archive search/read only where you separately approved Archive access. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
+      `Start a shared Afternote work session for ${formatSessionDuration(workSessionTtlMs)} with an inactivity limit of ${formatSessionDuration(workSessionTtlMs)}? During this work session, previously paired Codex, Claude Code, and Claude Desktop apps may silently establish their own connection-bound, least-privilege sessions for up to ${formatSessionDuration(TRUSTED_MCP_CONNECTION_TTL_MS)}, limited to Remember, Recall, and Get. This triggering connection lasts ${formatSessionDuration(Math.min(ttlMs, TRUSTED_MCP_CONNECTION_TTL_MS))}. Verification: ${phrase.slice(0, 4)} ${phrase.slice(4, 8)} ${phrase.slice(8, 12)}.`,
       challengeExpiresAt,
     );
   }
@@ -1244,21 +1240,6 @@ export class VaultBrokerWorker {
     const envelope = request.params.envelope as BrokerRequestEnvelope;
     if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
       throw new BrokerProtocolError("invalid_request", "Memory envelope is invalid");
-    }
-    if (envelope.operation === "archive.search" || envelope.operation === "archive.read") {
-      const dispatch = archiveConnectorOperation(envelope.operation, request.params.body);
-      const bodyBytes = Buffer.from(JSON.stringify(request.params.body));
-      const database = this.#database!;
-      const store = new ConversationArchives(database as unknown as import("bun:sqlite").Database);
-      try {
-        const result = await this.#authority().executeAuthorizedRead(envelope, bodyBytes,
-          () => database.withProgressDeadline(MAX_LIBRARY_SEARCH_MS, async () => ({
-            result: dispatch(store), noteRefs: [],
-          })), transportBinding);
-        return this.#librarySuccess(request.requestId, result);
-      } finally {
-        store.close();
-      }
     }
     const body = validateMemoryBody(envelope.operation, request.params.body);
     const bodyBytes = Buffer.from(JSON.stringify(body));
@@ -1380,13 +1361,12 @@ export class VaultBrokerWorker {
     });
     const canMutate = scopes.includes("library.remember") ||
       scopes.includes("library.update_note");
-    const archiveAccess = scopes.some((scope) => scope.startsWith("library.archive_"));
     return ownerPresenceChallenge(
       challengeId,
       `Open the Afternote Library for ${formatSessionDuration(ttlMs)}? ` +
         `This allows reading note text, source context, and revision history${
           canMutate ? ", plus explicit create and revision-safe edit" : ""
-        }${archiveAccess ? ", plus Conversation Archive import, reading and paused-import management" : ""}. Permanent deletion always requires another prompt.`,
+        }. Permanent deletion always requires another prompt.`,
       challengeExpiresAt,
     );
   }
@@ -1398,22 +1378,6 @@ export class VaultBrokerWorker {
     const memory = this.#localMemory();
     const vault = this.#vaultContext();
     const authority = this.#authority();
-    if (request.method.startsWith("library.archive_")) {
-      const operation = archiveLibraryOperation(request.method, request.params, this.#libraryCursors!);
-      const session = this.#librarySession(transportBinding, [operation.scope]);
-      const database = this.#database!;
-      const store = new ConversationArchives(database as unknown as import("bun:sqlite").Database);
-      try {
-        const result = operation.mutation
-          ? authority.executeNativeLibraryMutation(session.sessionId, request.method,
-              () => ({ result: operation.execute(store), noteRefs: [] }))
-          : await authority.executeNativeLibraryRead(session.sessionId, request.method,
-              () => database.withProgressDeadline(MAX_LIBRARY_SEARCH_MS, async () => ({
-                result: operation.execute(store), noteRefs: [],
-              })));
-        return this.#librarySuccess(request.requestId, result);
-      } finally { store.close(); }
-    }
     switch (request.method) {
       case "library.refresh_search": {
         const reload = Object.hasOwn(request.params, "reloadModel") ? request.params.reloadModel : true;
@@ -2060,32 +2024,12 @@ export class VaultBrokerWorker {
         }? Scopes: ${
           formatCapabilities(target.scopes)
         }. Its active and pending sessions will be revoked before local state changes.`;
-    } else if (request.method === "admin.approve_archive_access") {
-      assertExactObject(request.params, ["kind"]);
-      const kind = mcpClientKind(request.params.kind);
-      const target = this.#authority().connectorRevocationTarget(kind);
-      operation = { kind: "archive-access", target };
-      reason = `Allow ${target.displayLabel} to search and read Conversation Archives? This separate permission includes all completed Archives in this Vault. Retrieved passages may be sent to the connected AI provider. Revoke the Connector to remove access.`;
-    } else if (request.method === "admin.archive_delete") {
-      assertExactObject(request.params, ["id"]);
-      const id = uuid(request.params.id, "archive ID");
-      const store = new ConversationArchives(this.#database! as unknown as import("bun:sqlite").Database);
-      try {
-        const archive = store.status(id);
-        if (archive.state !== "ready") {
-          throw new BrokerProtocolError("conflict", "Only completed Archives can be deleted here");
-        }
-        operation = { kind: "archive-delete", id, sha256: archive.sha256 };
-        reason = `Delete this Conversation Archive and all its passages? Archive ID: ${id}. This cannot be undone without a backup.`;
-      } finally {
-        store.close();
-      }
     } else if (request.method === "admin.export") {
       assertExactObject(request.params, ["destination", "format"]);
       const destination = adminDestination(request.params.destination);
       const format = adminExportFormat(request.params.format);
       operation = { kind: "export", destination, format };
-      reason = `Export Afternote ${format === "json" ? "JSON backup (Notes and Archives)" : "Markdown (Notes only, not a complete Vault backup)"} to this exact path: ${destination}? The export contains plaintext ${format === "json" ? "Notes and Archives, including paused imports" : "notes"}.`;
+      reason = `Export Afternote ${format === "json" ? "JSON" : "Markdown"} to this exact path: ${destination}? The export contains plaintext notes.`;
     } else if (request.method === "admin.diagnostics") {
       assertExactObject(request.params, []);
       operation = { kind: "diagnostics" };
@@ -2696,7 +2640,7 @@ export class VaultBrokerWorker {
           state: "unlocked",
           epoch: this.#lifecycleEpoch,
           noteCount: result.noteCount,
-          format: `afternote-vault-v${pending.approvalSnapshot.sourceSchemaVersion}`,
+          format: "afternote-vault-v1",
         });
       } else {
         this.#openVault(false);
@@ -2707,7 +2651,7 @@ export class VaultBrokerWorker {
             state: "unlocked",
             epoch: this.#lifecycleEpoch,
             noteCount: result.noteCount,
-            format: `afternote-vault-v${pending.approvalSnapshot.sourceSchemaVersion}`,
+            format: "afternote-vault-v1",
           }),
         );
         this.#closeVaultHandles();
@@ -2917,24 +2861,6 @@ export class VaultBrokerWorker {
     pending: Extract<PendingPresence, { kind: "admin" }>,
   ): string {
     const operation = pending.operation;
-    if (operation.kind === "archive-access") {
-      this.#authority().approveConnectorArchiveAccess(operation.target);
-      return success(pending.requestId, { approved: true, kind: operation.target.kind });
-    }
-    if (operation.kind === "archive-delete") {
-      const store = new ConversationArchives(this.#database! as unknown as import("bun:sqlite").Database);
-      try {
-        return this.#authority().executeNativeOwnerAdminMutation("admin.archive_delete", () => {
-          const archive = store.status(operation.id);
-          if (archive.state !== "ready" || archive.sha256 !== operation.sha256) {
-            throw new BrokerProtocolError("conflict", "Archive changed after deletion approval");
-          }
-          return success(pending.requestId, { deleted: store.deleteInCurrentTransaction(operation.id) });
-        });
-      } finally {
-        store.close();
-      }
-    }
     if (
       operation.kind === "client-rotation" ||
       operation.kind === "revoked-client-replacement" ||
@@ -2980,9 +2906,8 @@ export class VaultBrokerWorker {
               );
             }
           };
-          let format = "afternote-markdown-v1";
           if (operation.format === "json") {
-            format = memory.exportInterchange(
+            memory.exportInterchange(
               vault,
               operation.destination,
               this.#applicationVersion,
@@ -2999,7 +2924,9 @@ export class VaultBrokerWorker {
           return success(pending.requestId, {
             exported: true,
             destination: operation.destination,
-            format,
+            format: operation.format === "json"
+              ? "afternote-vault-v1"
+              : "afternote-markdown-v1",
           });
         }
         const memory = this.#localMemory();
@@ -3657,7 +3584,7 @@ function mcpClientKind(value: unknown): "codex" | "claude" | "claude-desktop" {
 }
 
 function capabilities(value: unknown): BrokerCapability[] {
-  const supported: readonly BrokerCapability[] = BROKER_CAPABILITIES;
+  const supported: readonly BrokerCapability[] = MEMORY_CAPABILITIES;
   if (
     !Array.isArray(value) ||
     value.length === 0 ||
@@ -3894,10 +3821,8 @@ function adminExportFormat(value: unknown): "json" | "markdown" {
 
 function adminOperationMethod(
   operation: Extract<PendingPresence, { kind: "admin" }>["operation"],
-): "admin.export" | "admin.archive_delete" | "admin.approve_archive_access" | "admin.diagnostics" | "admin.prepare_client_rotation" | "admin.prepare_connector_reconnect" {
-  return operation.kind === "archive-access" ? "admin.approve_archive_access"
-    : operation.kind === "archive-delete" ? "admin.archive_delete"
-    : operation.kind === "connector-reconnect"
+): "admin.export" | "admin.diagnostics" | "admin.prepare_client_rotation" | "admin.prepare_connector_reconnect" {
+  return operation.kind === "connector-reconnect"
     ? "admin.prepare_connector_reconnect"
     : operation.kind === "client-rotation" ||
       operation.kind === "revoked-client-replacement"
@@ -4096,8 +4021,7 @@ function librarySearchMode(
 
 function formatCapabilities(capabilities: BrokerCapability[]): string {
   return capabilities
-    .map((capability) => capability === "archive.search" ? "Archive search"
-      : capability === "archive.read" ? "Archive read" : capability.slice("memory.".length))
+    .map((capability) => capability.slice("memory.".length))
     .map((name) => name === "get_note" ? "Get" : `${name[0]?.toUpperCase()}${name.slice(1)}`)
     .join(", ");
 }

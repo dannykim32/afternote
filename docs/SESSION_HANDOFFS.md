@@ -6,11 +6,51 @@ Ask one agent to save what matters, then ask another to read it. A session hando
 is an ordinary Afternote Note: editable in the Mac app, searchable by meaning,
 and available to your approved connectors on the same Mac.
 
-This guide accompanies Beta 6, but saving and reading handoff Notes uses existing
-Note tools. It does not require a plugin, skill installation, or Archive access.
+This guide accompanies Beta 7, but saving and reading handoff Notes uses existing
+Note tools. The optional skill below shortens the prompts; it is not required.
 There is no automatic capture, built-in summarizer, or chat-session restore.
 Your agent writes the summary; Afternote stores it. An agent cannot summarize
 history it no longer has, and Afternote Local does not sync between Macs.
+
+## Optional handoff skill
+
+The repository includes [afternote-handoff](../skills/afternote-handoff/SKILL.md).
+It is a small set of instructions, not another connector or a summarization service.
+Connect Afternote first using [Getting Started](GETTING_STARTED.md).
+
+Copy the whole `skills/afternote-handoff` folder from this checkout into your host's
+personal skills directory, creating that parent directory if necessary:
+
+- Codex: `~/.agents/skills/afternote-handoff/`.
+- Claude Code: `~/.claude/skills/afternote-handoff/`.
+
+If that folder already exists, review the differences before replacing your copy.
+This is a manual installation; updating the Afternote app does not update the skill.
+For Claude Code, add `disable-model-invocation: true` inside the installed copy's
+YAML frontmatter if you want the host to load it only when you invoke it. Codex's
+included metadata already requests explicit invocation. Regardless of loading
+policy, the skill requires an explicit request before saving a Note.
+See the official [Codex skill guide](https://developers.openai.com/codex/skills)
+and [Claude Code skill guide](https://code.claude.com/docs/en/skills) for discovery
+and invocation settings. Restart the host if the skill does not appear.
+
+In Codex, select `$afternote-handoff`; in Claude Code, use `/afternote-handoff`.
+Then say, for example:
+
+```text
+Save a handoff for our Kyoto trip plan to Afternote so I can continue it later.
+```
+
+In a fresh chat, invoke the skill and say:
+
+```text
+Read handoff Note [ID], expected revision [N], and challenge the plan.
+Do not save your review yet.
+```
+
+The copyable prompts below work in Claude Desktop and other supported Afternote
+hosts without installing a skill. Installing instructions does not grant Vault
+access or change the host's account/organization policies.
 
 ## Choose what the next conversation should do
 
@@ -48,7 +88,9 @@ to continue, not just a list of topics we discussed.
 
 Use only context you can access. Mark missing history and unavailable attachments
 explicitly. Include relevant source links, file paths, commit IDs, or existing
-Afternote Note/Archive IDs only when known. A reference is not a copy of its content.
+Afternote Note IDs and revisions only when known. A reference is not a copy of its content.
+If I requested the whole session and substantial history is unavailable, ask
+whether I want a partial handoff before saving.
 Exclude credentials and unrelated personal details. Don't save the full transcript,
 import files, or enable future autosaving. If essential material won't fit, ask me
 how to narrow the handoff rather than silently omitting it.
@@ -150,19 +192,16 @@ Distinguish confirmed bookings from suggestions and unverified availability.
 In a fresh chat, use the read prompt and **Continue this**. An old price or opening
 time still needs verification; saving it does not make it current.
 
-## When to keep the transcript too
+## Limits and privacy
 
-A handoff summarizes; an Archive preserves an actual imported transcript. If you
-need the original detail, follow the [Archive walkthrough](CONVERSATION_ARCHIVES.md#use).
-You may reference an existing Archive ID in the handoff, but that does not import
-anything or grant access. Archive reads require separate approval. In Beta 6,
-Archive search matches exact words; semantic search applies to Notes.
+A summary is not a lossless transcript. Keep original material outside Afternote
+when exact wording matters, and supply it separately when needed. File paths and
+links may be unavailable in the next agent's environment; a handoff does not bundle
+attachments. Notes are limited to 100,000 Unicode characters, not tokens.
+Source files and JSON exports remain plaintext outside the Vault. Notes returned
+to a connected agent may reach its model provider; encryption at rest does not
+prevent that disclosure.
 
-File paths and links may be unavailable in the next agent's environment. Importing
-a transcript does not bundle its attachments. Source files and JSON exports remain
-plaintext outside the Vault. Notes and passages returned to a connected agent may
-reach its model provider; encryption at rest does not prevent that disclosure.
-
-The [Beta 6 handoff acceptance checks](CONVERSATION_ARCHIVES_ACCEPTANCE.md#session-handoff-workflow)
+The [handoff acceptance checks](SESSION_HANDOFFS_ACCEPTANCE.md)
 cover content fidelity, fresh-session retrieval, and permission boundaries. They
 are a manual checklist, not a claim that every agent will follow these prompts.

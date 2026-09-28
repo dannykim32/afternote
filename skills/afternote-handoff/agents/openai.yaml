@@ -1,0 +1,6 @@
+interface:
+  display_name: "Afternote handoff"
+  short_description: "Explicitly save or read a session handoff"
+  default_prompt: "Use $afternote-handoff to draft a handoff for this conversation without saving it yet."
+policy:
+  allow_implicit_invocation: false

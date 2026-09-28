@@ -44,7 +44,6 @@ import {
   type VaultContext,
 } from "@afternote/memory";
 import type { Database, SQLQueryBindings } from "bun:sqlite";
-import { ConversationArchives } from "./conversation-archives";
 import {
   cosineSimilaritiesNative,
   SqlcipherDatabase,
@@ -2286,10 +2285,10 @@ export class SqliteMemory implements Memory {
     destinationPath: string,
     applicationVersion: string,
     assertCanContinue: () => void = () => {},
-  ): "afternote-vault-v1" | "afternote-vault-v2" {
+  ): void {
     this.#assertVault(vault);
     assertCanContinue();
-    return this.#database.transaction(() => {
+    this.#database.transaction(() => {
       const noteCount = this.#database
         .query<{ count: number }, []>("select count(*) as count from notes")
         .get()?.count ?? 0;
@@ -2341,33 +2340,16 @@ export class SqliteMemory implements Memory {
           };
         }
       };
-      const archives = new ConversationArchives(this.#database);
       try {
-        const hasArchives = archives.listPage().archives.length > 0 ||
-          archives.listPage({ state: "importing" }).archives.length > 0;
-        const streamArchives = hasArchives ? function* () {
-          for (const archive of archives.exportSnapshot()) {
-            assertCanContinue();
-            yield { ...archive, passages: function* () {
-              for (const passage of archive.passages()) {
-                assertCanContinue();
-                yield passage;
-              }
-            } };
-          }
-        } : undefined;
         writeInterchange(
-        destinationPath,
-        streamNotes,
-        noteCount,
-        revisionCount,
-        applicationVersion,
-        assertCanContinue,
-        streamArchives,
-      );
-        return hasArchives ? "afternote-vault-v2" as const : "afternote-vault-v1" as const;
+          destinationPath,
+          streamNotes,
+          noteCount,
+          revisionCount,
+          applicationVersion,
+          assertCanContinue,
+        );
       } finally {
-        archives.close();
         closePreparedStatement(noteStatement);
         closePreparedStatement(revisionStatement);
       }
@@ -2453,12 +2435,6 @@ export class SqliteMemory implements Memory {
         encryptionKey: options.encryptionKey,
       });
       restored.#importInterchange(document.notes);
-      if (document.archives) {
-        const archives = new ConversationArchives(restored.#database);
-        try {
-          restored.#database.transaction(() => archives.restoreInCurrentTransaction(document.archives!))();
-        } finally { archives.close(); }
-      }
       restored.close();
       restored = undefined;
       const verification = openNoteDatabase(temporaryDatabasePath, options.encryptionKey, {

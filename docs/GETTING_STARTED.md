@@ -53,6 +53,13 @@ Claude Desktop parent as one process chain; it never writes Claude's private ext
 npm-installed scripts, wrapper launchers, and repackaged binaries are not supported in this
 beta because they cannot satisfy the native runtime identity check.
 
+### Carry work into a fresh conversation
+
+Use the [session handoff guide](SESSION_HANDOFFS.md) to save a focused summary and
+read it from another approved connector on the same Mac. It includes an optional
+skill and copyable prompts for continuing, challenging, or acting on prior work.
+Saving is always an explicit choice; summarizing alone does not save a Note.
+
 ### Connect Codex or Claude Code
 
 1. Install and launch the official signed native macOS build of your host.
@@ -96,29 +103,13 @@ Afternote; a disabled Install button is not a reason to bypass workplace policy.
 - Use **Notes** to browse, search, edit, and inspect revision history. An unchanged save
   does not create a revision.
 - Use **Settings** to change routine authentication, lock or unlock the vault, and export
-  the Vault. JSON exports preserve revisions, Archives and paused imports; Markdown exports contain only current Notes and are for reading, not lossless
+  notes. JSON exports preserve revisions; Markdown exports are for reading, not lossless
   restore. Exports are plaintext: store them somewhere private.
 - Use **Connections** to inspect connector activity and revoke access. Locking the vault
   blocks connector reads and writes; unlocking or starting a new work session can require
   fresh approval. Quitting the app alone is not the same as locking the vault.
 
-### Carry a session forward
-
-For ongoing work, ask your agent to save a session handoff as an ordinary Note.
-Then open a fresh conversation and ask it to read that Note by ID before
-continuing, challenging the proposal, or producing a specific output.
-No extra plugin or Archive permission is needed. See the
-[session handoff prompts and examples](SESSION_HANDOFFS.md).
-
-### Conversation Archives
-
-Available in the Beta 6 candidate, not the current Beta 5 download.
-For larger transcripts, use **Notes > Conversation Archives… > Import transcript…**.
-Imports accept UTF-8 text/Markdown up to 64 MiB. The viewer supports pause/resume,
-exact passage search and bounded pages. Connectors require separate **Allow Archive
-access** approval in Connections. See the [full Archive walkthrough](CONVERSATION_ARCHIVES.md#use).
-
-### Troubleshooting
+### If something goes wrong
 
 Open **Settings > Save diagnostics** for a redacted diagnostic file, or run:
 

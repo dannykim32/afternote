@@ -39,10 +39,9 @@ BOOL IsNullableDate(id value) {
 }
 
 BOOL IsScopeList(id value) {
-  if (![value isKindOfClass:[NSArray class]] || [value count] > 6) return NO;
+  if (![value isKindOfClass:[NSArray class]] || [value count] > 4) return NO;
   NSArray *allowed = @[
-    @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget",
-    @"archive.search", @"archive.read"
+    @"memory.remember", @"memory.recall", @"memory.get_note", @"memory.forget"
   ];
   NSMutableSet *seen = [NSMutableSet set];
   for (id scope in value) {

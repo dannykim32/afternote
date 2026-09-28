@@ -49,6 +49,12 @@ describe("encrypted SqliteMemory", () => {
     memory.exportInterchange(vault, exportPath, "2.0.0-alpha.2");
     memory.close();
 
+    const exported = JSON.parse(readFileSync(exportPath, "utf8"));
+    expect(exported.schemaVersion).toBe(1);
+    expect(Object.keys(exported).sort()).toEqual([
+      "applicationVersion", "format", "manifest", "notes", "schemaVersion",
+    ]);
+
     expect(existsSync(`${databasePath}-wal`)).toBe(false);
     expect(existsSync(`${databasePath}-shm`)).toBe(false);
     expect(readFileSync(databasePath).includes(Buffer.from(canary))).toBe(false);
@@ -81,6 +87,9 @@ describe("encrypted SqliteMemory", () => {
       content: `${canary} current`,
       revision: 2,
     });
+    expect((await restored.listNoteRevisions(vault, original.id)).revisions)
+      .toMatchObject([{ revision: 2, content: `${canary} current` },
+        { revision: 1, content: `${canary} original` }]);
     restored.close();
     expect(readFileSync(restoredPath).includes(Buffer.from(canary))).toBe(false);
     expect(readFileSync(restoredPath).includes(Buffer.from(sourceCanary))).toBe(false);

@@ -6,35 +6,27 @@ during release review.
 
 ## Unreleased
 
-## 2.0.0-beta.6 - 2026-09-23
+## 2.0.0-beta.7 - 2026-09-28
 
 ### Added
 
-- A documented [session handoff workflow](docs/SESSION_HANDOFFS.md) for continuing,
-  challenging, or acting on work in a fresh conversation. Copyable prompts use
-  existing Note tools; this is not automatic capture or a built-in summarizer.
-- Conversation Archives for explicitly imported UTF-8 text/Markdown transcripts,
-  up to 64 MiB per file. Imports stream in bounded, retry-safe batches and verify
-  the full content hash before becoming readable. Paused imports can be resumed
-  or discarded; the original file is never changed.
-- A native Archive list, exact passage search and paged read-only viewer, plus
-  `afternote archive import <file> [title] [resume-archive-id]` through the signed
-  Owner boundary. Lock, expiry and disconnection clear displayed transcript text.
-- Separately approved `search_archives` and `read_archive` connector tools.
-  Ordinary Note grants do not expand automatically. Approval covers all completed
-  Archives for that Connector; revocation removes both Note and Archive access.
-- Archive-inclusive JSON Vault backups and validated encrypted restore, including
-  paused imports. Markdown exports remain current-Notes-only. Completed Archive
-  deletion requires fresh Owner approval.
+- Optional session-handoff skill and copyable prompts built on ordinary Notes.
+  Save a focused summary explicitly, then read its ID and revision in a fresh
+  conversation to continue, challenge, or act on prior work. No background capture.
 
-### Limits
+### Fixed
 
-- Archive retrieval is exact-word search, not semantic search. Notes retain the
-  existing local semantic engine and revision workflow.
-- Import requires an actual transcript file; this does not automatically capture
-  conversations or reconstruct chat history outside a model's current context.
-- Source files and exported JSON backups remain plaintext outside the Vault.
-  Passages read through a Connector may reach that AI provider.
+- Give ordinary Note search a bounded wait for local model startup, preserve exact
+  fallback, and report incomplete semantic work rather than a false no-match result.
+  Recheck access after asynchronous work before returning results.
+- Keep release typechecking and Codex readiness fixtures on the pinned Bun runtime.
+  Parse provisioning expiry as a typed UTC date and verify encrypted storage with
+  an explicit unkeyed SQLite read.
+
+The unreleased Conversation Archives experiment has been removed. Beta 7 retains
+the existing Note schema and export format; it adds no transcript store or viewer.
+Previously signed private Beta 6 candidates contain the retired experiment and
+do not represent this source. A new candidate and acceptance pass are required.
 
 ## 2.0.0-beta.5 - 2026-09-17
 

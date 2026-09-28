@@ -12,7 +12,7 @@ import {
 describe("vault broker MCP client", () => {
   it("allows bounded cold startup for recall without widening mutation timeouts", () => {
     const observed: Array<number | undefined> = [];
-    for (const operation of ["memory.recall", "memory.remember", "archive.read"]) {
+    for (const operation of ["memory.recall", "memory.remember", "unknown.read"]) {
       requestVaultBroker("memory.execute", { envelope: { operation }, body: {} }, {
         service: "dev.afternote.test-broker", codeRequirement: "identifier dev.afternote.test-broker",
         transport(_service, _requirement, request, timeout) {

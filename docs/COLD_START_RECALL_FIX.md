@@ -6,7 +6,8 @@ Fix the intermittent immediate-paraphrase failure in the unchanged Beta 6
 candidate, `f570a2e`. The Owner approved regression coverage at the broker's
 save/search/readiness interfaces and the compiled offline semantic check,
 including slow startup and lock/revoke during startup. Review this fix against
-that commit, not the entire Archive branch.
+that commit. These ordinary Note fixes remain part of Beta 7 independently of the
+retired, unreleased Conversation Archives experiment.
 
 The release remains gated on automated verification and manual acceptance of
 the signed candidate. A passing retry alone is not evidence that a failure is fixed.
@@ -45,7 +46,7 @@ The compiled offline check must retain its immediate Recall assertion, included
 model pins, encrypted storage check, both Connector canaries, and index readiness
 assertions. Do not add sleeps or retries to make its first Recall pass.
 
-On the signed candidate, retain the Archive acceptance checklist and also:
+On a newly built signed candidate, run these ordinary Note checks:
 
 1. Fully quit and reopen Afternote. Immediately save a synthetic Note and ask a
    Connector for it using a paraphrase with no literal match. Verify its citation.

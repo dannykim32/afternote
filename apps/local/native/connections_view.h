@@ -9,7 +9,6 @@
 @property(nonatomic, copy) NSString *displayName;
 @property(nonatomic, strong) AfternoteConnectorPresentation *presentation;
 @property(nonatomic) BOOL connected;
-@property(nonatomic) BOOL canApproveArchives;
 @property(nonatomic, copy) NSString *permissions;
 @property(nonatomic, copy) NSString *activity;
 @property(nonatomic, copy) NSArray<NSString *> *historyLines;
@@ -26,7 +25,6 @@
 - (void)refreshIntegrationStatusFromButton:(NSButton *)sender;
 - (void)reviewIntegrationSetup:(NSButton *)sender;
 - (void)confirmRevocation:(NSButton *)sender;
-- (void)approveArchiveAccess:(NSButton *)sender;
 - (void)toggleConnectorHistory:(NSButton *)sender;
 - (void)loadMore:(id)sender;
 @end
