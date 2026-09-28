@@ -10,6 +10,9 @@ during release review.
 
 ### Added
 
+- A documented [session handoff workflow](docs/SESSION_HANDOFFS.md) for continuing,
+  challenging, or acting on work in a fresh conversation. Copyable prompts use
+  existing Note tools; this is not automatic capture or a built-in summarizer.
 - Conversation Archives for explicitly imported UTF-8 text/Markdown transcripts,
   up to 64 MiB per file. Imports stream in bounded, retry-safe batches and verify
   the full content hash before becoming readable. Paused imports can be resumed

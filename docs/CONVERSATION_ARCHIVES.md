@@ -18,6 +18,10 @@ must be recorded before this candidate is published.
 
 ## Use
 
+Want to continue or challenge the work rather than preserve every message? Start
+with a [session handoff Note](SESSION_HANDOFFS.md). It uses existing Note access;
+importing the transcript is optional and separately approved.
+
 1. Open **Notes > Conversation Archives…**, authenticate, then **Import transcript…**.
    Choose an actual UTF-8 `.txt` or `.md` transcript. Export it from its original
    host first; asking a model to reproduce a million-token history is not an export.

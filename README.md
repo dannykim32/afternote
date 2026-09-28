@@ -64,6 +64,19 @@ See [installation and connector setup](docs/GETTING_STARTED.md) for the full ste
 [release verification](docs/VERIFY_RELEASE.md) for checksums, and
 [beta readiness and limits](docs/BETA_READINESS.md) for what has been tested.
 
+## Pick up useful work in another conversation
+
+Ask an agent to save a **session handoff** to Afternote, then have a fresh
+conversation read it to continue, challenge, or act on the work. Preserve the
+decisions and open questions from a design review, a writing session, or a trip
+plan without carrying over every message.
+
+This uses ordinary Notes and your existing connector permissions on the same Mac.
+The agent writes the summary; Afternote does not capture chats automatically or
+restore an agent's hidden context. Use the returned Note ID for an exact handoff.
+
+See [copyable save/read prompts and examples](docs/SESSION_HANDOFFS.md).
+
 ## Large conversations: explicit Archives
 
 Available in the Beta 6 candidate; not included in the current Beta 5 download.

@@ -102,8 +102,17 @@ Afternote; a disabled Install button is not a reason to bypass workplace policy.
   blocks connector reads and writes; unlocking or starting a new work session can require
   fresh approval. Quitting the app alone is not the same as locking the vault.
 
+### Carry a session forward
+
+For ongoing work, ask your agent to save a session handoff as an ordinary Note.
+Then open a fresh conversation and ask it to read that Note by ID before
+continuing, challenging the proposal, or producing a specific output.
+No extra plugin or Archive permission is needed. See the
+[session handoff prompts and examples](SESSION_HANDOFFS.md).
+
 ### Conversation Archives
 
+Available in the Beta 6 candidate, not the current Beta 5 download.
 For larger transcripts, use **Notes > Conversation Archives… > Import transcript…**.
 Imports accept UTF-8 text/Markdown up to 64 MiB. The viewer supports pause/resume,
 exact passage search and bounded pages. Connectors require separate **Allow Archive

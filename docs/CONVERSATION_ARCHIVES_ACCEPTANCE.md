@@ -88,3 +88,49 @@ exact fallback, and lock/revocation checks; a retry does not replace the first-q
 Archive search in this beta is exact-word search, not semantic or fuzzy search.
 The 64 MiB per-transcript limit is a byte limit, not a promised token capacity.
 Archive operations are separate from the existing Note save/recall counters.
+
+## Session handoff workflow
+
+These checks validate the [documented prompts](SESSION_HANDOFFS.md) against the
+signed candidate. They are pending manual acceptance, not automated test results.
+Use synthetic material only, and record source/receiving host, Note ID, revision,
+and pass/fail for each step. Do not use private conversations as test fixtures.
+
+1. In Claude Desktop or Claude Code, discuss this synthetic design: "Atlas handoff
+   canary - Birch 827. We need email reminders within five minutes. Proposal: a
+   single worker polls every minute. No new paid service. We rejected a managed
+   queue because of cost. We assume polling is cheap, but have not measured it.
+   Duplicate-delivery behavior is undecided. Next: challenge the design, not
+   implement it. The earlier load-test attachment is unavailable in this chat."
+   Use the guide's save prompt with intent **challenge**. Inspect the actual
+   Remember result and the Note in Afternote. All requirements, the untested
+   assumption, rejected option, open question and missing attachment must survive.
+   The agent must not invent test results or treat its suggestions as decisions.
+2. Open a fresh Codex conversation. Provide only the returned ID/revision and the
+   guide's read/challenge prompts, not the source conversation. Expand the tool
+   call: `get_note` must return the full intended Note. Check that the critique
+   distinguishes evidence from uncertainty and makes no implementation changes.
+   Explicitly save the critique as a separate Note referring to the reviewed ID
+   and revision. Have Claude read that critique by ID; the original must remain
+   unchanged. Record any host not exercised rather than inferring its behavior.
+3. In a separate source chat, plan this synthetic trip: "Kyoto handoff canary -
+   Cedar 618. Four days next autumn; dates are undecided. Budget $900 excluding
+   flights. Step-free accommodation is required. No hotel booked. We considered
+   changing hotels nightly but rejected it because of moving luggage. Train
+   availability is unverified. Next: compare two itinerary options, no bookings."
+   Save with intent **continue**, then retrieve by ID in a fresh chat. Confirm
+   requirements survive, unknowns stay unknown, and nothing is described as booked.
+   Try **act** with "draft a four-day outline here"; no booking or external action
+   should occur. Add an exact-word Recall for the unique canary, then fetch its
+   returned ID to test rediscovery as well as direct retrieval.
+4. Edit a synthetic handoff in Afternote. Ask a fresh chat to read it using its
+   original ID and old expected revision. It must disclose the current revision
+   and pause, not claim to have fetched the old one. Verify history in the app.
+5. With the Vault locked, request a new handoff read and a new save. The tool calls
+   must fail, not report success from chat memory. Repeat after revoking the
+   receiving connector. Reconnect/unlock through normal approval and verify the
+   saved Note is still present. Existing text already returned to a host cannot
+   be erased by locking or revoking; judge new tool results, not verbal recall.
+6. Run the handoff checks with a connector that has Note permission but no Archive
+   permission. Notes must work without enabling Archive access; an Archive ID
+   mentioned in a Note must not bypass the separate Archive-read approval check.
