@@ -128,11 +128,12 @@ To carry the critique back, explicitly ask Codex:
 ```text
 Save this critique as a separate Afternote Note. Reference the original handoff's
 ID and the revision you reviewed. Preserve the findings, evidence, uncertainties,
-and proposed checks. Don't overwrite the original proposal. Confirm the new ID.
+and proposed checks. Don't overwrite the original proposal. Confirm the new ID
+and revision after a successful save.
 ```
 
-Then give Claude the critique ID, ask it to read that Note, and decide which
-findings warrant a revision. Saving an updated handoff is a separate choice.
+Then give Claude the critique ID and revision using the read prompt above, and
+decide which findings warrant a revision. Saving an updated handoff is a separate choice.
 References between these Notes are ordinary text, not automatic synchronization.
 
 A fresh reviewer can still be anchored by the original recommendation. For a
