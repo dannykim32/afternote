@@ -8,6 +8,6 @@
     "@afternote/mcp": "workspace:*",
     "@afternote/memory": "workspace:*",
     "@huggingface/transformers": "3.8.1",
-    "@modelcontextprotocol/server": "2.0.0"
+    "@modelcontextprotocol/server": "2.3.0"
   }
 }
