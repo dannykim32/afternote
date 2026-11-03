@@ -6,6 +6,17 @@ during release review.
 
 ## Unreleased
 
+## 2.0.0-beta.8 - 2026-11-02
+
+### Security
+
+- Update the MCP client and server packages to 2.3.0, Zod to 4.6.6, and the
+  transitive Sharp override to 0.35.5 after the prepublication dependency audit
+  reported new advisories against the private Beta 7 candidate. Afternote still
+  uses local stdio connectors; no HTTP transport or OAuth flow is introduced.
+- Preserve the Notes-only handoff workflow and cold-start search fixes from
+  Beta 7. The Vault schema and export format are unchanged.
+
 ## 2.0.0-beta.7 - 2026-09-28
 
 ### Added
